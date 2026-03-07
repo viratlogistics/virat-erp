@@ -11,7 +11,14 @@ st.set_page_config(page_title="Virat Logistics ERP", layout="wide")
 # Google Sheets Connection Logic
 def get_gspread_client():
     # Streamlit Secrets se credentials uthana
-    creds_dict = st.secrets["gcp_service_account"]
+   def get_gspread_client():
+    # Streamlit Secrets ko dictionary mein badalna
+    creds_dict = dict(st.secrets["gcp_service_account"])
+    
+    # Private key ke newline (\n) characters ko fix karna
+    if "private_key" in creds_dict:
+        creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+        
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     return gspread.authorize(creds)
@@ -184,3 +191,4 @@ elif menu in ["Party Receipt", "Broker Payment"]:
         if st.form_submit_button("Save"):
             save_to_gs("payments", [str(date.today()), p_name, cat, p_amt, p_mode])
             st.rerun()
+
