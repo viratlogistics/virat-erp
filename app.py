@@ -30,7 +30,10 @@ if client:
 def load_from_gs(ws_name):
     try:
         ws = sh.worksheet(ws_name)
-        return pd.DataFrame(ws.get_all_records())
+        data = ws.get_all_records()
+        df = pd.DataFrame(data)
+        # Cleaning: Remove spaces from all text columns
+        return df.apply(lambda x: x.str.strip() if x.dtype == "object" else x)
     except: return pd.DataFrame()
 
 def save_to_gs(ws_name, row_data):
@@ -66,7 +69,7 @@ if sh:
     df_p = load_from_gs("payments")
     df_a = load_from_gs("admin")
     
-    # Fill Missing Columns & Convert Numeric
+    # Fill Missing Columns & Numeric Conversion
     for c in cols_t:
         if c not in df_t.columns: df_t[c] = 0 if any(x in c for x in ["Freight", "Profit", "Weight", "Charges", "Diesel", "Toll", "Exp"]) else ""
     
@@ -148,50 +151,63 @@ elif menu == "Add LR":
                 new_row = [str(d), f"LR-{len(df_t)+1001}", v_type, party, con_nm, con_gst, con_add, cee_nm, cee_gst, cee_add, mat, wt, vehicle, "Driver", broker, f_loc, t_loc, freight, h_chg, dsl, de, tl, ot, prof]
                 if save_to_gs("trips", new_row): st.success("Saved!"); st.rerun()
 
-# --- LR REPORTS (FULL EDIT & DELETE) ---
+# --- LR REPORTS (EDIT ALL FIELDS) ---
 elif menu == "LR Reports":
-    st.header("📋 LR Management (Edit/Delete)")
+    st.header("📋 LR Management (Full Edit/Delete)")
     if not df_t.empty:
         search = st.text_input("Search LR/Vehicle/Party")
         filtered = df_t[df_t.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
         for i, row in filtered.iterrows():
             with st.expander(f"{row['LR']} | {row['Party']} | {row['Vehicle']}"):
                 with st.form(f"edit_{row['LR']}"):
-                    st.write("Edit Fields:")
+                    st.write("Edit Any Field:")
                     ec1, ec2, ec3 = st.columns(3)
                     e_p = ec1.text_input("Party", row['Party'])
-                    e_v = ec1.text_input("Vehicle", row['Vehicle'])
-                    e_f = ec2.number_input("Freight", value=float(row['Freight']))
-                    e_h = ec2.number_input("Hired Charges", value=float(row['HiredCharges']))
-                    e_mat = ec3.text_input("Material", row['Material'])
-                    e_wt = ec3.number_input("Weight", value=float(row['Weight']))
+                    e_con = ec1.text_input("Consignor", row['Consignor'])
+                    e_cee = ec1.text_input("Consignee", row['Consignee'])
+                    
+                    e_f_loc = ec2.text_input("From", row['From'])
+                    e_t_loc = ec2.text_input("To", row['To'])
+                    e_v = ec2.text_input("Vehicle", row['Vehicle'])
+                    
+                    e_f = ec3.number_input("Freight", value=float(row['Freight']))
+                    e_h = ec3.number_input("Hired Charges", value=float(row['HiredCharges']))
                     e_br = ec3.text_input("Broker", row['Broker'])
                     
                     if st.form_submit_button("Update Records"):
                         updated = list(row.values)
-                        # Index update (Type based profit)
                         new_prof = (e_f - e_h) if row['Type'] == "Hired" else (e_f - (row['Diesel']+row['DriverExp']+row['Toll']+row['Other']))
-                        updated[3], updated[12], updated[17], updated[18], updated[10], updated[11], updated[14], updated[23] = e_p, e_v, e_f, e_h, e_mat, e_wt, e_br, new_prof
+                        # Mapping updates based on cols_t index
+                        updated[3], updated[4], updated[7], updated[15], updated[16], updated[12], updated[17], updated[18], updated[14], updated[23] = e_p, e_con, e_cee, e_f_loc, e_t_loc, e_v, e_f, e_h, e_br, new_prof
                         if update_gs_row("trips", row['LR'], updated): st.success("Updated!"); st.rerun()
                 
                 if st.button(f"🗑️ Delete {row['LR']}", key=f"del_{i}"):
                     if delete_gs_row("trips", row['LR']): st.warning("Deleted!"); st.rerun()
 
-# --- MONTHLY BILL ---
+# --- MONTHLY BILL (CLEAN DATE LOGIC) ---
 elif menu == "Monthly Bill":
     st.header("📅 Monthly Party Bill")
     if not df_t.empty:
-        df_t['Date'] = pd.to_datetime(df_t['Date'])
-        p_name = st.selectbox("Select Party", df_t["Party"].unique())
-        m_list = df_t['Date'].dt.strftime('%B %Y').unique()
-        sel_m = st.selectbox("Select Month", m_list)
-        m_df = df_t[(df_t['Party']==p_name) & (df_t['Date'].dt.strftime('%B %Y')==sel_m)]
-        st.dataframe(m_df[["Date", "LR", "Vehicle", "From", "To", "Freight"]], use_container_width=True)
-        if not m_df.empty: st.metric("Total Bill", f"₹{m_df['Freight'].sum():,.0f}")
+        # Converting to date objects safely
+        df_t['Date'] = pd.to_datetime(df_t['Date'], errors='coerce')
+        parties = df_t["Party"].unique()
+        sel_party = st.selectbox("Select Party", parties)
+        
+        # Unique Month-Year list
+        months = df_t[df_t['Date'].notna()]['Date'].dt.strftime('%B %Y').unique()
+        sel_month = st.selectbox("Select Month", months)
+        
+        m_df = df_t[(df_t['Party'] == sel_party) & (df_t['Date'].dt.strftime('%B %Y') == sel_month)]
+        
+        if not m_df.empty:
+            st.dataframe(m_df[["Date", "LR", "Vehicle", "From", "To", "Freight"]], use_container_width=True)
+            st.metric("Total Bill Amount", f"₹{m_df['Freight'].sum():,.0f}")
+        else:
+            st.info("No data found for this selection.")
 
-# --- LEDGERS (BROKER FIX) ---
+# --- LEDGERS (ACCURATE BROKER FILTER) ---
 elif menu == "Party Ledger":
-    st.header("🏢 Party Outstanding")
+    st.header("🏢 Party Ledger")
     if not df_t.empty:
         p_bill = df_t.groupby("Party")["Freight"].sum().reset_index().rename(columns={"Party":"Name", "Freight":"Total_Bill"})
         p_paid = df_p[df_p["Category"]=="Party"].groupby("Name")["Amount"].sum().reset_index().rename(columns={"Amount":"Total_Paid"})
@@ -201,28 +217,32 @@ elif menu == "Party Ledger":
 
 elif menu == "Broker Ledger":
     st.header("🤝 Broker Payable Ledger")
-    # Case-insensitive "Hired" check
-    hired = df_t[df_t["Type"].str.lower() == "hired"]
+    # Using strip() and lower() for 100% accurate match
+    hired = df_t[df_t["Type"].astype(str).str.strip().str.lower() == "hired"]
+    
     if not hired.empty:
         b_work = hired.groupby("Broker")["HiredCharges"].sum().reset_index().rename(columns={"Broker":"Name", "HiredCharges":"Total_Work"})
         b_paid = df_p[df_p["Category"]=="Broker"].groupby("Name")["Amount"].sum().reset_index().rename(columns={"Amount":"Total_Paid"})
         res = pd.merge(b_work, b_paid, on="Name", how="left").fillna(0)
         res["Balance"] = res["Total_Work"] - res["Total_Paid"]
         st.dataframe(res, use_container_width=True)
-    else: st.info("Hired vehicle data nahi mila. Add LR mein 'Hired' select karein.")
+    else:
+        st.warning("Koi 'Hired' entry nahi mili. Add LR mein gaadi ka type check karein.")
 
-# --- PAYMENTS ---
+# --- PAYMENTS & ADMIN ---
 elif menu in ["Party Receipt", "Broker Payment"]:
     cat = "Party" if menu == "Party Receipt" else "Broker"
     st.header(f"💰 {cat} Entry")
     with st.form("pay"):
-        nm = st.selectbox("Select Name", df_t[cat].unique() if not df_t.empty else [])
-        am, md = st.number_input("Amount", 0.0), st.selectbox("Mode", ["Cash", "Bank", "Cheque"])
+        # Dynamic names from trip records
+        available_names = df_t[cat].unique() if not df_t.empty else []
+        nm = st.selectbox("Name", available_names)
+        am, md = st.number_input("Amount", 0.0), st.selectbox("Mode", ["Bank", "Cash", "Cheque"])
         if st.form_submit_button("Save"):
             if save_to_gs("payments", [str(date.today()), nm, cat, am, md]): st.success("Saved!"); st.rerun()
 
 elif menu == "Admin Expense":
-    st.header("🏢 Admin Expense")
+    st.header("🏢 Office Expense")
     with st.form("adm"):
         ct = st.selectbox("Category", ["Salary", "Rent", "Office", "Other"])
         am, rem = st.number_input("Amount", 0.0), st.text_input("Remarks")
