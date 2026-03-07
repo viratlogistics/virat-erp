@@ -49,12 +49,16 @@ def save_ws(ws_name, row_list):
 def update_ws(ws_name, lr_no, updated_row):
     try:
         ws = sh.worksheet(ws_name)
+        # Better Search: Exact match for LR No
         cell = ws.find(str(lr_no))
         if cell:
-            ws.update(f'A{cell.row}:X{cell.row}', [updated_row])
+            # Update specific row with new data
+            ws.update(f'A{cell.row}:X{cell.row}', [updated_row], value_input_option='USER_ENTERED')
             return True
         return False
-    except: return False
+    except Exception as e:
+        st.error(f"Update Error: {e}")
+        return False
 
 def delete_ws(ws_name, lr_no):
     try:
@@ -76,11 +80,9 @@ if sh:
     df_p = load_ws("payments")
     df_a = load_ws("admin")
 
-    # Safety: Ensure columns exist
     for c in cols_t:
         if c not in df_t.columns: df_t[c] = 0 if any(x in c for x in ["Freight", "Profit", "Weight", "Charges", "Diesel", "Toll", "Exp"]) else ""
     
-    # Numeric Casting
     num_t = ["Freight", "HiredCharges", "Profit", "Weight", "Diesel", "Toll", "DriverExp", "Other"]
     for c in num_t: df_t[c] = pd.to_numeric(df_t[c], errors='coerce').fillna(0)
     
@@ -91,8 +93,7 @@ if sh:
     if not df_a.empty:
         df_a["Amount"] = pd.to_numeric(df_a["Amount"], errors='coerce').fillna(0)
     else: df_a = pd.DataFrame(columns=cols_a)
-else:
-    st.stop()
+else: st.stop()
 
 # --- 4. LOGIN ---
 if "login" not in st.session_state: st.session_state.login = False
@@ -115,7 +116,7 @@ menu = st.sidebar.selectbox("Main Menu",
 
 # --- DASHBOARD ---
 if menu == "Dashboard":
-    st.title("📊 Enterprise Summary")
+    st.title("📊 Financial Summary")
     t_rev = df_t["Freight"].sum()
     p_rec = df_p[df_p["Category"]=="Party"]["Amount"].sum()
     b_work = df_t["HiredCharges"].sum()
@@ -163,7 +164,7 @@ elif menu == "Add LR":
                 row = [str(d), lr_id, t_val, party, cnm, cgst, cadd, eenm, eegst, eeadd, mat, wt, v_no, "Driver", br, floc, tloc, fr, h_chg, dsl, de, tl, ot, calc_prof]
                 if save_ws("trips", row): st.success("Saved Successfully!"); st.rerun()
 
-# --- LR MANAGER (FIXED KEY ERROR) ---
+# --- LR MANAGER (ACTUAL UPDATE FIX) ---
 elif menu == "LR Manager (Edit/Del)":
     st.header("🔍 Edit or Delete Trip Records")
     if not df_t.empty:
@@ -171,39 +172,47 @@ elif menu == "LR Manager (Edit/Del)":
         f_df = df_t[df_t.apply(lambda r: search_q.lower() in str(r).lower(), axis=1)]
         
         for idx, row in f_df.iterrows():
-            # KEY FIX: index (idx) ko form name ke saath jod diya hai
             with st.expander(f"Trip: {row['LR']} | {row['Vehicle']} | {row['Party']}"):
                 with st.form(key=f"edit_form_{idx}_{row['LR']}"):
-                    st.write("### Edit Trip Information")
+                    st.write("### Full Trip Edit")
                     e1, e2, e3 = st.columns(3)
-                    u_date = e1.text_input("Date", row['Date'])
-                    u_party = e1.text_input("Party", row['Party'])
-                    u_cnm = e1.text_input("Consignor", row['Consignor'])
-                    u_cgst = e1.text_input("Consignor GST", row['Consignor_GST'])
-                    u_cadd = e1.text_area("Consignor Address", row['Consignor_Add'])
+                    u_date = e1.text_input("Date", str(row['Date']))
+                    u_party = e1.text_input("Party", str(row['Party']))
+                    u_cnm = e1.text_input("Consignor", str(row['Consignor']))
+                    u_cgst = e1.text_input("Consignor GST", str(row['Consignor_GST']))
+                    u_cadd = e1.text_area("Consignor Address", str(row['Consignor_Add']))
                     
-                    u_eenm = e2.text_input("Consignee", row['Consignee'])
-                    u_eegst = e2.text_input("Consignee GST", row['Consignee_GST'])
-                    u_eeadd = e2.text_area("Consignee Address", row['Consignee_Add'])
-                    u_vno = e2.text_input("Vehicle No", row['Vehicle'])
-                    u_from = e2.text_input("From", row['From'])
-                    u_to = e2.text_input("To", row['To'])
+                    u_eenm = e2.text_input("Consignee", str(row['Consignee']))
+                    u_eegst = e2.text_input("Consignee GST", str(row['Consignee_GST']))
+                    u_eeadd = e2.text_area("Consignee Address", str(row['Consignee_Add']))
+                    u_vno = e2.text_input("Vehicle No", str(row['Vehicle']))
+                    u_from = e2.text_input("From", str(row['From']))
+                    u_to = e2.text_input("To", str(row['To']))
                     
-                    u_mat = e3.text_input("Material", row['Material'])
+                    u_mat = e3.text_input("Material", str(row['Material']))
                     u_wt = e3.number_input("Weight", value=float(row['Weight']))
                     u_fr = e3.number_input("Freight", value=float(row['Freight']))
                     u_hchg = e3.number_input("Hired Charges", value=float(row['HiredCharges']))
+                    u_br = e3.text_input("Broker Name", str(row['Broker']))
                     u_dsl = e3.number_input("Diesel", value=float(row['Diesel']))
                     u_toll = e3.number_input("Toll", value=float(row['Toll']))
-                    u_br = e3.text_input("Broker Name", row['Broker'])
 
                     if st.form_submit_button("✅ Update This Record"):
+                        # Recalculate Profit based on updated values
                         u_prof = (u_fr - u_hchg) if row['Type'] == "Hired" else (u_fr - (u_dsl + float(row['DriverExp']) + u_toll + float(row['Other'])))
-                        up_list = list(row.values)
-                        up_list[0], up_list[3], up_list[4], up_list[5], up_list[6], up_list[7], up_list[8], up_list[9], up_list[12], up_list[15], up_list[16], up_list[10], up_list[11], up_list[17], up_list[18], up_list[14], up_list[19], up_list[21], up_list[23] = u_date, u_party, u_cnm, u_cgst, u_cadd, u_eenm, u_eegst, u_eeadd, u_vno, u_from, u_to, u_mat, u_wt, u_fr, u_hchg, u_br, u_dsl, u_toll, u_prof
+                        
+                        # Prepare the full 24-column row list
+                        up_list = [
+                            u_date, row['LR'], row['Type'], u_party, u_cnm, u_cgst, u_cadd,
+                            u_eenm, u_eegst, u_eeadd, u_mat, u_wt, u_vno, row['Driver'],
+                            u_br, u_from, u_to, u_fr, u_hchg, u_dsl, row['DriverExp'],
+                            u_toll, row['Other'], u_prof
+                        ]
                         
                         if update_ws("trips", row['LR'], up_list):
-                            st.success("Record Updated!"); st.rerun()
+                            st.success(f"LR {row['LR']} Updated in Google Sheets!"); st.rerun()
+                        else:
+                            st.error("Sheet update failed. Check connection.")
 
                 if st.button(f"🗑️ Delete Record {row['LR']}", key=f"del_btn_{idx}"):
                     if delete_ws("trips", row['LR']):
@@ -219,7 +228,7 @@ elif menu == "Monthly Bill":
         if len(m_list) > 0:
             sm = st.selectbox("Select Month", m_list)
             m_df = df_t[(df_t['Party'] == sp) & (df_t['Date'].dt.strftime('%B %Y') == sm)]
-            st.dataframe(m_df[["Date", "LR", "Vehicle", "From", "To", "Material", "Freight"]], use_container_width=True)
+            st.dataframe(m_df[["Date", "LR", "Vehicle", "From", "To", "Freight"]], use_container_width=True)
             st.metric("Total Bill Amount", f"₹{m_df['Freight'].sum():,.0f}")
 
 # --- LEDGERS ---
@@ -241,7 +250,6 @@ elif menu == "Broker Ledger":
         bl = pd.merge(w, p, on="Name", how="left").fillna(0)
         bl["Outstanding"] = bl["Total_Work"] - bl["Total_Paid"]
         st.table(bl.style.format({"Total_Work": "₹{:.0f}", "Total_Paid": "₹{:.0f}", "Outstanding": "₹{:.0f}"}))
-    else: st.info("No Hired Data.")
 
 # --- VEHICLE PERFORMANCE (OWN ONLY) ---
 elif menu == "Vehicle Performance":
@@ -251,7 +259,6 @@ elif menu == "Vehicle Performance":
         vr = own_fleet.groupby("Vehicle").agg({"LR": "count", "Freight": "sum", "Profit": "sum"}).reset_index().rename(columns={"LR": "Trips", "Freight": "Revenue"})
         st.dataframe(vr.style.format({"Revenue": "₹{:.0f}", "Profit": "₹{:.0f}"}), use_container_width=True)
         st.bar_chart(vr.set_index("Vehicle")["Profit"])
-    else: st.warning("Own fleet data nahi mila.")
 
 # --- TRANSACTIONS ---
 elif menu in ["Party Receipt", "Broker Payment"]:
@@ -260,10 +267,9 @@ elif menu in ["Party Receipt", "Broker Payment"]:
     with st.form(f"pay_form_{cat}"):
         nms = df_t[cat].unique() if not df_t.empty else []
         snm = st.selectbox("Select Name", nms)
-        am = st.number_input("Amount", 0.0)
-        mo = st.selectbox("Mode", ["Bank", "Cash", "Cheque"])
+        am, md = st.number_input("Amount", 0.0), st.selectbox("Mode", ["Bank", "Cash", "Cheque"])
         if st.form_submit_button("Record"):
-            if save_ws("payments", [str(date.today()), snm, cat, am, mo]): st.success("Recorded!"); st.rerun()
+            if save_ws("payments", [str(date.today()), snm, cat, am, md]): st.success("Recorded!"); st.rerun()
 
 elif menu == "Admin Expense":
     st.header("🏢 Office Admin Expense")
