@@ -33,7 +33,7 @@ def load_from_gs(worksheet_name):
         return pd.DataFrame(ws.get_all_records())
     except: return pd.DataFrame()
 
-# Columns structure (Sahi sequence jo Sheet se match karega)
+# Column Structures
 cols_t = ["Date","LR","Type","Party","Consignor","Consignor_GST","Consignor_Add","Consignee","Consignee_GST","Consignee_Add","Material","Weight","Vehicle","Driver","Broker","From","To","Freight","HiredCharges","Diesel","DriverExp","Toll","Other","Profit"]
 cols_p = ["Date", "Name", "Category", "Amount", "Mode"]
 cols_a = ["Date", "Category", "Amount", "Remarks"]
@@ -43,11 +43,18 @@ if sh:
     df_p = load_from_gs("payments")
     df_a = load_from_gs("admin")
     
-    # Missing columns safety
+    # Missing columns safety & Numeric Conversion
     for c in cols_t: 
-        if c not in df_t.columns: df_t[c] = 0
-    for c in cols_p: 
-        if c not in df_p.columns: df_p[c] = 0
+        if c not in df_t.columns: df_t[c] = ""
+    num_cols = ["Freight", "HiredCharges", "Profit", "Weight", "Diesel", "Toll", "DriverExp", "Other"]
+    for c in num_cols:
+        if c in df_t.columns:
+            df_t[c] = pd.to_numeric(df_t[c], errors='coerce').fillna(0)
+    
+    if not df_p.empty:
+        df_p["Amount"] = pd.to_numeric(df_p["Amount"], errors='coerce').fillna(0)
+    if not df_a.empty:
+        df_a["Amount"] = pd.to_numeric(df_a["Amount"], errors='coerce').fillna(0)
 else:
     st.stop()
 
@@ -59,7 +66,38 @@ def save_to_gs(worksheet_name, row_data):
     except Exception as e:
         st.error(f"Error: {e}"); return False
 
-# --- 2. LOGIN ---
+# --- 2. PDF GENERATORS ---
+def generate_lr_pdf(row):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 20); pdf.cell(190, 10, "VIRAT LOGISTICS", ln=True, align='C')
+    pdf.set_font("Arial", '', 10); pdf.cell(190, 5, "Transport & Fleet Management", ln=True, align='C'); pdf.ln(10)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(95, 10, f"LR No: {row['LR']}", border=1)
+    pdf.cell(95, 10, f"Date: {row['Date']}", border=1, ln=True); pdf.ln(5)
+    pdf.cell(95, 7, f"Consignor: {row['Consignor']}", border='TLR', ln=True)
+    pdf.cell(95, 7, f"Consignee: {row['Consignee']}", border='LRB', ln=True); pdf.ln(5)
+    pdf.cell(100, 10, f"Material: {row['Material']}", border=1)
+    pdf.cell(90, 10, f"Freight: Rs. {row['Freight']}", border=1, ln=True)
+    return pdf.output(dest='S').encode('latin-1')
+
+def generate_monthly_pdf(party, m_df, month):
+    pdf = FPDF(orientation='L', unit='mm', format='A4'); pdf.add_page()
+    pdf.set_font("Arial", 'B', 16); pdf.cell(280, 10, f"BILL SUMMARY - {party}", ln=True, align='C')
+    pdf.set_font("Arial", '', 10); pdf.cell(280, 7, f"Month: {month}", ln=True, align='C'); pdf.ln(5)
+    pdf.set_font("Arial", 'B', 8)
+    for h in ["Date", "LR", "Vehicle", "Consignee", "From-To", "Freight"]: pdf.cell(45, 8, h, 1, 0, 'C')
+    pdf.ln(); pdf.set_font("Arial", '', 8)
+    for _, r in m_df.iterrows():
+        pdf.cell(45, 7, str(r['Date']), 1)
+        pdf.cell(45, 7, str(r['LR']), 1)
+        pdf.cell(45, 7, str(r['Vehicle']), 1)
+        pdf.cell(45, 7, str(r['Consignee'])[:20], 1)
+        pdf.cell(45, 7, f"{r['From']}-{r['To']}"[:20], 1)
+        pdf.cell(45, 7, str(r['Freight']), 1, 1, 'R')
+    return pdf.output(dest='S').encode('latin-1')
+
+# --- 3. LOGIN & MENU ---
 if "login" not in st.session_state: st.session_state.login = False
 if not st.session_state.login:
     st.title("🚚 Virat Logistics ERP")
@@ -68,23 +106,22 @@ if not st.session_state.login:
         if u == "admin" and p == "1234": st.session_state.login = True; st.rerun()
     st.stop()
 
-menu = st.sidebar.selectbox("Menu", ["Dashboard", "Add LR", "Party Ledger", "Broker Ledger", "Party Receipt", "Broker Payment", "Admin Expense"])
+menu = st.sidebar.selectbox("Menu", ["Dashboard", "Add LR", "LR Reports", "Monthly Bill", "Vehicle Profit", "Party Ledger", "Broker Ledger", "Party Receipt", "Broker Payment", "Admin Expense"])
 
-# --- 3. DASHBOARD ---
+# --- 4. DASHBOARD ---
 if menu == "Dashboard":
     st.title("📊 Financial Summary")
-    t_prof = pd.to_numeric(df_t["Profit"], errors='coerce').sum()
-    t_rev = pd.to_numeric(df_t["Freight"], errors='coerce').sum()
-    p_rec = pd.to_numeric(df_p[df_p["Category"]=="Party"]["Amount"], errors='coerce').sum()
-    b_work = pd.to_numeric(df_t["HiredCharges"], errors='coerce').sum()
-    b_paid = pd.to_numeric(df_p[df_p["Category"]=="Broker"]["Amount"], errors='coerce').sum()
+    t_rev = df_t["Freight"].sum()
+    p_rec = df_p[df_p["Category"]=="Party"]["Amount"].sum() if not df_p.empty else 0
+    b_work = df_t["HiredCharges"].sum()
+    b_paid = df_p[df_p["Category"]=="Broker"]["Amount"].sum() if not df_p.empty else 0
     
     c1, c2, c3 = st.columns(3)
-    c1.metric("Profit", f"₹{t_prof:,.0f}")
+    c1.metric("Profit", f"₹{df_t['Profit'].sum():,.0f}")
     c2.metric("Party Due", f"₹{(t_rev - p_rec):,.0f}")
     c3.metric("Broker Payable", f"₹{(b_work - b_paid):,.0f}")
 
-# --- 4. ADD LR ---
+# --- 5. ADD LR ---
 elif menu == "Add LR":
     st.header("📝 New LR Entry")
     v_type = st.radio("Vehicle Type", ["Own", "Hired"], horizontal=True)
@@ -100,60 +137,72 @@ elif menu == "Add LR":
             mat, wt = st.text_input("Material"), st.number_input("Weight", 0.0)
             broker = st.text_input("Broker", disabled=(v_type=="Own"))
             freight = st.number_input("Freight*", 0.0)
-            if v_type == "Hired":
-                h_chg, dsl, de, tl, ot = st.number_input("Hired Charges"), 0, 0, 0, 0
-            else:
-                h_chg, dsl, de, tl, ot = 0, st.number_input("Diesel"), st.number_input("Driver Exp"), st.number_input("Toll"), st.number_input("Other")
+            if v_type == "Hired": h_chg, dsl, de, tl, ot = st.number_input("Hired Charges"), 0, 0, 0, 0
+            else: h_chg, dsl, de, tl, ot = 0, st.number_input("Diesel"), st.number_input("Driver Exp"), st.number_input("Toll"), st.number_input("Other")
         
         if st.form_submit_button("Save"):
             prof = (freight - (dsl+de+tl+ot)) if v_type == "Own" else (freight - h_chg)
-            # Yahan sequence bilkul sheet ke columns jaisa hai
             new_row = [str(d), f"LR-{len(df_t)+1001}", v_type, party, consignor, con_gst, con_add, consignee, cee_gst, cee_add, mat, wt, vehicle, "Driver", broker, f_loc, t_loc, freight, h_chg, dsl, de, tl, ot, prof]
             if save_to_gs("trips", new_row): st.success("Saved!"); st.rerun()
 
-# --- 5. LEDGERS (Fixing Type & Calculation) ---
-elif menu == "Party Ledger":
-    st.header("🏢 Party Outstanding")
+# --- 6. LR REPORTS ---
+elif menu == "LR Reports":
+    st.header("📋 All LR Records")
     if not df_t.empty:
-        df_t["Freight"] = pd.to_numeric(df_t["Freight"], errors='coerce').fillna(0)
-        p_bill = df_t.groupby("Party")["Freight"].sum().reset_index()
-        p_bill.columns = ["Name", "Total_Billing"]
-        
-        df_p["Amount"] = pd.to_numeric(df_p["Amount"], errors='coerce').fillna(0)
-        p_paid = df_p[df_p["Category"]=="Party"].groupby("Name")["Amount"].sum().reset_index()
-        p_paid.columns = ["Name", "Total_Received"]
-        
-        ledger = pd.merge(p_bill, p_paid, on="Name", how="left").fillna(0)
-        ledger["Balance"] = ledger["Total_Billing"] - ledger["Total_Received"]
-        st.dataframe(ledger, use_container_width=True)
+        for i, row in df_t.iterrows():
+            with st.expander(f"{row['LR']} | {row['Party']} | {row['Vehicle']}"):
+                st.write(row)
+                st.download_button("📥 PDF", generate_lr_pdf(row), f"{row['LR']}.pdf", "application/pdf", key=f"pdf_{i}")
+
+# --- 7. MONTHLY BILL ---
+elif menu == "Monthly Bill":
+    st.header("📅 Monthly Party Bill")
+    if not df_t.empty:
+        df_t['Date'] = pd.to_datetime(df_t['Date'])
+        p_name = st.selectbox("Select Party", df_t["Party"].unique())
+        m_list = df_t['Date'].dt.strftime('%B %Y').unique()
+        sel_m = st.selectbox("Select Month", m_list)
+        m_df = df_t[(df_t['Party']==p_name) & (df_t['Date'].dt.strftime('%B %Y')==sel_m)]
+        if not m_df.empty:
+            st.dataframe(m_df)
+            st.download_button("📥 Download Monthly PDF", generate_monthly_pdf(p_name, m_df, sel_m), f"Bill_{p_name}.pdf", "application/pdf")
+
+# --- 8. VEHICLE PROFIT ---
+elif menu == "Vehicle Profit":
+    st.header("🚛 Vehicle Wise Profit")
+    own = df_t[df_t["Type"]=="Own"]
+    if not own.empty:
+        v_sum = own.groupby("Vehicle").agg({"LR":"count", "Freight":"sum", "Profit":"sum"}).reset_index()
+        st.dataframe(v_sum.rename(columns={"LR":"Trips"}), use_container_width=True)
+
+# --- 9. LEDGERS ---
+elif menu == "Party Ledger":
+    st.header("🏢 Party Ledger")
+    if not df_t.empty:
+        p_bill = df_t.groupby("Party")["Freight"].sum().reset_index().rename(columns={"Party":"Name", "Freight":"Total_Billing"})
+        p_paid = df_p[df_p["Category"]=="Party"].groupby("Name")["Amount"].sum().reset_index().rename(columns={"Amount":"Total_Received"})
+        res = pd.merge(p_bill, p_paid, on="Name", how="left").fillna(0)
+        res["Balance"] = res["Total_Billing"] - res["Total_Received"]
+        st.dataframe(res, use_container_width=True)
 
 elif menu == "Broker Ledger":
-    st.header("🤝 Broker Outstanding")
-    hired = df_t[df_t["Type"] == "Hired"]
+    st.header("🤝 Broker Ledger")
+    hired = df_t[df_t["Type"]=="Hired"]
     if not hired.empty:
-        hired["HiredCharges"] = pd.to_numeric(hired["HiredCharges"], errors='coerce').fillna(0)
-        b_work = hired.groupby("Broker")["HiredCharges"].sum().reset_index()
-        b_work.columns = ["Name", "Total_Work"]
-        
-        df_p["Amount"] = pd.to_numeric(df_p["Amount"], errors='coerce').fillna(0)
-        b_paid = df_p[df_p["Category"]=="Broker"].groupby("Name")["Amount"].sum().reset_index()
-        b_paid.columns = ["Name", "Total_Paid"]
-        
-        ledger = pd.merge(b_work, b_paid, on="Name", how="left").fillna(0)
-        ledger["Balance"] = ledger["Total_Work"] - ledger["Total_Paid"]
-        st.dataframe(ledger, use_container_width=True)
-    else: st.info("No Hired Trips found.")
+        b_work = hired.groupby("Broker")["HiredCharges"].sum().reset_index().rename(columns={"Broker":"Name", "HiredCharges":"Total_Work"})
+        b_paid = df_p[df_p["Category"]=="Broker"].groupby("Name")["Amount"].sum().reset_index().rename(columns={"Amount":"Total_Paid"})
+        res = pd.merge(b_work, b_paid, on="Name", how="left").fillna(0)
+        res["Balance"] = res["Total_Work"] - res["Total_Paid"]
+        st.dataframe(res, use_container_width=True)
 
-# --- 6. PAYMENTS ---
+# --- 10. PAYMENTS & ADMIN ---
 elif menu in ["Party Receipt", "Broker Payment"]:
     cat = "Party" if menu == "Party Receipt" else "Broker"
     st.header(f"💰 {cat} Entry")
     with st.form("p_form", clear_on_submit=True):
-        # Dropdown for names from trips
-        names = df_t[cat].unique() if not df_t.empty else []
-        nm = st.selectbox("Name", names)
+        nm = st.selectbox("Name", df_t[cat].unique() if not df_t.empty else [])
         am, md = st.number_input("Amount", 0.0), st.selectbox("Mode", ["Cash", "Bank", "Cheque"])
-        if st.form_submit_button("Save Payment"):
+        if st.form_submit_button("Save"):
             if save_to_gs("payments", [str(date.today()), nm, cat, am, md]): st.success("Saved!"); st.rerun()
 
 elif menu == "Admin Expense":
