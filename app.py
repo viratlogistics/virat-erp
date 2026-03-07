@@ -9,22 +9,18 @@ from google.oauth2.service_account import Credentials
 st.set_page_config(page_title="Virat Logistics ERP", layout="wide")
 
 # Google Sheets Connection Logic
+import json # Ye line upar import mein add karein
+
 def get_gspread_client():
     try:
-        # Streamlit Secrets ko dictionary mein badalna
-        creds_dict = dict(st.secrets["gcp_service_account"])
+        # Secrets se poori JSON string uthana
+        info = json.loads(st.secrets["gcp_service_account"]["json_key"])
         
-        # KEY FIX: Agar triple quotes use kiye hain toh \n ki tension nahi, 
-        # lekin agar \n likhe hain toh unhe asli newline mein badalna zaroori hai.
-        if "private_key" in creds_dict:
-            # Ye line double backslash aur single backslash dono ko handle karegi
-            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
-            
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        creds = Credentials.from_service_account_info(info, scopes=scope)
         return gspread.authorize(creds)
     except Exception as e:
-        st.error(f"❌ Login Failed (Check Secrets): {e}")
+        st.error(f"❌ Login Failed: {e}")
         return None
 client = get_gspread_client()
 
@@ -109,4 +105,5 @@ if menu == "Add LR":
                 new_row = [str(d), lr, v_type, party, consignor, con_gst, con_add, consignee, cee_gst, cee_add, mat, wt, vehicle, "Driver", broker, f_loc, t_loc, freight, h_chg, dsl, de, tl, ot, prof]
                 if save_to_gs("trips", new_row):
                     st.success("Saved Successfully!"); st.rerun()
+
 
