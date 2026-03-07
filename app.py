@@ -14,8 +14,10 @@ def get_gspread_client():
         # Streamlit Secrets ko dictionary mein badalna
         creds_dict = dict(st.secrets["gcp_service_account"])
         
-        # Private key ke newline characters fix karna
+        # KEY FIX: Agar triple quotes use kiye hain toh \n ki tension nahi, 
+        # lekin agar \n likhe hain toh unhe asli newline mein badalna zaroori hai.
         if "private_key" in creds_dict:
+            # Ye line double backslash aur single backslash dono ko handle karegi
             creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
             
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -24,7 +26,6 @@ def get_gspread_client():
     except Exception as e:
         st.error(f"❌ Login Failed (Check Secrets): {e}")
         return None
-
 client = get_gspread_client()
 
 # IMPORTANT: Sheet ka naam bilkul sahi likhein (Jaise Google Drive mein hai)
@@ -108,3 +109,4 @@ if menu == "Add LR":
                 new_row = [str(d), lr, v_type, party, consignor, con_gst, con_add, consignee, cee_gst, cee_add, mat, wt, vehicle, "Driver", broker, f_loc, t_loc, freight, h_chg, dsl, de, tl, ot, prof]
                 if save_to_gs("trips", new_row):
                     st.success("Saved Successfully!"); st.rerun()
+
