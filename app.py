@@ -22,7 +22,6 @@ def get_gspread_client():
 client = get_gspread_client()
 SHEET_NAME = "Virat_Logistics_Data"
 
-# Safe Sheet Opening
 sh = None
 if client:
     try:
@@ -48,7 +47,6 @@ def load_safe(worksheet_name, default_cols):
             df[col] = 0 if any(x in col for x in ["Amount", "Freight", "Profit", "HiredCharges", "Weight"]) else ""
     return df[default_cols]
 
-# Columns structure (DO NOT CHANGE ORDER)
 cols_t = ["Date","LR","Type","Party","Consignor","Consignor_GST","Consignor_Add","Consignee","Consignee_GST","Consignee_Add","Material","Weight","Vehicle","Driver","Broker","From","To","Freight","HiredCharges","Diesel","DriverExp","Toll","Other","Profit"]
 cols_p = ["Date", "Name", "Category", "Amount", "Mode"]
 cols_a = ["Date", "Category", "Amount", "Remarks"]
@@ -63,14 +61,13 @@ else:
 def save_to_gs(worksheet_name, row_data):
     try:
         ws = sh.worksheet(worksheet_name)
-        # Ensure row_data is a list of strings/numbers for proper column alignment
         ws.append_row(row_data, value_input_option='USER_ENTERED')
         return True
     except Exception as e:
         st.error(f"Error saving: {e}")
         return False
 
-# --- 2. PDF GENERATORS ---
+# --- 2. PDF GENERATOR (Fixed Float Error) ---
 def generate_detailed_monthly_pdf(party, selected_df, selected_m):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
@@ -84,7 +81,11 @@ def generate_detailed_monthly_pdf(party, selected_df, selected_m):
     for h, w in headers: pdf.cell(w, 8, h, 1, 0, 'C')
     pdf.ln()
     pdf.set_font("Arial", '', 7)
+    
+    total_freight = 0
     for _, r in selected_df.iterrows():
+        f_val = pd.to_numeric(r['Freight'], errors='coerce') if not pd.isna(r['Freight']) else 0
+        total_freight += f_val
         pdf.cell(20, 7, str(r['Date']), 1)
         pdf.cell(20, 7, str(r['LR']), 1)
         pdf.cell(30, 7, str(r['Vehicle']), 1)
@@ -92,10 +93,11 @@ def generate_detailed_monthly_pdf(party, selected_df, selected_m):
         pdf.cell(35, 7, str(r['Material'])[:20], 1)
         pdf.cell(15, 7, str(r['Weight']), 1, 0, 'C')
         pdf.cell(65, 7, f"{r['From']}-{r['To']}"[:40], 1)
-        pdf.cell(25, 7, f"{float(r['Freight']):,.0f}", 1, 1, 'R')
+        pdf.cell(25, 7, f"{float(f_val):,.0f}", 1, 1, 'R')
+        
     pdf.set_font("Arial", 'B', 9)
     pdf.cell(230, 10, "GRAND TOTAL", 1, 0, 'R')
-    pdf.cell(25, 10, f"Rs. {selected_df['Freight'].astype(float).sum():,.0f}", 1, 1, 'R')
+    pdf.cell(25, 10, f"Rs. {total_freight:,.0f}", 1, 1, 'R')
     return pdf.output(dest='S').encode('latin-1')
 
 # --- 3. LOGIN ---
@@ -109,7 +111,7 @@ if not st.session_state.login:
     st.stop()
 
 # --- 4. SIDEBAR ---
-menu = st.sidebar.selectbox("Menu", ["Dashboard", "Add LR", "Monthly Bill", "Party Receipt", "Broker Payment", "Admin Expense", "Party Ledger", "Broker Ledger"])
+menu = st.sidebar.selectbox("Menu", ["Dashboard", "Add LR", "Monthly Bill", "Party Ledger", "Broker Ledger", "Party Receipt", "Broker Payment", "Admin Expense"])
 
 # --- 5. DASHBOARD ---
 if menu == "Dashboard":
@@ -156,21 +158,19 @@ elif menu == "Add LR":
             else:
                 h_chg, dsl, de, tl, ot = 0, st.number_input("Diesel"), st.number_input("Driver Exp"), st.number_input("Toll"), st.number_input("Other")
         
-        if st.form_submit_button("Save to Sheets"):
+        if st.form_submit_button("Save Entry"):
             if party and vehicle:
                 prof = (freight - (dsl+de+tl+ot)) if v_type == "Own" else (freight - h_chg)
-                # Align data strictly with cols_t
                 new_row = [str(d), lr, v_type, party, consignor, con_gst, con_add, consignee, cee_gst, cee_add, mat, wt, vehicle, "Driver", broker, f_loc, t_loc, freight, h_chg, dsl, de, tl, ot, prof]
                 if save_to_gs("trips", new_row):
-                    st.success("Entry Saved Successfully!"); st.rerun()
+                    st.success("Entry Saved!"); st.rerun()
 
 # --- 7. MONTHLY BILL ---
 elif menu == "Monthly Bill":
     st.header("📅 Monthly Summary Bill")
     if not df_t.empty:
         df_t['Date'] = pd.to_datetime(df_t['Date'])
-        p_list = df_t["Party"].unique()
-        p_name = st.selectbox("Select Party", p_list)
+        p_name = st.selectbox("Select Party", df_t["Party"].unique())
         m_list = df_t['Date'].dt.strftime('%B %Y').unique()
         sel_m = st.selectbox("Select Month", m_list)
         m_df = df_t[(df_t['Party']==p_name) & (df_t['Date'].dt.strftime('%B %Y')==sel_m)].copy()
@@ -178,21 +178,18 @@ elif menu == "Monthly Bill":
             m_df.insert(0, "Select", True)
             edited = st.data_editor(m_df, hide_index=True)
             sel_trips = edited[edited["Select"] == True]
-            if not sel_trips.empty:
+            if st.button("Generate PDF"):
                 pdf_bytes = generate_detailed_monthly_pdf(p_name, sel_trips, sel_m)
-                st.download_button("📥 Download Bill PDF", pdf_bytes, f"Bill_{p_name}_{sel_m}.pdf", "application/pdf")
+                st.download_button("📥 Download", pdf_bytes, f"Bill_{p_name}.pdf", "application/pdf")
 
-# --- 8. LEDGERS (ACCURATE) ---
+# --- 8. LEDGERS ---
 elif menu == "Party Ledger":
     st.header("🏢 Party Wise Outstanding")
     if not df_t.empty:
-        # Total Billing
         p_bill = df_t.groupby("Party")["Freight"].sum().reset_index()
         p_bill.columns = ["Name", "Total_Billing"]
-        # Total Received
         p_paid = df_p[df_p["Category"]=="Party"].groupby("Name")["Amount"].sum().reset_index() if not df_p.empty else pd.DataFrame(columns=["Name", "Amount"])
         p_paid.columns = ["Name", "Total_Received"]
-        # Merge
         ledger = pd.merge(p_bill, p_paid, on="Name", how="left").fillna(0)
         ledger["Balance"] = ledger["Total_Billing"] - ledger["Total_Received"]
         st.dataframe(ledger, use_container_width=True)
@@ -209,22 +206,20 @@ elif menu == "Broker Ledger":
         ledger["Balance"] = ledger["Total_Work"] - ledger["Total_Paid"]
         st.dataframe(ledger, use_container_width=True)
 
-# --- 9. PAYMENTS & ADMIN ---
+# --- 9. PAYMENTS ---
 elif menu in ["Party Receipt", "Broker Payment"]:
     cat = "Party" if menu == "Party Receipt" else "Broker"
     st.header(f"💰 {cat} Transaction")
     with st.form("p_form", clear_on_submit=True):
-        nm, am, md = st.text_input("Name (Exactly as in LR)"), st.number_input("Amount", 0.0), st.selectbox("Mode", ["Cash", "Bank", "Cheque"])
+        nm = st.selectbox("Select Name", df_t[cat].unique() if not df_t.empty else [])
+        am, md = st.number_input("Amount", 0.0), st.selectbox("Mode", ["Cash", "Bank", "Cheque"])
         if st.form_submit_button("Save Payment"):
-            if nm and am > 0:
-                if save_to_gs("payments", [str(date.today()), nm, cat, am, md]):
-                    st.success("Payment Recorded!"); st.rerun()
+            if save_to_gs("payments", [str(date.today()), nm, cat, am, md]):
+                st.success("Saved!"); st.rerun()
 
 elif menu == "Admin Expense":
-    st.header("🏢 Office Admin Expense")
+    st.header("🏢 Office Expense")
     with st.form("a_form", clear_on_submit=True):
         ct, am, rem = st.selectbox("Type", ["Salary", "Rent", "Office", "Other"]), st.number_input("Amount", 0.0), st.text_input("Remarks")
         if st.form_submit_button("Save"):
-            if am > 0:
-                save_to_gs("admin", [str(date.today()), ct, am, rem])
-                st.success("Expense Recorded!"); st.rerun()
+            save_to_gs("admin", [str(date.today()), ct, am, rem]); st.rerun()
