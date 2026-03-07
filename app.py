@@ -186,15 +186,43 @@ elif menu == "Party Ledger":
         st.dataframe(res, use_container_width=True)
 
 elif menu == "Broker Ledger":
-    st.header("🤝 Broker Ledger")
-    hired = df_t[df_t["Type"]=="Hired"]
+    st.header("🤝 Broker Wise Outstanding")
+    
+    # Sirf 'Hired' trips ko filter karein
+    hired = df_t[df_t["Type"] == "Hired"]
+    
     if not hired.empty:
-        b_work = hired.groupby("Broker")["HiredCharges"].sum().reset_index().rename(columns={"Broker":"Name", "HiredCharges":"Total_Work"})
-        b_paid = df_p[df_p["Category"]=="Broker"].groupby("Name")["Amount"].sum().reset_index().rename(columns={"Amount":"Total_Paid"})
+        # Numeric conversion safety
+        hired["HiredCharges"] = pd.to_numeric(hired["HiredCharges"], errors='coerce').fillna(0)
+        
+        # Broker ke naam se group karein
+        b_work = hired.groupby("Broker")["HiredCharges"].sum().reset_index()
+        b_work.columns = ["Name", "Total_Work"]
+        
+        # Payments check karein
+        if not df_p.empty:
+            df_p["Amount"] = pd.to_numeric(df_p["Amount"], errors='coerce').fillna(0)
+            b_paid = df_p[df_p["Category"] == "Broker"].groupby("Name")["Amount"].sum().reset_index()
+            b_paid.columns = ["Name", "Total_Paid"]
+        else:
+            b_paid = pd.DataFrame(columns=["Name", "Total_Paid"])
+            
+        # Merge Work and Paid data
         res = pd.merge(b_work, b_paid, on="Name", how="left").fillna(0)
         res["Balance"] = res["Total_Work"] - res["Total_Paid"]
+        
+        # Final Table Display
+        st.subheader("Summary Table")
         st.dataframe(res, use_container_width=True)
-
+        
+        # Detail view for each broker
+        st.divider()
+        st.subheader("Broker Wise Trip Details")
+        for b_name in res["Name"].unique():
+            with st.expander(f"Details for: {b_name}"):
+                st.write(hired[hired["Broker"] == b_name][["Date", "LR", "Vehicle", "From", "To", "HiredCharges"]])
+    else:
+        st.info("Koi 'Hired' type ki entry nahi mili. Add LR mein 'Hired' select karke entry karein.")
 # --- 10. PAYMENTS & ADMIN ---
 elif menu in ["Party Receipt", "Broker Payment"]:
     cat = "Party" if menu == "Party Receipt" else "Broker"
@@ -211,3 +239,4 @@ elif menu == "Admin Expense":
         ct, am, rem = st.selectbox("Type", ["Salary", "Rent", "Office", "Other"]), st.number_input("Amount"), st.text_input("Remarks")
         if st.form_submit_button("Save"):
             save_to_gs("admin", [str(date.today()), ct, am, rem]); st.rerun()
+
