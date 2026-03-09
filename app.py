@@ -45,38 +45,44 @@ def delete_master_row(name_val):
 def generate_lr_pdf(lr_data, show_fr=True):
     pdf = FPDF()
     pdf.add_page()
-    # Branch Name & Address (Dynamic)
-    pdf.set_font("Arial", 'B', 18); pdf.cell(100, 8, lr_data.get('BrName', 'Virat Logistics'), ln=1)
-    pdf.set_font("Arial", '', 8); pdf.cell(190, 4, f"Address: {lr_data.get('BrAddr', '')}", ln=True)
-    pdf.cell(190, 4, f"GST No: {lr_data.get('BrGST', '')}", ln=True)
     
-    pdf.set_font("Arial", 'I', 8); pdf.cell(190, 5, "Your Goods Are In Good hand..", ln=True)
-    pdf.line(10, 35, 200, 35); pdf.ln(12)
+    # Helper function: Har value ko text mein badalne ke liye
+    def s(val): return str(val) if val is not None else ""
+
+    pdf.set_font("Arial", 'B', 18); pdf.cell(100, 8, s(lr_data.get('BrName', 'Virat Logistics')), ln=1)
+    pdf.set_font("Arial", '', 8); pdf.cell(190, 4, f"Address: {s(lr_data.get('BrAddr', ''))}", ln=True)
+    pdf.cell(190, 4, f"GST No: {s(lr_data.get('BrGST', ''))}", ln=True); pdf.ln(5)
+    pdf.line(10, 35, 200, 35); pdf.ln(10)
     
     pdf.set_font("Arial", 'B', 9)
-    pdf.cell(45, 8, f"LR No: {lr_data.get('LR No', '')}", 1); pdf.cell(45, 8, f"Date: {lr_data.get('Date', '')}", 1)
-    pdf.cell(50, 8, f"Vehicle: {lr_data.get('Vehicle', '')}", 1); pdf.cell(50, 8, f"Risk: {lr_data.get('Risk', 'Owner Risk')}", 1, ln=True)
-
+    pdf.cell(45, 8, f"LR No: {s(lr_data.get('LR No', ''))}", 1); pdf.cell(45, 8, f"Date: {s(lr_data.get('Date', ''))}", 1)
+    pdf.cell(50, 8, f"Vehicle: {s(lr_data.get('Vehicle', ''))}", 1); pdf.cell(50, 8, f"Risk: {s(lr_data.get('Risk', 'At Owner Risk'))}", 1, ln=True)
+    
     pdf.ln(2); pdf.set_fill_color(240, 240, 240)
     pdf.cell(63, 6, "CONSIGNOR", 1, 0, 'C', True); pdf.cell(63, 6, "CONSIGNEE", 1, 0, 'C', True); pdf.cell(64, 6, "BILLING PARTY", 1, 1, 'C', True)
     
     pdf.set_font("Arial", '', 8); y_s = pdf.get_y()
-    pdf.multi_cell(63, 5, f"{lr_data.get('Cnor', '')}\nGST: {lr_data.get('CnorGST', '')}", 1, 'L'); y_e1 = pdf.get_y()
-    pdf.set_y(y_s); pdf.set_x(73); pdf.multi_cell(63, 5, f"{lr_data.get('Cnee', '')}\nGST: {lr_data.get('CneeGST', '')}", 1, 'L'); y_e2 = pdf.get_y()
-    pdf.set_y(y_s); pdf.set_x(136); pdf.multi_cell(64, 5, f"{lr_data.get('BillP', '')}\nInv: {lr_data.get('InvNo', '')}", 1, 'L'); y_e3 = pdf.get_y()
-    pdf.set_y(max(y_e1, y_e2, y_e3))
+    pdf.multi_cell(63, 5, f"{s(lr_data.get('Cnor', ''))}\nGST: {s(lr_data.get('CnorGST', ''))}", 1, 'L'); y_e1 = pdf.get_y()
+    pdf.set_y(y_s); pdf.set_x(73); pdf.multi_cell(63, 5, f"{s(lr_data.get('Cnee', ''))}\nGST: {s(lr_data.get('CneeGST', ''))}", 1, 'L'); y_e2 = pdf.get_y()
+    pdf.set_y(y_s); pdf.set_x(136); pdf.multi_cell(64, 5, f"{s(lr_data.get('BillP', ''))}\nInv: {s(lr_data.get('InvNo', ''))}", 1, 'L'); y_e3 = pdf.get_y()
+    pdf.set_y(max(y_e1, y_e2, y_e3)); pdf.ln(2)
     
-    pdf.ln(2); pdf.set_font("Arial", 'B', 8); pdf.cell(190, 6, f"SHIP TO: {lr_data.get('ShipTo', 'N/A')}", 1, ln=True)
+    pdf.set_font("Arial", 'B', 8); pdf.cell(190, 6, f"SHIP TO: {s(lr_data.get('ShipTo', 'N/A'))}", 1, ln=True)
     pdf.ln(4); pdf.cell(70, 7, "Material", 1); pdf.cell(30, 7, "Pkg", 1); pdf.cell(30, 7, "Weight", 1); pdf.cell(30, 7, "Route", 1); pdf.cell(30, 7, "Freight", 1, ln=True)
-    pdf.set_font("Arial", '', 8); pdf.cell(70, 10, lr_data.get('Material', ''), 1); pdf.cell(30, 10, lr_data.get('Pkg', ''), 1); pdf.cell(30, 10, f"{lr_data.get('NetWt', 0)}/{lr_data.get('ChgWt', 0)}", 1); pdf.cell(30, 10, f"{lr_data.get('From', '')}-{lr_data.get('To', '')}", 1)
-    amt = f"Rs. {lr_data.get('Freight', 0)}" if show_fr else "T.B.B."
-    pdf.cell(30, 10, amt, 1, ln=True)
-    pdf.ln(5); pdf.set_font("Arial", 'B', 8)
-    # Bank Details (Dynamic)
-    pdf.cell(190, 5, f"BANK: {lr_data.get('BankInfo', 'N/A')} | Freight Paid By: {lr_data.get('PaidBy', 'N/A')}", ln=True)
+    
+    # Yahan pe s() use karne se error khatam ho jayega
+    pdf.set_font("Arial", '', 8)
+    pdf.cell(70, 10, s(lr_data.get('Material', '')), 1)
+    pdf.cell(30, 10, s(lr_data.get('Pkg', '')), 1)
+    pdf.cell(30, 10, f"{s(lr_data.get('NetWt', 0))}/{s(lr_data.get('ChgWt', 0))}", 1)
+    pdf.cell(30, 10, f"{s(lr_data.get('From', ''))}-{s(lr_data.get('To', ''))}", 1)
+    
+    amt = f"Rs. {s(lr_data.get('Freight', 0))}" if show_fr else "T.B.B."
+    pdf.cell(30, 10, amt, 1, ln=True); pdf.ln(5)
+    
+    pdf.set_font("Arial", 'B', 8); pdf.cell(190, 5, f"BANK: {s(lr_data.get('BankInfo', 'N/A'))} | Freight Paid By: {s(lr_data.get('PaidBy', 'N/A'))}", ln=True)
     pdf.ln(10); pdf.cell(95, 5, "Consignor Sign", 0, 0, 'L'); pdf.cell(95, 5, "For VIRAT LOGISTICS", 0, 1, 'R')
     return pdf.output(dest='S').encode('latin-1')
-
 # --- 3. MAIN LOGIC ---
 df_m = load("masters")
 df_t = load("trips")
@@ -243,3 +249,4 @@ elif menu == "3. LR Register":
         st.dataframe(df_f)
     else:
         st.info("No records found in trips sheet.")
+
