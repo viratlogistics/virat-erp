@@ -190,12 +190,17 @@ elif menu == "4. Financial Ledger":
             l_date = c2.date_input("Date", date.today())
             
             # Masters se naam uthaye Category ke hisab se
-            names = sorted(df_m[df_m['Type'] == l_cat]['Name'].tolist()) if not df_m.empty else []
-            l_name = c2.selectbox(f"Select {l_cat}*", ["Select"] + names)
+           # --- FIXED DROPDOWN LOGIC ---
+            # Category ke hisab se Masters se filter karein
+            if not df_m.empty:
+                # 'Broker' aur 'Party' dono check karega
+                m_filter = df_m[df_m['Type'].str.contains(l_cat, case=False, na=False)]
+                names = sorted(m_filter['Name'].unique().tolist())
+            else:
+                names = []
             
-            l_amt = c1.number_input("Amount*", min_value=0.0)
-            l_mode = c2.selectbox("Mode", ["Bank Transfer", "Cash", "Cheque", "TDS/Other"])
-            l_rem = st.text_input("Remarks (Invoice, LR No, etc.)")
+            l_name = c2.selectbox(f"Select {l_cat}*", ["Select"] + names, key="l_name_select")
+            # ----------------------------
             
             if st.form_submit_button("Save Transaction"):
                 if l_name != "Select" and l_amt > 0:
@@ -244,5 +249,6 @@ elif menu == "4. Financial Ledger":
             st.dataframe(billed if r_cat == "Party" else payable, use_container_width=True)
             st.write("💵 **Payment History**")
             st.dataframe(received if r_cat == "Party" else paid, use_container_width=True)
+
 
 
