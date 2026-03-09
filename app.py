@@ -39,7 +39,7 @@ def safe_float(val):
         return float(val)
     except: return 0.0
 
-# --- 2. PROFESSIONAL PDF ENGINE ---
+# --- 2. PDF ENGINE ---
 def generate_lr_pdf(lr, show_fr=True):
     pdf = FPDF()
     pdf.add_page()
@@ -73,7 +73,7 @@ df_m = load("masters")
 df_t = load("trips")
 
 if 'm_edit_idx' not in st.session_state: st.session_state.m_edit_idx = None
-if 'edit_idx' not in st.session_state: st.session_state.edit_idx = None
+if 'edit_lr_no' not in st.session_state: st.session_state.edit_lr_no = None
 if 'reset_k' not in st.session_state: st.session_state.reset_k = 0
 if 'pdf_ready' not in st.session_state: st.session_state.pdf_ready = None
 
@@ -82,10 +82,7 @@ menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry", "3.
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     m_type = st.selectbox("Category", ["Party", "Broker", "Vehicle", "Bank", "Branch"])
-    
-    # Pre-fill if editing
     m_ed = df_m.iloc[st.session_state.m_edit_idx] if st.session_state.m_edit_idx is not None else {}
-    
     with st.form("m_form", clear_on_submit=True):
         n = st.text_input("Name", value=m_ed.get('Name', ''))
         g = st.text_input("GST/Account No", value=m_ed.get('GST', ''))
@@ -98,27 +95,24 @@ if menu == "1. Masters Setup":
                     st.session_state.m_edit_idx = None
                 save("masters", [m_type, n, g, a])
                 st.success("Master Saved/Updated!"); st.rerun()
-    
     if st.session_state.m_edit_idx is not None:
         if st.button("Cancel Edit"): st.session_state.m_edit_idx = None; st.rerun()
-
     st.divider()
     if not df_m.empty:
         curr = df_m[df_m['Type'] == m_type]
         for i, r in curr.iterrows():
             c1, c2, c3 = st.columns([4, 1, 1])
             c1.write(f"**{r['Name']}** | {r.get('GST','')}")
-            if c2.button("✏️", key=f"med_{i}"):
-                st.session_state.m_edit_idx = i; st.rerun()
-            if c3.button("🗑️", key=f"mdel_{i}"):
-                sh.worksheet("masters").delete_rows(int(i) + 2); st.rerun()
+            if c2.button("✏️", key=f"med_{i}"): st.session_state.m_edit_idx = i; st.rerun()
+            if c3.button("🗑️", key=f"mdel_{i}"): sh.worksheet("masters").delete_rows(int(i) + 2); st.rerun()
 
 elif menu == "2. LR Entry":
     st.header("📝 Professional LR Entry")
-    if st.session_state.edit_idx is not None:
-        st.warning(f"Editing Mode: Row {st.session_state.edit_idx}")
-        ed = df_t.iloc[st.session_state.edit_idx]
-        if st.button("Cancel Edit"): st.session_state.edit_idx = None; st.rerun()
+    if st.session_state.edit_lr_no is not None:
+        st.warning(f"Editing Mode: {st.session_state.edit_lr_no}")
+        ed_row = df_t[df_t['LR No'] == st.session_state.edit_lr_no]
+        ed = ed_row.iloc[0] if not ed_row.empty else {}
+        if st.button("Cancel Edit"): st.session_state.edit_lr_no = None; st.rerun()
     else: ed = {}
 
     k = st.session_state.reset_k
@@ -154,13 +148,15 @@ elif menu == "2. LR Entry":
             hc, dsl, toll, drv = c1.number_input("Hired Charges"), 0, 0, 0
         if st.form_submit_button("🚀 SAVE LR"):
             row = [str(dt), lr_no, v_cat, bill_p, cn, "", "", ce, "", "", mt, nw, vn, "Driver", "OWN", fl, tl, fr, hc, dsl, drv, toll, 0, (fr-hc-dsl-toll-drv)]
-            if st.session_state.edit_idx is not None:
-                sh.worksheet("trips").delete_rows(int(st.session_state.edit_idx) + 2)
-                st.session_state.edit_idx = None
+            if st.session_state.edit_lr_no is not None:
+                try:
+                    target_row = sh.worksheet("trips").find(st.session_state.edit_lr_no).row
+                    sh.worksheet("trips").delete_rows(target_row)
+                except: pass
+                st.session_state.edit_lr_no = None
             save("trips", row)
             st.session_state.pdf_ready = {"LR No": lr_no, "Date": str(dt), "Vehicle": vn, "Consignor": cn, "Consignee": ce, "Party": bill_p, "From": fl, "To": tl, "Material": mt, "Weight": nw, "Freight": fr, "Paid_By": pb, "BrName": sel_br, "BrAddr": br_r.get('Address',''), "BrGST": br_r.get('GST',''), "BankInfo": f"{bk} A/C:{bk_r.get('GST','')}", "show_fr": show_fr}
-            st.success("Saved!"); st.rerun()
-
+            st.success("Saved/Updated!"); st.rerun()
     if st.session_state.pdf_ready:
         st.download_button("📥 DOWNLOAD PDF", generate_lr_pdf(st.session_state.pdf_ready, st.session_state.pdf_ready.get('show_fr', True)), f"LR_{st.session_state.pdf_ready['LR No']}.pdf")
 
@@ -173,8 +169,12 @@ elif menu == "3. LR Register":
         for i, row in df_f.iterrows():
             with st.expander(f"LR: {row['LR No']} | {row['Consignee']}"):
                 c1, c2, c3 = st.columns(3)
-                if c1.button("✏️ Edit", key=f"e_{i}"): st.session_state.edit_idx = i; st.rerun()
+                if c1.button("✏️ Edit", key=f"e_{i}"):
+                    st.session_state.edit_lr_no = row['LR No']; st.rerun()
                 if c2.button("🗑️ Delete", key=f"d_{i}"):
-                    sh.worksheet("trips").delete_rows(int(i) + 2); st.rerun()
+                    try:
+                        target_row = sh.worksheet("trips").find(row['LR No']).row
+                        sh.worksheet("trips").delete_rows(target_row); st.rerun()
+                    except: st.error("Row not found")
                 st.download_button("📥 PDF", generate_lr_pdf(row.to_dict(), True), f"LR_{row['LR No']}.pdf", key=f"p_{i}")
         st.dataframe(df_f)
