@@ -7,7 +7,7 @@ from google.oauth2.service_account import Credentials
 import json, io
 
 # --- 1. CONNECTION & LOAD ---
-st.set_page_config(page_title="Virat Logistics ERP v4.1", layout="wide")
+st.set_page_config(page_title="Virat Logistics ERP v4.2", layout="wide")
 
 @st.cache_resource
 def get_sh():
@@ -40,8 +40,7 @@ def generate_lr_pdf(lr_data, show_fr):
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(100, 8, lr_data.get('BrName', 'VIRAT LOGISTICS'), 0)
     pdf.set_font("Arial", 'B', 10)
-    # GST ki jagah Branch Name (KIM/KOSAMBA) likhne ka logic
-    pdf.cell(90, 8, f"{lr_data.get('BrCode', '')}", 0, 1, 'R') 
+    pdf.cell(90, 8, f"GST No: {lr_data.get('BrGST', '')}", 0, 1, 'R') 
     
     pdf.set_font("Arial", 'I', 8); pdf.cell(190, 5, "Your Goods Are In Good hand..", ln=True)
     pdf.set_font("Arial", '', 7); pdf.multi_cell(190, 3, f"Address: {lr_data.get('BrAddr', '')}")
@@ -86,10 +85,10 @@ menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry"])
 if menu == "1. Masters Setup":
     st.header("🏗️ Masters Setup")
     m_type = st.radio("Category", ["Party", "Branch", "Vehicle", "Bank", "Broker"], horizontal=True)
-    with st.form("master_v41", clear_on_submit=True):
+    with st.form("master_v42", clear_on_submit=True):
         c1, c2 = st.columns(2)
         with c1:
-            name = st.text_input(f"{m_type} Name/No*"); gst = st.text_input("GST / Branch Code (KIM/KOSAMBA)")
+            name = st.text_input(f"{m_type} Name/No*"); gst = st.text_input("GST / Branch Name")
         with c2:
             contact = st.text_input("Contact"); address = st.text_area("Address")
         if st.form_submit_button("Add Master"):
@@ -97,7 +96,7 @@ if menu == "1. Masters Setup":
     st.dataframe(df_m[df_m['Type'] == m_type] if not df_m.empty else [])
 
 elif menu == "2. LR Entry":
-    st.header("📝 Professional LR Entry v4.1")
+    st.header("📝 Professional LR Entry v4.2")
     if st.button("🆕 START NEW ENTRY"):
         st.session_state.reset_trigger += 1; st.session_state.pdf_ready = None; st.rerun()
     
@@ -105,21 +104,20 @@ elif menu == "2. LR Entry":
     def get_list(t): return df_m[df_m['Type'] == t] if not df_m.empty else pd.DataFrame()
     branches = get_list('Branch'); banks = get_list('Bank'); parties = get_list('Party'); vehicles = get_list('Vehicle'); brokers = get_list('Broker')
 
-    # --- TOP SETTINGS (OUTSIDE FORM FOR INSTANT UPDATE) ---
-    st.markdown("### 🏢 Business Unit")
+    st.markdown("### 🏢 Core Details")
     col_u1, col_u2, col_u3 = st.columns(3)
     with col_u1:
         sel_br = st.selectbox("Select Our Branch*", ["Select"] + branches['Name'].tolist(), key=f"br_{k}")
         br_info = branches[branches['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
-        br_code = br_info.get('GST', '01') # This will be KIM or KOSAMBA
+        br_code_for_lr = br_info.get('GST', '01') 
     with col_u2:
         v_cat = st.radio("Trip Category*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"vcat_{k}")
         lr_mode = st.radio("LR No Mode", ["Auto", "Manual"], horizontal=True, key=f"lrmode_{k}")
     with col_u3:
-        # --- DYNAMIC BRANCH-BASED NUMBERING ---
+        # --- AUTO NUMBERING LOGIC (KeyError Fix) ---
         fy = "25-26"
-        branch_count = len(df_t[df_t['Category'] == v_cat]) + 1 if not df_t.empty else 1
-        auto_no = f"VIL/{fy}/{br_code}/{branch_count:03d}" if sel_br != "Select" else ""
+        branch_count = len(df_t) + 1 if not df_t.empty else 1
+        auto_no = f"VIL/{fy}/{br_code_for_lr}/{branch_count:03d}" if sel_br != "Select" else ""
         lr_no = st.text_input("LR Number*", value=auto_no if lr_mode == "Auto" else "", key=f"lrno_{k}")
 
     st.divider()
@@ -143,7 +141,7 @@ elif menu == "2. LR Entry":
         ship_to = st.text_area("Ship-To Address", value=cnee_d.get('Address', ''), key=f"st_{k}")
         if v_cat == "Own Fleet": drv_adv = st.number_input("Driver Advance", key=f"drv_{k}")
 
-    with st.form(f"main_form_v41_{k}"):
+    with st.form(f"main_form_v42_{k}"):
         st.markdown("---")
         f1, f2, f3 = st.columns(3)
         with f1:
@@ -157,6 +155,7 @@ elif menu == "2. LR Entry":
         with f3:
             n_wt, c_wt = st.number_input("Net Wt"), st.number_input("Chg Wt")
             fr = st.number_input("Total Freight*", min_value=0.0)
+            inv = st.text_input("Invoice Info")
             show_fr_check = st.checkbox("Print Freight Amount in PDF?", value=True)
 
         if st.form_submit_button("🚀 SAVE & PREPARE PDF"):
@@ -171,7 +170,7 @@ elif menu == "2. LR Entry":
                 if save_row("trips", row):
                     st.session_state.pdf_ready = {
                         "LR No": lr_no, "Date": str(d), "Vehicle": v_no, "Risk": risk, "Articles": articles,
-                        "BrName": br_info.get('Name',''), "BrCode": br_code, "BrAddr": br_info.get('Address',''),
+                        "BrName": br_info.get('Name',''), "BrGST": br_info.get('GST',''), "BrAddr": br_info.get('Address',''),
                         "BillP": bill_pty, "Cnor": cnor, "CnorGST": cnor_d.get('GST',''), 
                         "Cnee": cnee, "CneeGST": cnee_d.get('GST',''), "Material": mat, 
                         "Pkg": "Standard", "NetWt": n_wt, "ChgWt": c_wt, "From": fl, "To": tl, "Freight": fr,
@@ -179,7 +178,6 @@ elif menu == "2. LR Entry":
                     }
                     st.success(f"✅ LR {lr_no} Saved!")
 
-    # SAFE DOWNLOAD BUTTON
     if st.session_state.pdf_ready:
         st.divider()
         st.download_button("📥 DOWNLOAD PDF", generate_lr_pdf(st.session_state.pdf_ready, st.session_state.pdf_ready['ShowFr']), f"LR_{lr_no}.pdf")
