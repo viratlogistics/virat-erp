@@ -177,85 +177,93 @@ elif menu == "3. LR Register":
                     try: sh.worksheet("trips").delete_rows(sh.worksheet("trips").find(row['LR No']).row); st.rerun()
                     except: st.error("Not found")
                 st.download_button("📥 PDF", generate_lr_pdf(row.to_dict(), True), f"LR_{row['LR No']}.pdf", key=f"p_{i}")
-# --- 4. FINANCIAL LEDGER (FIXED FOR DROPDOWN & SUBMIT) ---
+# --- 4. FINANCIAL LEDGER (POWERFUL DROPDOWN FIX) ---
 elif menu == "4. Financial Ledger":
     st.title("💳 Financial Management")
     t1, t2 = st.tabs(["➕ Add Transaction", "📑 Statement Report"])
     
     with t1:
         st.subheader("Record Paisa Aaya ya Diya")
-        # --- FORM START ---
         with st.form("ledger_entry_form", clear_on_submit=True):
             c1, c2 = st.columns(2)
-            l_cat = c1.selectbox("Category*", ["Party", "Broker"], key="cat_choice")
+            # User choice: Party ya Broker
+            l_cat = c1.selectbox("Category*", ["Party", "Broker"], key="main_cat_choice")
             l_type = c1.radio("Transaction*", ["Received (Paisa Aaya)", "Paid (Paisa Diya)"], horizontal=True)
             l_date = c2.date_input("Date", date.today())
             
-            # --- FIXED DROPDOWN LOGIC ---
+            # --- BRAHMASTRA FILTER FOR DROPDOWN ---
+            names_list = []
             if not df_m.empty:
-                m_f = df_m[df_m['Type'].str.strip() == l_cat]
+                # 1. Sabse pehle Type column ko saaf karo (Space hatao aur Chota letter karo)
+                df_m['clean_type'] = df_m['Type'].str.strip().str.capitalize()
+                target_cat = l_cat.strip().capitalize()
+                
+                # 2. Ab filter karo
+                m_f = df_m[df_m['clean_type'] == target_cat]
                 names_list = sorted(m_f['Name'].unique().tolist())
-            else:
-                names_list = []
             
-            # l_cat ki key se dropdown refresh hoga
-            l_name = c2.selectbox(f"Select {l_cat} Name*", ["Select"] + names_list, key=f"dropdown_{l_cat}")
+            # Dropdown with unique key for each category
+            l_name = c2.selectbox(
+                f"Select {l_cat} Name*", 
+                ["Select"] + names_list, 
+                key=f"final_drop_{l_cat}"
+            )
             
             l_amt = c1.number_input("Amount*", min_value=0.0)
             l_mode = c2.selectbox("Mode", ["Bank Transfer", "Cash", "Cheque", "TDS/Other"])
             l_rem = st.text_input("Remarks (Invoice, LR No, etc.)")
             
-            # --- SUBMIT BUTTON INSIDE FORM ---
-            submitted = st.form_submit_button("Save Transaction")
-            if submitted:
+            # Submit Button
+            if st.form_submit_button("Save Transaction"):
                 if l_name != "Select" and l_amt > 0:
                     save("payments", [str(l_date), l_cat, l_type, l_name, l_amt, l_mode, l_rem])
-                    st.success(f"Recorded: {l_amt} for {l_name}")
+                    st.success(f"✅ Saved: {l_amt} for {l_name}")
                     st.rerun()
-        # --- FORM END ---
 
     with t2:
         st.subheader("Hisaab-Kitaab (Report)")
         c1, c2 = st.columns(2)
-        r_cat = c1.selectbox("Report For", ["Party", "Broker"], key="rep_cat")
+        r_cat = c1.selectbox("Report For", ["Party", "Broker"], key="rep_cat_ui")
         
+        # Report filter logic (Same powerful filter)
+        r_names = []
         if not df_m.empty:
-            r_f = df_m[df_m['Type'].str.strip() == r_cat]
+            df_m['clean_type'] = df_m['Type'].str.strip().str.capitalize()
+            r_f = df_m[df_m['clean_type'] == r_cat.strip().capitalize()]
             r_names = sorted(r_f['Name'].unique().tolist())
-        else:
-            r_names = []
             
-        r_name = c2.selectbox(f"Select Name", ["Select"] + r_names, key=f"rep_name_{r_cat}")
+        r_name = c2.selectbox(f"Select Name", ["Select"] + r_names, key=f"rep_name_ui_{r_cat}")
         
         if r_name != "Select":
             df_p = load("payments")
             if r_cat == "Party":
-                billed = df_t[df_t['Party'] == r_name]
-                b_total = safe_float(billed['Freight'].sum())
-                paid = df_p[(df_p['Category'] == 'Party') & (df_p['Name'] == r_name)]
-                p_total = safe_float(paid['Amount'].sum())
-                bal = b_total - p_total
+                # Party Logic
+                billed_df = df_t[df_t['Party'] == r_name]
+                b_total = safe_float(billed_df['Freight'].sum())
+                paid_df = df_p[(df_p['Category'] == 'Party') & (df_p['Name'] == r_name)]
+                p_total = safe_float(paid_df['Amount'].sum())
                 
                 st.metric("Total Billed", f"₹{b_total:,.2f}")
                 st.metric("Total Received", f"₹{p_total:,.2f}")
-                st.metric("Balance Due", f"₹{bal:,.2f}", delta=-bal)
+                st.metric("Balance Due", f"₹{b_total - p_total:,.2f}")
             else:
-                payable = df_t[df_t['Broker'] == r_name]
-                # Hired Charges column position check (usually 18th or 19th)
-                py_total = safe_float(payable.iloc[:, 18].sum()) if not payable.empty else 0.0
-                p_paid = df_p[(df_p['Category'] == 'Broker') & (df_p['Name'] == r_name)]
-                p_paid_total = safe_float(p_paid['Amount'].sum())
-                bal = py_total - p_paid_total
+                # Broker Logic
+                payable_df = df_t[df_t['Broker'] == r_name]
+                # Column 18 is Hired Charges
+                py_total = safe_float(payable_df.iloc[:, 18].sum()) if not payable_df.empty else 0.0
+                p_paid_df = df_p[(df_p['Category'] == 'Broker') & (df_p['Name'] == r_name)]
+                p_paid_total = safe_float(p_paid_df['Amount'].sum())
                 
                 st.metric("Hired Payable", f"₹{py_total:,.2f}")
                 st.metric("Total Paid", f"₹{p_paid_total:,.2f}")
-                st.metric("Outstanding", f"₹{bal:,.2f}", delta=bal)
+                st.metric("Outstanding", f"₹{py_total - p_paid_total:,.2f}")
             
             st.divider()
-            st.write("📊 **Details**")
-            st.dataframe(billed if r_cat == "Party" else payable)
-            st.write("💸 **Payments**")
-            st.dataframe(paid if r_cat == "Party" else p_paid)
+            st.write("📊 Trip Data")
+            st.dataframe(billed_df if r_cat == "Party" else payable_df)
+            st.write("💸 Payment Data")
+            st.dataframe(paid_df if r_cat == "Party" else p_paid_df)
+
 
 
 
