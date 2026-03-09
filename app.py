@@ -107,12 +107,8 @@ if menu == "1. Masters Setup":
 
 elif menu == "2. LR Entry":
     st.header("📝 Professional LR Entry")
-    if st.session_state.last_pdf:
-        st.success(f"✅ LR {st.session_state.last_pdf['LR No']} Saved!")
-        fr_opt = st.session_state.last_pdf.get('show_fr', True)
-        st.download_button("📥 DOWNLOAD LAST BILTY", generate_lr_pdf(st.session_state.last_pdf, fr_opt), f"LR_{st.session_state.last_pdf['LR No']}.pdf")
-        if st.button("Close & New Entry"): st.session_state.last_pdf = None; st.rerun()
-
+    
+    # 1. Reset/Edit Logic
     if st.session_state.edit_lr_no:
         st.warning(f"Editing Mode: {st.session_state.edit_lr_no}")
         ed_row = df_t[df_t['LR No'] == st.session_state.edit_lr_no]
@@ -121,62 +117,38 @@ elif menu == "2. LR Entry":
 
     k = st.session_state.reset_k
     def gl(t): return sorted(df_m[df_m['Type'] == t]['Name'].tolist()) if not df_m.empty else []
-    
-    cp1, cp2, cp3 = st.columns(3)
-    with cp1:
-        sel_br = st.selectbox("Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
-        br_r = df_m[(df_m['Name'] == sel_br) & (df_m['Type'] == 'Branch')].iloc[0] if sel_br != "Select" else {}
-        v_cat = st.radio("Type*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"vcat_{k}")
+
+    # --- START OF FORM ---
+    with st.form(f"lr_main_form_{k}"):
+        cp1, cp2, cp3 = st.columns(3)
         
-        # --- Broker Selection Logic ---
-        if v_cat == "Market Hired":
-            sel_broker = st.selectbox("Select Broker*", ["Select"] + gl("Broker"), key=f"broker_sel_{k}")
-        else:
-            sel_broker = "OWN"
+        with cp1:
+            sel_br = st.selectbox("Branch*", ["Select"] + gl("Branch"), key=f"form_br_{k}")
+            br_r = df_m[(df_m['Name'] == sel_br) & (df_m['Type'] == 'Branch')].iloc[0] if sel_br != "Select" else {}
+            v_cat = st.radio("Type*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"form_vcat_{k}")
             
-        lr_no = st.text_input("LR No*", value=str(ed.get('LR No', f"VIL/25-26/{br_r.get('GST','01')}/{len(df_t)+1:03d}")), key=f"lrno_{k}")
-    
-    with cp2:
-        bill_p = st.selectbox("Party*", ["Select"] + gl("Party"), key=f"bp_{k}")
-        cn = st.text_input("Consignor", value=str(ed.get('Consignor', '')), key=f"cn_{k}")
-    
-    with cp3:
-        ce = st.text_input("Consignee", value=str(ed.get('Consignee', '')), key=f"ce_{k}")
-        pb = st.selectbox("Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pb_{k}")
-        bk = st.selectbox("Bank*", ["Select"] + gl("Bank"), key=f"bk_{k}")
-        bk_r = df_m[(df_m['Name'] == bk) & (df_m['Type'] == 'Bank')].iloc[0] if bk != "Select" else {}
-
-    with st.form(f"lr_form_{k}"):
-       cp1, cp2, cp3 = st.columns(3)
-    with cp1:
-        sel_br = st.selectbox("Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
-        br_r = df_m[(df_m['Name'] == sel_br) & (df_m['Type'] == 'Branch')].iloc[0] if sel_br != "Select" else {}
-        v_cat = st.radio("Type*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"vcat_{k}")
-        
-        if v_cat == "Market Hired":
-            sel_broker = st.selectbox("Select Broker*", ["Select"] + gl("Broker"), key=f"broker_sel_{k}")
-        else:
             sel_broker = "OWN"
+            if v_cat == "Market Hired":
+                sel_broker = st.selectbox("Select Broker*", ["Select"] + gl("Broker"), key=f"form_broker_{k}")
             
-        lr_no = st.text_input("LR No*", value=str(ed.get('LR No', f"VIL/25-26/{br_r.get('GST','01')}/{len(df_t)+1:03d}")), key=f"lrno_{k}")
+            lr_no = st.text_input("LR No*", value=str(ed.get('LR No', f"VIL/25-26/{br_r.get('GST','01')}/{len(df_t)+1:03d}")), key=f"form_lrno_{k}")
 
-    with cp2:
-        # --- PARTY AUTO-FETCH LOGIC YAHAN LAGEGA ---
-        bill_p = st.selectbox("Billing Party*", ["Select"] + gl("Party"), key=f"bp_{k}")
-        # Master se party ka data nikalna
-        p_data = df_m[(df_m['Name'] == bill_p) & (df_m['Type'] == 'Party')].iloc[0] if bill_p != "Select" else {}
-        
-        cn = st.text_input("Consignor Name", value=str(p_data.get('Name', ed.get('Consignor', ''))), key=f"cn_{k}")
-        cn_gst = st.text_input("Consignor GST", value=str(p_data.get('GST', '')), key=f"cgst_{k}")
-        cn_addr = st.text_area("Consignor Address", value=str(p_data.get('Address', '')), key=f"caddr_{k}")
+        with cp2:
+            bill_p = st.selectbox("Billing Party*", ["Select"] + gl("Party"), key=f"form_bp_{k}")
+            # --- AUTO FETCH LOGIC ---
+            p_data = df_m[(df_m['Name'] == bill_p) & (df_m['Type'] == 'Party')].iloc[0] if bill_p != "Select" else {}
+            
+            cn = st.text_input("Consignor Name", value=str(p_data.get('Name', ed.get('Consignor', ''))), key=f"form_cn_{k}")
+            cn_gst = st.text_input("Consignor GST", value=str(p_data.get('GST', '')), key=f"form_cgst_{k}")
+            cn_addr = st.text_area("Consignor Address", value=str(p_data.get('Address', '')), key=f"form_caddr_{k}", height=68)
 
-    with cp3:
-        ce = st.text_input("Consignee Name", value=str(ed.get('Consignee', '')), key=f"ce_{k}")
-        ce_gst = st.text_input("Consignee GST", key=f"cegst_{k}")
-        pb = st.selectbox("Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pb_{k}")
-        bk = st.selectbox("Bank*", ["Select"] + gl("Bank"), key=f"bk_{k}")
+        with cp3:
+            ce = st.text_input("Consignee Name", value=str(ed.get('Consignee', '')), key=f"form_ce_{k}")
+            ce_gst = st.text_input("Consignee GST", key=f"form_cegst_{k}")
+            pb = st.selectbox("Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"form_pb_{k}")
+            bk = st.selectbox("Bank*", ["Select"] + gl("Bank"), key=f"form_bk_{k}")
 
-    with st.form(f"lr_form_{k}"):
+        st.divider()
         f1, f2, f3 = st.columns(3)
         dt = f1.date_input("Date", date.today())
         vn = f1.text_input("Vehicle No", value=str(ed.get('Vehicle', '')))
@@ -185,25 +157,40 @@ elif menu == "2. LR Entry":
         mt = f2.text_input("Material Name", value=str(ed.get('Material', '')))
         pkg = f2.selectbox("Packaging Type", ["Bags", "Drums", "Boxes", "Loose", "Pallets", "Other"])
         
-        art = f3.number_input("Article (Qty)", min_value=0)
+        art = f3.number_input("Article (Qty)", min_value=0, step=1)
         nw = f3.number_input("Net Weight", value=safe_float(ed.get('Weight', 0.0)))
         cw = f3.number_input("Charged Weight", value=safe_float(ed.get('ChargedWeight', 0.0)))
         fr = f3.number_input("Total Freight", value=safe_float(ed.get('Freight', 0.0)))
         
-        # ... baaki Diesel/Toll aur Submit Button waisa hi rahega ...
-        
-        if v_cat == "Own Fleet": dsl, toll, drv, hc = c1.number_input("Diesel"), c2.number_input("Toll"), c3.number_input("Adv"), 0.0
-        else: hc, dsl, toll, drv = c1.number_input("Hired Charges"), 0, 0, 0
+        show_fr = st.checkbox("Show Freight in PDF?", value=True)
 
+        if v_cat == "Own Fleet": 
+            dsl, toll, drv, hc = f1.number_input("Diesel"), f2.number_input("Toll"), f3.number_input("Adv"), 0.0
+        else: 
+            hc, dsl, toll, drv = f1.number_input("Hired Charges"), 0, 0, 0
+
+        # --- SUBMIT BUTTON INSIDE FORM ---
         if st.form_submit_button("🚀 SAVE LR"):
-            row = [str(dt), lr_no, v_cat, bill_p, cn, "", "", ce, "", "", mt, nw, vn, "Driver", sel_broker, fl, tl, fr, hc, dsl, drv, toll, 0, (fr-hc-dsl-toll-drv)]
+            # Yahan hum naya data (Packaging, Article, Charged Weight) add karenge
+            # Date, LR_No, Type, Party, Cnor, CnorGST, CnorAddr, Cnee, CneeGST, Pkg, Mat, Art, Veh, Broker, From, To, Freight, CWt, NWt, Profit...
+            row = [str(dt), lr_no, v_cat, bill_p, cn, cn_gst, cn_addr, ce, ce_gst, pkg, mt, art, vn, sel_broker, fl, tl, fr, cw, nw, (fr-hc-dsl-toll-drv)]
+            
             if st.session_state.edit_lr_no:
                 try: sh.worksheet("trips").delete_rows(sh.worksheet("trips").find(st.session_state.edit_lr_no).row)
                 except: pass
                 st.session_state.edit_lr_no = None
+            
             save("trips", row)
-            st.session_state.last_pdf = {"LR No": lr_no, "Date": str(dt), "Vehicle": vn, "Consignor": cn, "Consignee": ce, "Party": bill_p, "From": fl, "To": tl, "Material": mt, "Weight": nw, "Freight": fr, "Paid_By": pb, "BrName": sel_br, "BrAddr": br_r.get('Address',''), "BrGST": br_r.get('GST',''), "BankInfo": f"{bk} A/C:{bk_r.get('GST','')}", "show_fr": show_fr}
-            st.session_state.reset_k += 1; st.rerun()
+            # Store data for PDF download before reset
+            st.session_state.last_pdf = {"LR No": lr_no, "Date": str(dt), "Vehicle": vn, "Consignor": cn, "Consignee": ce, "Party": bill_p, "From": fl, "To": tl, "Material": mt, "Weight": nw, "Freight": fr, "Paid_By": pb, "BrName": sel_br, "BrAddr": br_r.get('Address',''), "BrGST": br_r.get('GST',''), "show_fr": show_fr}
+            st.session_state.reset_k += 1
+            st.rerun()
+
+    # PDF Download Option (Outside form, appears after save)
+    if st.session_state.last_pdf:
+        st.success(f"✅ LR {st.session_state.last_pdf['LR No']} Saved!")
+        st.download_button("📥 DOWNLOAD BILTY", generate_lr_pdf(st.session_state.last_pdf, st.session_state.last_pdf.get('show_fr', True)), f"LR_{st.session_state.last_pdf['LR No']}.pdf")
+        if st.button("Clear & New Entry"): st.session_state.last_pdf = None; st.rerun()
 elif menu == "3. LR Register":
     st.title("📋 LR REGISTER")
     search = st.text_input("Search LR/Party")
