@@ -36,8 +36,8 @@ def save(name, row):
 def generate_lr_pdf(lr_data, show_fr):
     pdf = FPDF()
     pdf.add_page()
-    # Header Section
-    pdf.set_font("Arial", 'B', 16)
+    # Header Section (Professional Style)
+    pdf.set_font("Arial", 'B', 18)
     pdf.cell(190, 8, "VIRAT LOGISTICS", ln=True, align='C')
     pdf.set_font("Arial", 'I', 8)
     pdf.cell(190, 5, "Your Goods Are In Good hand..", ln=True, align='C')
@@ -45,14 +45,15 @@ def generate_lr_pdf(lr_data, show_fr):
     pdf.multi_cell(190, 4, "Plot No 130, Nr Manglam Werehouse, Kuwarda Road, Kosamba, Gujarat 394120", align='C')
     pdf.line(10, 32, 200, 32)
     
-    # LR Info
+    # LR Info Row
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 9)
-    pdf.cell(60, 8, f"LR No: {lr_data['LR No']}", 1)
-    pdf.cell(60, 8, f"Date: {lr_data['Date']}", 1)
-    pdf.cell(70, 8, f"Vehicle: {lr_data['Vehicle']}", 1, ln=True)
+    pdf.cell(45, 8, f"LR No: {lr_data['LR No']}", 1)
+    pdf.cell(45, 8, f"Date: {lr_data['Date']}", 1)
+    pdf.cell(50, 8, f"Vehicle: {lr_data['Vehicle']}", 1)
+    pdf.cell(50, 8, f"Billing: {lr_data['PaidBy']}", 1, ln=True)
     
-    # Consignor/Consignee
+    # Consignor/Consignee Box
     pdf.ln(2)
     pdf.set_fill_color(240, 240, 240)
     pdf.cell(95, 7, "CONSIGNOR (From)", 1, 0, 'C', True)
@@ -69,25 +70,29 @@ def generate_lr_pdf(lr_data, show_fr):
     y_end2 = pdf.get_y()
     pdf.set_y(max(y_end1, y_end2))
     
-    # Material Details
+    # Weight & Material Table
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 9)
-    pdf.cell(110, 8, "Material Description", 1)
-    pdf.cell(40, 8, "Route", 1)
-    pdf.cell(40, 8, "Freight", 1, ln=True)
+    pdf.cell(60, 8, "Material & Packaging", 1)
+    pdf.cell(30, 8, "Net Wt", 1)
+    pdf.cell(30, 8, "Chg Wt", 1)
+    pdf.cell(35, 8, "Route", 1)
+    pdf.cell(35, 8, "Freight", 1, ln=True)
     
     pdf.set_font("Arial", '', 9)
-    pdf.cell(110, 10, str(lr_data['Material']), 1)
-    pdf.cell(40, 10, f"{lr_data['From']}-{lr_data['To']}", 1)
-    amt = f"Rs. {lr_data['Freight']}" if show_fr else "To be billed"
-    pdf.cell(40, 10, amt, 1, ln=True)
+    pdf.cell(60, 10, f"{lr_data['Material']} ({lr_data['Pkg']})", 1)
+    pdf.cell(30, 10, f"{lr_data['NetWt']} kg", 1)
+    pdf.cell(30, 10, f"{lr_data['ChgWt']} kg", 1)
+    pdf.cell(35, 10, f"{lr_data['From']}-{lr_data['To']}", 1)
+    amt = f"Rs. {lr_data['Freight']}" if show_fr else "T.B.B"
+    pdf.cell(35, 10, amt, 1, ln=True)
     
-    # Footer
+    # Footer with Bank
     pdf.ln(10)
     pdf.set_font("Arial", 'B', 8)
     pdf.cell(190, 5, "Bank: BOB | A/C: 53480400000059 | IFSC: BARBOSARSUR", ln=True)
     pdf.ln(10)
-    pdf.cell(95, 5, "Consignor Sign", 0, 0, 'L')
+    pdf.cell(95, 5, "Consignor Signature", 0, 0, 'L')
     pdf.cell(95, 5, "For VIRAT LOGISTICS", 0, 1, 'R')
     return pdf.output(dest='S').encode('latin-1')
 
@@ -109,7 +114,7 @@ if menu == "1. Masters Setup":
         st.table(df_m[df_m['Type'] == m_type][['Name']])
 
 elif menu == "2. LR Entry":
-    st.header("📝 Create New LR")
+    st.header("📝 Consignment Note (LR)")
     
     party_list = sorted(df_m[df_m['Type'] == 'Party']['Name'].unique().tolist()) if not df_m.empty else []
     broker_list = sorted(df_m[df_m['Type'] == 'Broker']['Name'].unique().tolist()) if not df_m.empty else []
@@ -117,10 +122,10 @@ elif menu == "2. LR Entry":
     
     v_cat = st.radio("Trip Type*", ["Own Fleet", "Market Hired"], horizontal=True)
 
-    st.markdown("### 🏢 Party & Broker Selection")
+    st.markdown("### 🏢 Core Details")
     cp1, cp2, cp3 = st.columns(3)
     with cp1:
-        is_new_p = st.checkbox("New Party?")
+        is_new_p = st.checkbox("New Consignor?")
         pty = st.text_input("Consignor Name*") if is_new_p else st.selectbox("Consignor*", ["Select"] + party_list)
         cnor_gst = st.text_input("Consignor GST")
     with cp2:
@@ -128,11 +133,13 @@ elif menu == "2. LR Entry":
             is_new_b = st.checkbox("New Broker?")
             br = st.text_input("Broker Name*") if is_new_b else st.selectbox("Broker*", ["Select"] + broker_list)
         else: br = "OWN"
+        paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee"])
     with cp3:
         show_fr_in_pdf = st.checkbox("Show Freight in Print?", value=True)
 
     with st.form("lr_form"):
-        c1, c2 = st.columns(2)
+        st.markdown("---")
+        c1, c2, c3 = st.columns(3)
         with c1:
             d = st.date_input("Date", date.today())
             v_no = st.selectbox("Vehicle*", ["Select"] + own_v) if v_cat == "Own Fleet" else st.text_input("Vehicle No*")
@@ -140,29 +147,43 @@ elif menu == "2. LR Entry":
             cnee_gst = st.text_input("Consignee GST")
         with c2:
             fl, tl = st.text_input("From"), st.text_input("To")
-            mat = st.text_input("Material")
-            fr = st.number_input("Freight*", min_value=0.0)
-            if v_cat == "Market Hired":
+            mat = st.text_input("Material Name")
+            pkg = st.selectbox("Packaging Type", ["Drums", "Bags", "Boxes", "Loose", "Pallets"])
+        with c3:
+            net_wt = st.number_input("Net Weight (kg)", min_value=0.0)
+            chg_wt = st.number_input("Charged Weight (kg)", min_value=0.0)
+            fr = st.number_input("Total Freight Amount*", min_value=0.0)
+            
+            if v_cat == "Own Fleet":
+                st.write("**Expenses**")
+                dsl = st.number_input("Diesel")
+                toll = st.number_input("Toll")
+                drv = st.number_input("Driver Adv")
+                hc = 0.0
+            else:
                 hc = st.number_input("Hired Charges")
                 dsl, toll, drv = 0.0, 0.0, 0.0
-            else:
-                hc = 0.0
-                dsl, toll, drv = st.number_input("Diesel"), st.number_input("Toll"), st.number_input("Driver Adv")
         
-        submitted = st.form_submit_button("🚀 SAVE LR & PRINT")
+        submitted = st.form_submit_button("🚀 SAVE LR & GENERATE PDF")
 
     if submitted:
         if pty and pty != "Select" and v_no and v_no != "Select" and fr > 0:
             if is_new_p: save("masters", ["Party", pty])
-            if v_cat == "Market Hired" and is_new_b: save("masters", ["Broker", br])
+            if v_cat == "Market Hired" and 'is_new_b' in locals() and is_new_b: save("masters", ["Broker", br])
             
             lr_id = f"LR-{date.today().strftime('%d%m')}-{v_no[-4:]}"
             prof = (fr - hc) if v_cat == "Market Hired" else (fr - dsl - toll - drv)
-            row = [str(d), lr_id, v_cat, pty, "", "", "", "", "", "", mat, 0, v_no, "Driver", br, fl, tl, fr, hc, dsl, drv, toll, 0, prof]
+            
+            # 24 columns mapping (Weight aur PaidBy ko empty slots mein dala hai)
+            row = [str(d), lr_id, v_cat, pty, cnee, paid_by, net_wt, chg_wt, pkg, "", mat, 0, v_no, "Driver", br, fl, tl, fr, hc, dsl, drv, toll, 0, prof]
             
             if save("trips", row):
                 st.success(f"LR {lr_id} Saved!")
-                p_data = {"LR No": lr_id, "Date": str(d), "Party": pty, "Vehicle": v_no, "From": fl, "To": tl, "Material": mat, "Freight": fr, "Cnee": cnee, "Cnee_GST": cnee_gst, "Cnor_GST": cnor_gst}
-                st.download_button("🖨️ Download PDF", generate_lr_pdf(p_data, show_fr_in_pdf), f"{lr_id}.pdf")
+                p_data = {
+                    "LR No": lr_id, "Date": str(d), "Party": pty, "Vehicle": v_no, 
+                    "From": fl, "To": tl, "Material": mat, "Freight": fr, 
+                    "Cnee": cnee, "Cnee_GST": cnee_gst, "Cnor_GST": cnor_gst,
+                    "Pkg": pkg, "NetWt": net_wt, "ChgWt": chg_wt, "PaidBy": paid_by
+                }
+                st.download_button("🖨️ Download Professional LR", generate_lr_pdf(p_data, show_fr_in_pdf), f"{lr_id}.pdf")
             else: st.error("Error Saving!")
-        else: st.error("Fields missing!")
