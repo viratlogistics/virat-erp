@@ -106,7 +106,6 @@ elif menu == "2. LR Entry":
             fl = st.text_input("From Location")
             tl = st.text_input("To Location")
             # --- Is hisse ko LR Entry form ke andar "c1" ya "c2" column mein paste karein ---
-with c1:
     consignee = st.text_input("Consignee Name*") # Yash Speciality chemicals LLP jaisa [cite: 17]
     consignee_gst = st.text_input("Consignee GST No") # [cite: 18]
     consignor_gst = st.text_input("Consignor GST No") # [cite: 10]
@@ -143,6 +142,7 @@ with c1:
                 st.download_button("🖨️ Download PDF", btn_pdf, f"{lr_id}.pdf")
             else: st.error("Sync Failed!")
         else: st.error("Mandatory fields bharna zaroori hai (Party, Vehicle, Freight)!")
+
 
 
 
