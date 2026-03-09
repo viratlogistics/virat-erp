@@ -222,3 +222,4 @@ elif menu == "LR Register":
                     "Bank": "Bank Name", "PaidBy": row['Paid_By'], "InvNo": "Inv123", "ShipTo": "Address", "ShowFr": True
                 }
                 c2.download_button("📥 PDF", generate_lr_pdf(lr_pdf_data), f"LR_{row['LR_No']}.pdf", key=f"p_{i}")
+
