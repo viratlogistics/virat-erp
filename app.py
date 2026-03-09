@@ -37,31 +37,30 @@ def save(name, row):
 def generate_lr_pdf(lr_data, show_fr):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", 'B', 18); pdf.cell(100, 8, "Virat Logistics", ln=0)
-    pdf.set_font("Arial", '', 8); pdf.cell(90, 8, "Branch Code: 002", ln=1, align='R')
+    pdf.set_font("Arial", 'B', 18); pdf.cell(100, 8, "Virat Logistics", ln=1)
     pdf.set_font("Arial", 'I', 8); pdf.cell(190, 5, "Your Goods Are In Good hand..", ln=True)
     pdf.line(10, 30, 200, 30); pdf.ln(8)
     
     pdf.set_font("Arial", 'B', 9)
-    pdf.cell(45, 8, f"LR No: {lr_data['LR No']}", 1); pdf.cell(45, 8, f"Date: {lr_data['Date']}", 1)
-    pdf.cell(50, 8, f"Vehicle: {lr_data['Vehicle']}", 1); pdf.cell(50, 8, f"Risk: {lr_data['Risk']}", 1, ln=True)
+    pdf.cell(45, 8, f"LR No: {lr_data.get('LR No', '')}", 1); pdf.cell(45, 8, f"Date: {lr_data.get('Date', '')}", 1)
+    pdf.cell(50, 8, f"Vehicle: {lr_data.get('Vehicle', '')}", 1); pdf.cell(50, 8, f"Risk: {lr_data.get('Risk', 'Owner Risk')}", 1, ln=True)
 
     pdf.ln(2); pdf.set_fill_color(240, 240, 240)
     pdf.cell(63, 6, "CONSIGNOR", 1, 0, 'C', True); pdf.cell(63, 6, "CONSIGNEE", 1, 0, 'C', True); pdf.cell(64, 6, "BILLING PARTY", 1, 1, 'C', True)
     
     pdf.set_font("Arial", '', 8); y_s = pdf.get_y()
-    pdf.multi_cell(63, 5, f"{lr_data['Cnor']}\nGST: {lr_data['CnorGST']}", 1, 'L'); y_e1 = pdf.get_y()
-    pdf.set_y(y_s); pdf.set_x(73); pdf.multi_cell(63, 5, f"{lr_data['Cnee']}\nGST: {lr_data['CneeGST']}", 1, 'L'); y_e2 = pdf.get_y()
-    pdf.set_y(y_s); pdf.set_x(136); pdf.multi_cell(64, 5, f"{lr_data['BillP']}\nInv: {lr_data['InvNo']}", 1, 'L'); y_e3 = pdf.get_y()
+    pdf.multi_cell(63, 5, f"{lr_data.get('Cnor', '')}\nGST: {lr_data.get('CnorGST', '')}", 1, 'L'); y_e1 = pdf.get_y()
+    pdf.set_y(y_s); pdf.set_x(73); pdf.multi_cell(63, 5, f"{lr_data.get('Cnee', '')}\nGST: {lr_data.get('CneeGST', '')}", 1, 'L'); y_e2 = pdf.get_y()
+    pdf.set_y(y_s); pdf.set_x(136); pdf.multi_cell(64, 5, f"{lr_data.get('BillP', '')}\nInv: {lr_data.get('InvNo', '')}", 1, 'L'); y_e3 = pdf.get_y()
     pdf.set_y(max(y_e1, y_e2, y_e3))
     
-    pdf.ln(2); pdf.set_font("Arial", 'B', 8); pdf.cell(190, 6, f"SHIP TO: {lr_data['ShipTo']}", 1, ln=True)
+    pdf.ln(2); pdf.set_font("Arial", 'B', 8); pdf.cell(190, 6, f"SHIP TO: {lr_data.get('ShipTo', 'N/A')}", 1, ln=True)
     pdf.ln(4); pdf.cell(70, 7, "Material", 1); pdf.cell(30, 7, "Pkg", 1); pdf.cell(30, 7, "Weight", 1); pdf.cell(30, 7, "Route", 1); pdf.cell(30, 7, "Freight", 1, ln=True)
-    pdf.set_font("Arial", '', 8); pdf.cell(70, 10, lr_data['Material'], 1); pdf.cell(30, 10, lr_data['Pkg'], 1); pdf.cell(30, 10, f"{lr_data['NetWt']}/{lr_data['ChgWt']}", 1); pdf.cell(30, 10, f"{lr_data['From']}-{lr_data['To']}", 1)
-    amt = f"Rs. {lr_data['Freight']}" if show_fr else "T.B.B."
+    pdf.set_font("Arial", '', 8); pdf.cell(70, 10, lr_data.get('Material', ''), 1); pdf.cell(30, 10, lr_data.get('Pkg', ''), 1); pdf.cell(30, 10, f"{lr_data.get('NetWt', 0)}/{lr_data.get('ChgWt', 0)}", 1); pdf.cell(30, 10, f"{lr_data.get('From', '')}-{lr_data.get('To', '')}", 1)
+    amt = f"Rs. {lr_data.get('Freight', 0)}" if show_fr else "T.B.B."
     pdf.cell(30, 10, amt, 1, ln=True)
     pdf.ln(5); pdf.set_font("Arial", 'B', 8); 
-    pdf.cell(190, 5, f"BANK: {lr_data['Bank']} | Insurance Paid By: {lr_data['InsBy']} | Freight Paid By: {lr_data['PaidBy']}", ln=True)
+    pdf.cell(190, 5, f"BANK: {lr_data.get('Bank', 'N/A')} | Ins. Paid By: {lr_data.get('InsBy', 'N/A')} | Freight Paid By: {lr_data.get('PaidBy', 'N/A')}", ln=True)
     pdf.ln(10); pdf.cell(95, 5, "Consignor Sign", 0, 0, 'L'); pdf.cell(95, 5, "For VIRAT LOGISTICS", 0, 1, 'R')
     return pdf.output(dest='S').encode('latin-1')
 
@@ -119,7 +118,7 @@ elif menu == "2. LR Entry":
         with c1:
             d = st.date_input("Date", date.today())
             v_no = st.selectbox("Own Vehicle*", ["Select"] + own_v) if v_cat == "Own Fleet" else st.text_input("Market Vehicle No*")
-            br = "OWN" if v_cat == "Own Fleet" else st.selectbox("Broker*", ["Select"] + broker_list)
+            br_name = "OWN" if v_cat == "Own Fleet" else st.selectbox("Broker*", ["Select"] + broker_list)
             ship_to = st.text_area("Ship To Address")
         with c2:
             fl, tl = st.text_input("From City"), st.text_input("To City")
@@ -127,18 +126,25 @@ elif menu == "2. LR Entry":
             inv_no = st.text_input("Invoice No & Date")
         with c3:
             n_wt, c_wt = st.number_input("Net Wt", min_value=0.0), st.number_input("Chg Wt", min_value=0.0)
-            fr = st.number_input("Total Freight*", min_value=0.0)
+            fr_amt = st.number_input("Total Freight*", min_value=0.0)
             show_fr_in_pdf = st.checkbox("Show Freight in Print?", value=True)
             if v_cat == "Own Fleet": dsl, toll, drv, hc = st.number_input("Diesel"), st.number_input("Toll"), st.number_input("Driver Adv"), 0.0
             else: hc, dsl, toll, drv = st.number_input("Hired Charges"), 0.0, 0.0, 0.0
 
         if st.form_submit_button("🚀 SAVE LR"):
-            if bill_pty != "Select" and v_no and fr > 0:
-                prof = (fr - hc) if v_cat == "Market Hired" else (fr - dsl - toll - drv)
-                row = [str(d), lr_no, v_cat, bill_pty, cnee_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, "Driver", br, fl, tl, fr, hc, dsl, drv, toll, 0, prof]
+            if bill_pty != "Select" and v_no and fr_amt > 0:
+                prof = (fr_amt - hc) if v_cat == "Market Hired" else (fr_amt - dsl - toll - drv)
+                row = [str(d), lr_no, v_cat, bill_pty, cnee_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, "Driver", br_name, fl, tl, fr_amt, hc, dsl, drv, toll, 0, prof]
                 if save("trips", row):
                     st.success(f"✅ LR {lr_no} Saved!")
-                    st.session_state.pdf_ready = {"LR No": lr_no, "Date": str(d), "BillP": bill_pty, "Cnor": cnor_name, "CnorGST": cnor_gst, "Vehicle": v_no, "From": fl, "To": tl, "Material": mat, "Freight": fr, "Cnee": cnee_name, "CneeGST": cnee_gst, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, "Risk": risk, "InsBy": ins_by, "Bank": sel_bank, "InvNo": inv_no, "ShipTo": ship_to, "PaidBy": paid_by}
+                    st.session_state.pdf_ready = {
+                        "LR No": lr_no, "Date": str(d), "BillP": bill_pty, "Cnor": cnor_name, 
+                        "CnorGST": cnor_gst, "Vehicle": v_no, "From": fl, "To": tl, 
+                        "Material": mat, "Freight": fr_amt, "Cnee": cnee_name, 
+                        "CneeGST": cnee_gst, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, 
+                        "Risk": risk, "InsBy": ins_by, "Bank": sel_bank, "InvNo": inv_no, 
+                        "ShipTo": ship_to, "PaidBy": paid_by
+                    }
                 else: st.error("Save Error")
 
     if st.session_state.pdf_ready:
