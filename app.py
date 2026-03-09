@@ -177,4 +177,72 @@ elif menu == "3. LR Register":
                     try: sh.worksheet("trips").delete_rows(sh.worksheet("trips").find(row['LR No']).row); st.rerun()
                     except: st.error("Not found")
                 st.download_button("📥 PDF", generate_lr_pdf(row.to_dict(), True), f"LR_{row['LR No']}.pdf", key=f"p_{i}")
+elif menu == "4. Financial Ledger":
+    st.title("💳 Financial Management")
+    t1, t2 = st.tabs(["➕ Add Transaction", "📑 Statement Report"])
+    
+    with t1:
+        st.subheader("Record Paisa Aaya ya Diya")
+        with st.form("ledger_entry", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            l_cat = c1.selectbox("Category*", ["Party", "Broker"])
+            l_type = c1.radio("Transaction*", ["Received (Paisa Aaya)", "Paid (Paisa Diya)"], horizontal=True)
+            l_date = c2.date_input("Date", date.today())
+            
+            # Masters se naam uthaye Category ke hisab se
+            names = sorted(df_m[df_m['Type'] == l_cat]['Name'].tolist()) if not df_m.empty else []
+            l_name = c2.selectbox(f"Select {l_cat}*", ["Select"] + names)
+            
+            l_amt = c1.number_input("Amount*", min_value=0.0)
+            l_mode = c2.selectbox("Mode", ["Bank Transfer", "Cash", "Cheque", "TDS/Other"])
+            l_rem = st.text_input("Remarks (Invoice, LR No, etc.)")
+            
+            if st.form_submit_button("Save Transaction"):
+                if l_name != "Select" and l_amt > 0:
+                    # columns: Date, Category, Type, Name, Amount, Mode, Remarks
+                    save("payments", [str(l_date), l_cat, l_type, l_name, l_amt, l_mode, l_rem])
+                    st.success(f"Successfully Recorded for {l_name}!")
+                    st.rerun()
+
+    with t2:
+        st.subheader("Hisaab-Kitaab (Report)")
+        c1, c2 = st.columns(2)
+        r_cat = c1.selectbox("Report For", ["Party", "Broker"])
+        names = sorted(df_m[df_m['Type'] == r_cat]['Name'].tolist()) if not df_m.empty else []
+        r_name = c2.selectbox(f"Select Name", ["Select"] + names)
+        
+        if r_name != "Select":
+            # Data filters
+            df_p = load("payments") # Payment ki sheet load karein
+            
+            if r_cat == "Party":
+                # Party Logic: Billed (Trips) vs Received (Payments)
+                billed = df_t[df_t['Party'] == r_name]
+                billed_total = safe_float(billed['Freight'].sum())
+                received = df_p[(df_p['Category'] == 'Party') & (df_p['Name'] == r_name)]
+                received_total = safe_float(received['Amount'].sum())
+                balance = billed_total - received_total
+                
+                st.metric("Total Freight (Billed)", f"₹{billed_total:,.2f}")
+                st.metric("Total Received", f"₹{received_total:,.2f}")
+                st.metric("Pending Balance", f"₹{balance:,.2f}", delta=-balance)
+            else:
+                # Broker Logic: Hired Charges vs Paid
+                payable = df_t[df_t['Broker'] == r_name]
+                # Note: Aapki sheet mein column name 'HiredCharges' ya 'hc' ho sakta hai, usey check karein
+                payable_total = safe_float(payable.iloc[:, 18].sum()) # 18th column (Hired Charges)
+                paid = df_p[(df_p['Category'] == 'Broker') & (df_p['Name'] == r_name)]
+                paid_total = safe_float(paid['Amount'].sum())
+                balance = payable_total - paid_total
+                
+                st.metric("Total Hired Payable", f"₹{payable_total:,.2f}")
+                st.metric("Total Paid to Broker", f"₹{paid_total:,.2f}")
+                st.metric("Balance to Pay", f"₹{balance:,.2f}", delta=balance)
+            
+            st.divider()
+            st.write("📋 **Trip Details**")
+            st.dataframe(billed if r_cat == "Party" else payable, use_container_width=True)
+            st.write("💵 **Payment History**")
+            st.dataframe(received if r_cat == "Party" else paid, use_container_width=True)
+
 
