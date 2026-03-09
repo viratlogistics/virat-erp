@@ -39,7 +39,7 @@ def safe_float(val):
         return float(val)
     except: return 0.0
 
-# --- 2. PROFESSIONAL PDF ENGINE ---
+# --- 2. PROFESSIONAL PDF ENGINE (FREIGHT HIDE SUPPORT) ---
 def generate_lr_pdf(lr, show_fr=True):
     pdf = FPDF()
     pdf.add_page()
@@ -62,8 +62,11 @@ def generate_lr_pdf(lr, show_fr=True):
     pdf.ln(4); pdf.cell(70, 7, "Material", 1); pdf.cell(30, 7, "Pkg", 1); pdf.cell(30, 7, "Weight", 1); pdf.cell(30, 7, "Route", 1); pdf.cell(30, 7, "Freight", 1, ln=True)
     pdf.set_font("Arial", '', 8)
     pdf.cell(70, 10, s(lr.get('Material')), 1); pdf.cell(30, 10, s(lr.get('Pkg')), 1); pdf.cell(30, 10, s(lr.get('Weight', lr.get('NetWt'))), 1); pdf.cell(30, 10, f"{s(lr.get('From'))}-{s(lr.get('To'))}", 1)
+    
+    # Freight Hide/Show Logic
     amt = f"Rs. {s(lr.get('Freight'))}" if show_fr else "T.B.B."
     pdf.cell(30, 10, amt, 1, ln=True); pdf.ln(5)
+    
     pdf.set_font("Arial", 'B', 8); pdf.cell(190, 5, f"BANK: {s(lr.get('BankInfo', 'N/A'))} | Paid By: {s(lr.get('Paid_By', lr.get('PaidBy')))}", ln=True)
     pdf.ln(10); pdf.cell(95, 5, "Consignor Sign", 0, 0, 'L'); pdf.cell(95, 5, "For VIRAT LOGISTICS", 0, 1, 'R')
     return pdf.output(dest='S').encode('latin-1')
@@ -78,7 +81,7 @@ if 'last_pdf' not in st.session_state: st.session_state.last_pdf = None
 
 menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry", "3. LR Register"])
 
-# MASTER SETUP (REMAINS SAME AS 10.3)
+# MASTER SETUP
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     m_type = st.selectbox("Category", ["Party", "Broker", "Vehicle", "Bank", "Branch"])
@@ -107,9 +110,10 @@ elif menu == "2. LR Entry":
     # Status bar for PDF Download
     if st.session_state.last_pdf:
         st.success(f"✅ LR {st.session_state.last_pdf['LR No']} Saved!")
-        st.download_button("📥 DOWNLOAD LAST BILTY", generate_lr_pdf(st.session_state.last_pdf, True), f"LR_{st.session_state.last_pdf['LR No']}.pdf")
-        if st.button("Close Download & Start New"): 
-            st.session_state.last_pdf = None; st.rerun()
+        # Isme show_fr session se uthate hain
+        fr_opt = st.session_state.last_pdf.get('show_fr', True)
+        st.download_button("📥 DOWNLOAD LAST BILTY", generate_lr_pdf(st.session_state.last_pdf, fr_opt), f"LR_{st.session_state.last_pdf['LR No']}.pdf")
+        if st.button("Close & New Entry"): st.session_state.last_pdf = None; st.rerun()
 
     if st.session_state.edit_lr_no:
         st.warning(f"Editing Mode: {st.session_state.edit_lr_no}")
@@ -137,26 +141,27 @@ elif menu == "2. LR Entry":
 
     with st.form(f"lr_form_{k}"):
         c1, c2, c3 = st.columns(3)
-        dt = c1.date_input("Date", date.today())
-        vn = c1.text_input("Vehicle", value=str(ed.get('Vehicle', '')))
+        dt = c1.date_input("Date", date.today()); vn = c1.text_input("Vehicle", value=str(ed.get('Vehicle', '')))
         fl, tl = c2.text_input("From", value=str(ed.get('From', ''))), c2.text_input("To", value=str(ed.get('To', '')))
         mt = c2.text_input("Material", value=str(ed.get('Material', '')))
         nw = c3.number_input("Weight", value=safe_float(ed.get('Weight', 0.0)))
         fr = c3.number_input("Freight", value=safe_float(ed.get('Freight', 0.0)))
+        
+        # --- YE RAHA WOH OPTION ---
+        show_fr = st.checkbox("Show Freight in PDF?", value=True)
+        
         if v_cat == "Own Fleet": dsl, toll, drv, hc = c1.number_input("Diesel"), c2.number_input("Toll"), c3.number_input("Adv"), 0.0
         else: hc, dsl, toll, drv = c1.number_input("Hired Charges"), 0, 0, 0
 
-        if st.form_submit_button("🚀 SAVE LR & RESET"):
+        if st.form_submit_button("🚀 SAVE LR"):
             row = [str(dt), lr_no, v_cat, bill_p, cn, "", "", ce, "", "", mt, nw, vn, "Driver", "OWN", fl, tl, fr, hc, dsl, drv, toll, 0, (fr-hc-dsl-toll-drv)]
             if st.session_state.edit_lr_no:
                 try: sh.worksheet("trips").delete_rows(sh.worksheet("trips").find(st.session_state.edit_lr_no).row)
                 except: pass
                 st.session_state.edit_lr_no = None
             save("trips", row)
-            # Store for PDF then reset form
-            st.session_state.last_pdf = {"LR No": lr_no, "Date": str(dt), "Vehicle": vn, "Consignor": cn, "Consignee": ce, "Party": bill_p, "From": fl, "To": tl, "Material": mt, "Weight": nw, "Freight": fr, "Paid_By": pb, "BrName": sel_br, "BrAddr": br_r.get('Address',''), "BrGST": br_r.get('GST',''), "BankInfo": f"{bk} A/C:{bk_r.get('GST','')}"}
-            st.session_state.reset_k += 1
-            st.rerun()
+            st.session_state.last_pdf = {"LR No": lr_no, "Date": str(dt), "Vehicle": vn, "Consignor": cn, "Consignee": ce, "Party": bill_p, "From": fl, "To": tl, "Material": mt, "Weight": nw, "Freight": fr, "Paid_By": pb, "BrName": sel_br, "BrAddr": br_r.get('Address',''), "BrGST": br_r.get('GST',''), "BankInfo": f"{bk} A/C:{bk_r.get('GST','')}", "show_fr": show_fr}
+            st.session_state.reset_k += 1; st.rerun()
 
 elif menu == "3. LR Register":
     st.title("📋 LR REGISTER")
