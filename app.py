@@ -67,13 +67,9 @@ def generate_lr_pdf(lr_data, show_fr):
 # --- 3. MAIN LOGIC ---
 df_m = load("masters")
 
+# Session State Setup
 if 'reset_trigger' not in st.session_state: st.session_state.reset_trigger = 0
 if 'pdf_ready' not in st.session_state: st.session_state.pdf_ready = None
-
-def reset_form():
-    st.session_state.reset_trigger += 1
-    st.session_state.pdf_ready = None
-    st.rerun()
 
 menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry"])
 
@@ -87,7 +83,12 @@ if menu == "1. Masters Setup":
 
 elif menu == "2. LR Entry":
     st.header("📝 Professional LR Entry")
-    st.button("🆕 START NEW ENTRY (CLEAR ALL)", on_click=reset_form)
+    
+    # Reset Logic Fixed (No-Op error fix)
+    if st.button("🆕 START NEW ENTRY (CLEAR ALL)"):
+        st.session_state.reset_trigger += 1
+        st.session_state.pdf_ready = None
+        st.rerun()
 
     party_list = sorted(df_m[df_m['Type'] == 'Party']['Name'].unique().tolist()) if not df_m.empty else []
     bank_list = sorted(df_m[df_m['Type'] == 'Bank']['Name'].unique().tolist()) if not df_m.empty else []
@@ -147,5 +148,11 @@ elif menu == "2. LR Entry":
                     }
                 else: st.error("Save Error")
 
+    # Persistent Download Button logic outside form
     if st.session_state.pdf_ready:
-        st.download_button("📥 DOWNLOAD PDF", generate_lr_pdf(st.session_state.pdf_ready, show_fr_in_pdf), f"LR_{lr_no}.pdf")
+        st.divider()
+        st.download_button(
+            "📥 DOWNLOAD PDF", 
+            generate_lr_pdf(st.session_state.pdf_ready, show_fr_in_pdf), 
+            f"LR_{st.session_state.pdf_ready['LR No']}.pdf"
+        )
