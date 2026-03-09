@@ -34,7 +34,7 @@ def save(name, row):
         return True
     except: return False
 
-def generate_lr_pdf(lr_data):
+def generate_lr_pdf(lr_data, show_freight):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 20)
@@ -43,8 +43,10 @@ def generate_lr_pdf(lr_data):
     pdf.cell(190, 10, "CONSIGNMENT NOTE", ln=True, align='C')
     pdf.ln(10)
     for k, v in lr_data.items():
+        if k == "Freight" and not show_freight:
+            continue
         pdf.set_font("Arial", 'B', 10)
-        pdf.cell(50, 10, f"{k}:", 1)
+        pdf.cell(50, 10, f"{k.upper()}:", 1)
         pdf.set_font("Arial", '', 10)
         pdf.cell(140, 10, str(v), 1, ln=True)
     return pdf.output(dest='S').encode('latin-1')
@@ -72,19 +74,32 @@ elif menu == "2. LR Entry":
     
     v_cat = st.radio("Trip Category*", ["Own Fleet", "Market Hired"], horizontal=True)
 
-    # --- YE HAI JADU: Form se bahar rakha hai taaki turant kaam kare ---
-    st.write("---")
-    c_p1, c_p2 = st.columns([1, 2])
-    is_new_p = c_p1.checkbox("Add New Party?")
-    if is_new_p:
-        pty = c_p2.text_input("Enter New Party Name*", key="new_pty_input")
-    else:
-        pty = c_p2.selectbox("Select Party*", ["Select"] + party_list, key="old_pty_select")
+    # --- PARTY & BROKER (OUTSIDE FORM FOR INSTANT UPDATE) ---
+    st.markdown("### 🏢 Selection Area")
+    cp1, cp2, cp3 = st.columns([1, 1, 1])
+    
+    with cp1:
+        is_new_p = st.checkbox("New Party?")
+        pty = st.text_input("New Party Name*") if is_new_p else st.selectbox("Select Party*", ["Select"] + party_list)
+    
+    with cp2:
+        if v_cat == "Market Hired":
+            is_new_b = st.checkbox("New Broker?")
+            br = st.text_input("New Broker Name*") if is_new_b else st.selectbox("Select Broker*", ["Select"] + broker_list)
+        else:
+            br = "OWN"
+            st.info("Own Fleet: No Broker Needed")
 
-    with st.form("lr_form_main"):
+    with cp3:
+        st.write("📄 **Print Options**")
+        show_fr_in_pdf = st.checkbox("Show Freight in PDF?", value=True)
+
+    # --- MAIN TRIP DATA FORM ---
+    with st.form("lr_form_final"):
+        st.markdown("---")
         c1, c2 = st.columns(2)
         with c1:
-            d = st.date_input("Date", date.today())
+            d = st.date_input("Trip Date", date.today())
             if v_cat == "Own Fleet":
                 v_no = st.selectbox("Select Own Vehicle*", ["Select"] + own_vehicles)
             else:
@@ -94,14 +109,13 @@ elif menu == "2. LR Entry":
 
         with c2:
             mat = st.text_input("Material/Weight")
-            fr = st.number_input("Total Freight*", min_value=0.0)
+            fr = st.number_input("Total Freight Amount*", min_value=0.0)
             if v_cat == "Market Hired":
-                is_new_b = st.checkbox("New Broker?")
-                br = st.text_input("New Broker Name") if is_new_b else st.selectbox("Select Broker", ["Select"] + broker_list)
-                hc = st.number_input("Hired Charges")
+                hc = st.number_input("Hired Charges (Market)")
                 dsl, toll, drv_e = 0.0, 0.0, 0.0
             else:
-                br, hc = "OWN", 0.0
+                hc = 0.0
+                st.write("**Own Trip Expenses**")
                 dsl = st.number_input("Diesel Expense")
                 toll = st.number_input("Toll/Tax")
                 drv_e = st.number_input("Driver Advance")
@@ -110,14 +124,18 @@ elif menu == "2. LR Entry":
 
     if submitted:
         if pty and pty != "Select" and v_no and v_no != "Select" and fr > 0:
+            # Auto-save masters
             if is_new_p: save("masters", ["Party", pty])
+            if v_cat == "Market Hired" and is_new_b: save("masters", ["Broker", br])
+            
             lr_id = f"LR-{date.today().strftime('%d%m')}-{v_no[-4:]}"
             prof = (fr - hc) if v_cat == "Market Hired" else (fr - dsl - toll - drv_e)
             row = [str(d), lr_id, v_cat, pty, "", "", "", "", "", "", mat, 0, v_no, "Driver", br, fl, tl, fr, hc, dsl, drv_e, toll, 0, prof]
             
             if save("trips", row):
-                st.success(f"✅ LR {lr_id} Saved.")
+                st.success(f"✅ LR {lr_id} Saved Successfully!")
                 pdf_data = {"LR No": lr_id, "Date": str(d), "Party": pty, "Vehicle": v_no, "Route": f"{fl}-{tl}", "Freight": fr}
-                st.download_button("🖨️ Download PDF", generate_lr_pdf(pdf_data), f"{lr_id}.pdf")
+                btn_pdf = generate_lr_pdf(pdf_data, show_fr_in_pdf)
+                st.download_button("🖨️ Download PDF", btn_pdf, f"{lr_id}.pdf")
             else: st.error("Sync Failed!")
-        else: st.error("Details missing!")
+        else: st.error("Mandatory fields bharna zaroori hai (Party, Vehicle, Freight)!")
