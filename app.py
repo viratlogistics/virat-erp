@@ -89,6 +89,10 @@ elif menu == "2. LR Entry":
         else:
             br = "OWN"
             st.info("Own Fleet: No Broker Needed")
+            with c1:
+    consignee = st.text_input("Consignee Name*") # Yash Speciality chemicals LLP jaisa [cite: 17]
+    consignee_gst = st.text_input("Consignee GST No") # [cite: 18]
+    consignor_gst = st.text_input("Consignor GST No") # [cite: 10]
 
     with cp3:
         st.write("📄 **Print Options**")
@@ -139,3 +143,4 @@ elif menu == "2. LR Entry":
                 st.download_button("🖨️ Download PDF", btn_pdf, f"{lr_id}.pdf")
             else: st.error("Sync Failed!")
         else: st.error("Mandatory fields bharna zaroori hai (Party, Vehicle, Freight)!")
+
