@@ -158,7 +158,19 @@ elif menu == "2. LR Entry":
     k = st.session_state.reset_trigger
     def gl(t): return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
     
-    cp1, cp2, cp3 = st.columns(3)
+    # Agar Edit mode on hai toh data load karo
+if st.session_state.get('edit_lr_idx') is not None:
+    ed = df_t.iloc[st.session_state.edit_lr_idx]
+else:
+    ed = {}
+
+# Ab text_input mein 'value' parameter ka use kijiye
+with cp1:
+    # ... Branch Select ...
+    lr_no = st.text_input("LR Number*", value=str(ed.get('LR No', '')), key=f"lrno_{k}")
+with cp2:
+    cnor_name = st.text_input("Consignor Name*", value=str(ed.get('Consignor', '')), key=f"cnor_{k}")
+    # ... baki fields ...cp1, cp2, cp3 = st.columns(3)
     with cp1:
         sel_br = st.selectbox("Select Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
         br_row = df_m[(df_m['Name'] == sel_br) & (df_m['Type'] == 'Branch')].iloc[0] if sel_br != "Select" else {}
@@ -239,13 +251,14 @@ elif menu == "3. LR Register":
                 c1, c2, c3 = st.columns([1, 1, 2])
                 
                 # ✏️ EDIT BUTTON
-                if c1.button("✏️ Edit", key=f"edit_lr_{i}"):
-                    # Edit mode on karke data session mein daal rahe hain
-                    st.session_state.edit_lr_idx = i
-                    st.session_state.pdf_ready = None
-                    st.info("Data loaded! Ab '2. LR Entry' menu mein jaiye sudhaar karne ke liye.")
-                    # Direct menu change workaround
-                    # st.sidebar.selectbox niche hai isliye manual jana padega
+               if c1.button("✏️ Edit & Fix PDF", key=f"edit_lr_{i}"):
+    # 1. Row index save karo
+    st.session_state.edit_lr_idx = i
+    # 2. Reset trigger badal do taaki form update ho jaye
+    st.session_state.reset_trigger += 1
+    # 3. Direct Menu 2 (LR Entry) par jaane ka instruction
+    st.success("Data Loaded! Ab upar MENU mein '2. LR Entry' select kijiye.")
+    st.rerun()
                 
                 # 🗑️ DELETE BUTTON
                 if c2.button("🗑️ Delete", key=f"del_lr_{i}"):
@@ -262,5 +275,6 @@ elif menu == "3. LR Register":
         st.dataframe(df_f)
     else:
         st.info("No records found in trips sheet.")
+
 
 
