@@ -107,10 +107,8 @@ if menu == "1. Masters Setup":
 
 elif menu == "2. LR Entry":
     st.header("📝 Professional LR Entry")
-    # Status bar for PDF Download
     if st.session_state.last_pdf:
         st.success(f"✅ LR {st.session_state.last_pdf['LR No']} Saved!")
-        # Isme show_fr session se uthate hain
         fr_opt = st.session_state.last_pdf.get('show_fr', True)
         st.download_button("📥 DOWNLOAD LAST BILTY", generate_lr_pdf(st.session_state.last_pdf, fr_opt), f"LR_{st.session_state.last_pdf['LR No']}.pdf")
         if st.button("Close & New Entry"): st.session_state.last_pdf = None; st.rerun()
@@ -128,23 +126,20 @@ elif menu == "2. LR Entry":
     with cp1:
         sel_br = st.selectbox("Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
         br_r = df_m[(df_m['Name'] == sel_br) & (df_m['Type'] == 'Branch')].iloc[0] if sel_br != "Select" else {}
-      with cp1:
-        sel_br = st.selectbox("Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
-        br_r = df_m[(df_m['Name'] == sel_br) & (df_m['Type'] == 'Branch')].iloc[0] if sel_br != "Select" else {}
-        
         v_cat = st.radio("Type*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"vcat_{k}")
         
-        # --- NEW: BROKER SELECTION BOX ---
-        # Agar Market Hired select hai tabhi Broker ka box dikhao
+        # --- Broker Selection Logic ---
         if v_cat == "Market Hired":
             sel_broker = st.selectbox("Select Broker*", ["Select"] + gl("Broker"), key=f"broker_sel_{k}")
         else:
-            sel_broker = "OWN" # Own fleet ke liye default OWN
-        
+            sel_broker = "OWN"
+            
         lr_no = st.text_input("LR No*", value=str(ed.get('LR No', f"VIL/25-26/{br_r.get('GST','01')}/{len(df_t)+1:03d}")), key=f"lrno_{k}")
+    
     with cp2:
         bill_p = st.selectbox("Party*", ["Select"] + gl("Party"), key=f"bp_{k}")
         cn = st.text_input("Consignor", value=str(ed.get('Consignor', '')), key=f"cn_{k}")
+    
     with cp3:
         ce = st.text_input("Consignee", value=str(ed.get('Consignee', '')), key=f"ce_{k}")
         pb = st.selectbox("Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pb_{k}")
@@ -158,15 +153,13 @@ elif menu == "2. LR Entry":
         mt = c2.text_input("Material", value=str(ed.get('Material', '')))
         nw = c3.number_input("Weight", value=safe_float(ed.get('Weight', 0.0)))
         fr = c3.number_input("Freight", value=safe_float(ed.get('Freight', 0.0)))
-        
-        # --- YE RAHA WOH OPTION ---
         show_fr = st.checkbox("Show Freight in PDF?", value=True)
         
         if v_cat == "Own Fleet": dsl, toll, drv, hc = c1.number_input("Diesel"), c2.number_input("Toll"), c3.number_input("Adv"), 0.0
         else: hc, dsl, toll, drv = c1.number_input("Hired Charges"), 0, 0, 0
 
         if st.form_submit_button("🚀 SAVE LR"):
-            row = [str(dt), lr_no, v_cat, bill_p, cn, "", "", ce, "", "", mt, nw, vn, "Driver", "OWN", fl, tl, fr, hc, dsl, drv, toll, 0, (fr-hc-dsl-toll-drv)]
+            row = [str(dt), lr_no, v_cat, bill_p, cn, "", "", ce, "", "", mt, nw, vn, "Driver", sel_broker, fl, tl, fr, hc, dsl, drv, toll, 0, (fr-hc-dsl-toll-drv)]
             if st.session_state.edit_lr_no:
                 try: sh.worksheet("trips").delete_rows(sh.worksheet("trips").find(st.session_state.edit_lr_no).row)
                 except: pass
@@ -174,7 +167,6 @@ elif menu == "2. LR Entry":
             save("trips", row)
             st.session_state.last_pdf = {"LR No": lr_no, "Date": str(dt), "Vehicle": vn, "Consignor": cn, "Consignee": ce, "Party": bill_p, "From": fl, "To": tl, "Material": mt, "Weight": nw, "Freight": fr, "Paid_By": pb, "BrName": sel_br, "BrAddr": br_r.get('Address',''), "BrGST": br_r.get('GST',''), "BankInfo": f"{bk} A/C:{bk_r.get('GST','')}", "show_fr": show_fr}
             st.session_state.reset_k += 1; st.rerun()
-
 elif menu == "3. LR Register":
     st.title("📋 LR REGISTER")
     search = st.text_input("Search LR/Party")
@@ -269,6 +261,7 @@ elif menu == "4. Financial Ledger":
             st.dataframe(billed_df if r_cat == "Party" else payable_df, use_container_width=True)
             st.write("💵 Payment History")
             st.dataframe(df_p[df_p['Name'] == r_name], use_container_width=True)
+
 
 
 
