@@ -8,7 +8,7 @@ import json
 
 st.set_page_config(page_title="Virat Logistics ERP", layout="wide")
 
-# ---------------- GOOGLE SHEET CONNECTION ---------------- #
+# ---------------- GOOGLE CONNECTION ---------------- #
 
 @st.cache_resource
 def connect_sheet():
@@ -26,6 +26,7 @@ def connect_sheet():
     except:
         return None
 
+
 sh = connect_sheet()
 
 
@@ -33,14 +34,11 @@ def load_data(sheet):
     try:
         ws = sh.worksheet(sheet)
         data = ws.get_all_records()
-
         if len(data) == 0:
             return pd.DataFrame()
-
         df = pd.DataFrame(data)
         df.columns = [str(c).strip() for c in df.columns]
         return df
-
     except:
         return pd.DataFrame()
 
@@ -64,25 +62,21 @@ def generate_lr_pdf(data, show_freight):
     pdf.cell(130, 8, data["BrName"], 0)
 
     pdf.set_font("Arial", "B", 10)
-    pdf.cell(60, 8, f"GST: {data['BrGST']}", 0, 1, "R")
+    pdf.cell(60, 8, f"GST : {data['BrGST']}", 0, 1, "R")
 
     pdf.set_font("Arial", "", 8)
     pdf.multi_cell(190, 4, data["BrAddr"])
 
     pdf.line(10, 30, 200, 30)
+    pdf.ln(6)
 
-    pdf.ln(5)
-
-    # HEADER BOX
     pdf.set_font("Arial", "B", 10)
-
     pdf.cell(60, 8, f"LR NO : {data['LR No']}", 1)
     pdf.cell(60, 8, f"DATE : {data['Date']}", 1)
     pdf.cell(70, 8, f"VEHICLE : {data['Vehicle']}", 1, 1)
 
     pdf.ln(4)
 
-    # PARTY BOX
     pdf.set_font("Arial", "B", 9)
     pdf.cell(95, 6, "CONSIGNOR", 1)
     pdf.cell(95, 6, "CONSIGNEE", 1, 1)
@@ -93,9 +87,7 @@ def generate_lr_pdf(data, show_freight):
 
     pdf.ln(4)
 
-    # MATERIAL TABLE
     pdf.set_font("Arial", "B", 9)
-
     pdf.cell(50, 7, "Material", 1)
     pdf.cell(20, 7, "Pkg", 1)
     pdf.cell(30, 7, "Articles", 1)
@@ -114,19 +106,8 @@ def generate_lr_pdf(data, show_freight):
     pdf.cell(30, 8, f"{data['From']} - {data['To']}", 1)
     pdf.cell(30, 8, freight, 1, 1)
 
-    pdf.ln(6)
-
-    # RISK BOX
-    pdf.set_font("Arial", "B", 9)
-
-    risk_text = f"Risk : {data['Risk']}"
-
-    pdf.cell(190, 8, risk_text, 1, 1)
-
-    pdf.ln(10)
-
-    pdf.cell(95, 6, "Consignor Sign", 0)
-    pdf.cell(95, 6, "For Virat Logistics", 0, 1, "R")
+    pdf.ln(5)
+    pdf.cell(190, 8, f"Risk : {data['Risk']}", 1)
 
     return pdf.output(dest="S").encode("latin-1")
 
@@ -135,6 +116,9 @@ def generate_lr_pdf(data, show_freight):
 
 df_m = load_data("masters")
 df_t = load_data("trips")
+
+if "pdf_data" not in st.session_state:
+    st.session_state.pdf_data = None
 
 # ---------------- MENU ---------------- #
 
@@ -148,19 +132,19 @@ if menu == "Masters Setup":
 
     mtype = st.radio(
         "Category",
-        ["Party", "Branch", "Vehicle", "Broker", "Bank"],
+        ["Party", "Branch", "Vehicle", "Broker"],
         horizontal=True,
     )
 
     with st.form("master_form"):
 
-        col1, col2 = st.columns(2)
+        c1, c2 = st.columns(2)
 
-        with col1:
+        with c1:
             name = st.text_input("Name")
             code = st.text_input("GST / Branch Code")
 
-        with col2:
+        with c2:
             contact = st.text_input("Contact")
             addr = st.text_area("Address")
 
@@ -186,41 +170,33 @@ if menu == "LR Entry":
     vehicles = df_m[df_m["Type"] == "Vehicle"]
     brokers = df_m[df_m["Type"] == "Broker"]
 
-    c1, c2, c3 = st.columns(3)
+    col1, col2, col3 = st.columns(3)
 
-    # BRANCH
-    with c1:
+    # Branch
+    with col1:
 
-        branch = st.selectbox(
-            "Branch",
-            ["Select"] + branches["Name"].tolist()
-        )
+        branch = st.selectbox("Branch", ["Select"] + branches["Name"].tolist())
+
+        branch_code = ""
+        branch_addr = ""
 
         if branch != "Select":
             br_data = branches[branches["Name"] == branch].iloc[0]
             branch_code = br_data["GST"]
-        else:
-            branch_code = ""
+            branch_addr = br_data.get("Address", "")
 
-    # MODE
-    with c2:
+    # LR Mode
+    with col2:
+        lr_mode = st.radio("LR Mode", ["Auto", "Manual"], horizontal=True)
 
-        lr_mode = st.radio(
-            "LR Mode",
-            ["Auto", "Manual"],
-            horizontal=True,
-        )
-
-    # LR NUMBER
-    with c3:
+    # LR Number
+    with col3:
 
         fy = "25-26"
         next_no = 1
 
         if not df_t.empty and "LR No" in df_t.columns and branch_code != "":
-            branch_lrs = df_t[
-                df_t["LR No"].astype(str).str.contains(branch_code)
-            ]
+            branch_lrs = df_t[df_t["LR No"].astype(str).str.contains(branch_code)]
             next_no = len(branch_lrs) + 1
 
         auto_lr = f"VIL/{fy}/{branch_code}/{next_no:03d}"
@@ -233,22 +209,16 @@ if menu == "LR Entry":
 
     st.divider()
 
-    # PARTY
-    col1, col2, col3 = st.columns(3)
-
-    billing = col1.selectbox("Billing Party", ["Select"] + parties["Name"].tolist())
-    consignor = col2.selectbox("Consignor", ["Select"] + parties["Name"].tolist())
-    consignee = col3.selectbox("Consignee", ["Select"] + parties["Name"].tolist())
+    billing = st.selectbox("Billing Party", ["Select"] + parties["Name"].tolist())
+    consignor = st.selectbox("Consignor", ["Select"] + parties["Name"].tolist())
+    consignee = st.selectbox("Consignee", ["Select"] + parties["Name"].tolist())
 
     st.divider()
 
     trip_type = st.radio("Vehicle Type", ["Own Fleet", "Market Hired"], horizontal=True)
 
     vehicle = ""
-    diesel = 0
-    toll = 0
-    drv = 0
-    hired = 0
+    diesel = toll = drv = hired = 0
 
     if trip_type == "Own Fleet":
 
@@ -263,9 +233,7 @@ if menu == "LR Entry":
     else:
 
         vehicle = st.text_input("Market Vehicle No")
-
         broker = st.selectbox("Broker", ["Select"] + brokers["Name"].tolist())
-
         hired = st.number_input("Hired Charges", min_value=0.0)
 
     st.divider()
@@ -287,65 +255,75 @@ if menu == "LR Entry":
             weight = st.number_input("Weight")
 
         freight = st.number_input("Freight", min_value=0.0)
-
+        risk = st.radio("Risk Type", ["Owner Risk", "Insured"])
         show_fr = st.checkbox("Print Freight", True)
 
-        risk = st.radio("Risk Type", ["Owner Risk", "Insured"])
+        submitted = st.form_submit_button("SAVE LR")
 
-        if st.form_submit_button("SAVE & GENERATE LR"):
+    if submitted:
 
-            if not df_t.empty and "LR No" in df_t.columns:
-                if lr_no in df_t["LR No"].values:
-                    st.error("LR already exists")
-                    st.stop()
+        if branch == "Select":
+            st.error("Please select branch")
+            st.stop()
 
-            if trip_type == "Market Hired":
-                profit = freight - hired
-            else:
-                profit = freight - diesel - toll - drv
+        if not df_t.empty and "LR No" in df_t.columns:
+            if lr_no in df_t["LR No"].values:
+                st.error("LR already exists")
+                st.stop()
 
-            row = [
-                str(lr_date),
-                lr_no,
-                billing,
-                consignor,
-                consignee,
-                vehicle,
-                from_loc,
-                to_loc,
-                material,
-                articles,
-                weight,
-                freight,
-                profit,
-            ]
+        if trip_type == "Market Hired":
+            profit = freight - hired
+        else:
+            profit = freight - diesel - toll - drv
 
-            if save_row("trips", row):
+        row = [
+            str(lr_date),
+            lr_no,
+            billing,
+            consignor,
+            consignee,
+            vehicle,
+            from_loc,
+            to_loc,
+            material,
+            articles,
+            weight,
+            freight,
+            profit,
+        ]
 
-                st.success("LR Saved")
+        if save_row("trips", row):
 
-                pdf_data = {
-                    "LR No": lr_no,
-                    "Date": str(lr_date),
-                    "Vehicle": vehicle,
-                    "BrName": branch,
-                    "BrGST": branch_code,
-                    "BrAddr": br_data.get("Address", ""),
-                    "Consignor": consignor,
-                    "Consignee": consignee,
-                    "Material": material,
-                    "Articles": articles,
-                    "Weight": weight,
-                    "From": from_loc,
-                    "To": to_loc,
-                    "Freight": freight,
-                    "Risk": risk,
-                }
+            st.success("LR Saved Successfully")
 
-                pdf = generate_lr_pdf(pdf_data, show_fr)
+            pdf_data = {
+                "LR No": lr_no,
+                "Date": str(lr_date),
+                "Vehicle": vehicle,
+                "BrName": branch,
+                "BrGST": branch_code,
+                "BrAddr": branch_addr,
+                "Consignor": consignor,
+                "Consignee": consignee,
+                "Material": material,
+                "Articles": articles,
+                "Weight": weight,
+                "From": from_loc,
+                "To": to_loc,
+                "Freight": freight,
+                "Risk": risk,
+            }
 
-                st.download_button(
-                    "DOWNLOAD LR PDF",
-                    pdf,
-                    f"{lr_no}.pdf"
-                )
+            st.session_state.pdf_data = generate_lr_pdf(pdf_data, show_fr)
+            st.session_state.lr_file = f"{lr_no}.pdf"
+
+# -------- DOWNLOAD BUTTON (FORM KE BAHAR) -------- #
+
+if st.session_state.pdf_data:
+
+    st.download_button(
+        "📄 DOWNLOAD LR PDF",
+        st.session_state.pdf_data,
+        st.session_state.lr_file,
+        mime="application/pdf"
+    )
