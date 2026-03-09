@@ -89,20 +89,47 @@ menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry", "3.
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     m_type = st.selectbox("Category", ["Party", "Broker", "Vehicle", "Driver", "Bank", "Branch"])
+    
+    # Edit State Check
+    if 'm_edit_idx' not in st.session_state: st.session_state.m_edit_idx = None
+
+    # Form for Add/Edit
     with st.form("m_form", clear_on_submit=True):
-        val = st.text_input(f"New {m_type}")
-        code = st.text_input("GST No (For Branch) / Account No (For Bank)")
-        addr = st.text_area("Address (For Branch)")
-        if st.form_submit_button("Add Master"):
-            if val: save("masters", [m_type, val, code, addr]); st.success("Saved!"); st.rerun()
+        # Agar Edit mode hai toh purana data dikhao, nahi toh khali
+        ed_m = df_m.iloc[st.session_state.m_edit_idx] if st.session_state.m_edit_idx is not None else {}
+        
+        n = st.text_input("Name", value=ed_m.get('Name', ''))
+        g = st.text_input("GST/Account No", value=ed_m.get('GST', ''))
+        a = st.text_area("Address", value=ed_m.get('Address', ''))
+        
+        btn_label = "Update Master" if st.session_state.m_edit_idx is not None else "Add Master"
+        if st.form_submit_button(btn_label):
+            if n:
+                if st.session_state.m_edit_idx is not None:
+                    # Update Logic: Pehle purana delete fir naya add
+                    sh.worksheet("masters").delete_rows(int(st.session_state.m_edit_idx) + 2)
+                    st.session_state.m_edit_idx = None
+                save("masters", [m_type, n, g, a])
+                st.success("Master Updated!"); st.rerun()
+
+    if st.session_state.m_edit_idx is not None:
+        if st.button("Cancel Edit"): st.session_state.m_edit_idx = None; st.rerun()
+
     st.divider()
+    # Display List with Edit & Delete Buttons
     if not df_m.empty:
-        curr_m = df_m[df_m['Type'] == m_type]
-        for i, r in curr_m.iterrows():
-            mc1, mc2 = st.columns([5,1])
-            mc1.write(f"**{r['Name']}** | {r.get('GST', '')}")
-            if mc2.button("🗑️", key=f"del_{i}"):
-                if delete_master_row(r['Name']): st.rerun()
+        curr = df_m[df_m['Type'] == m_type]
+        for i, r in curr.iterrows():
+            c1, c2, c3 = st.columns([4, 1, 1])
+            c1.write(f"**{r['Name']}** | {r.get('GST','')}")
+            # EDIT Button
+            if c2.button("✏️", key=f"medit_{i}"):
+                st.session_state.m_edit_idx = i
+                st.rerun()
+            # DELETE Button
+            if c3.button("🗑️", key=f"mdel_{i}"):
+                sh.worksheet("masters").delete_rows(int(i) + 2)
+                st.rerun()
 
 elif menu == "2. LR Entry":
     st.header("📝 Professional LR Entry")
@@ -184,3 +211,4 @@ elif menu == "3. LR Register":
             with st.expander(f"LR: {row.get('LR No', 'N/A')} | {row.get('Consignee', 'N/A')}"):
                 st.download_button("📥 PDF", generate_lr_pdf(row.to_dict(), True), f"LR_{row.get('LR No','VL')}.pdf", key=f"p_{i}")
         st.dataframe(df_t)
+
