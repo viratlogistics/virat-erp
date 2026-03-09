@@ -206,9 +206,40 @@ elif menu == "2. LR Entry":
 
 elif menu == "3. LR Register":
     st.title("📋 LR REGISTER")
+    search = st.text_input("Search LR No / Party Name")
+    
     if not df_t.empty:
-        for i, row in df_t.iterrows():
-            with st.expander(f"LR: {row.get('LR No', 'N/A')} | {row.get('Consignee', 'N/A')}"):
-                st.download_button("📥 PDF", generate_lr_pdf(row.to_dict(), True), f"LR_{row.get('LR No','VL')}.pdf", key=f"p_{i}")
-        st.dataframe(df_t)
-
+        # Filtering logic
+        df_f = df_t.copy()
+        if search:
+            df_f = df_f[df_f.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
+        
+        for i, row in df_f.iterrows():
+            # Har LR ke liye ek dropdown box
+            with st.expander(f"LR: {row.get('LR No', 'N/A')} | {row.get('Consignee', 'N/A')} | ₹{row.get('Freight', 0)}"):
+                c1, c2, c3 = st.columns([1, 1, 2])
+                
+                # ✏️ EDIT BUTTON
+                if c1.button("✏️ Edit", key=f"edit_lr_{i}"):
+                    # Edit mode on karke data session mein daal rahe hain
+                    st.session_state.edit_lr_idx = i
+                    st.session_state.pdf_ready = None
+                    st.info("Data loaded! Ab '2. LR Entry' menu mein jaiye sudhaar karne ke liye.")
+                    # Direct menu change workaround
+                    # st.sidebar.selectbox niche hai isliye manual jana padega
+                
+                # 🗑️ DELETE BUTTON
+                if c2.button("🗑️ Delete", key=f"del_lr_{i}"):
+                    # Sheet se row delete (+2 because of header and 0-index)
+                    sh.worksheet("trips").delete_rows(int(i) + 2)
+                    st.warning(f"LR {row.get('LR No')} Deleted!")
+                    st.rerun()
+                
+                # 📥 PDF DOWNLOAD
+                pdf_bytes = generate_lr_pdf(row.to_dict(), True)
+                c3.download_button("📥 Download PDF", pdf_bytes, f"LR_{row.get('LR No')}.pdf", key=f"pdf_reg_{i}")
+        
+        st.divider()
+        st.dataframe(df_f)
+    else:
+        st.info("No records found in trips sheet.")
