@@ -7,7 +7,7 @@ from google.oauth2.service_account import Credentials
 import json, io
 
 # --- 1. CONNECTION & LOAD ---
-st.set_page_config(page_title="Virat Logistics ERP v3.6", layout="wide")
+st.set_page_config(page_title="Virat Logistics ERP v3.7", layout="wide")
 
 @st.cache_resource
 def get_sh():
@@ -25,8 +25,7 @@ def load_data(sheet_name="masters"):
         df = pd.DataFrame(ws.get_all_records())
         df.columns = [str(c).strip() for c in df.columns]
         return df
-    except:
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
 def save_row(sheet_name, row):
     try:
@@ -34,7 +33,7 @@ def save_row(sheet_name, row):
         return True
     except: return False
 
-# --- 2. PROFESSIONAL PDF ENGINE ---
+# --- 2. PDF ENGINE ---
 def generate_lr_pdf(lr_data, show_fr):
     pdf = FPDF()
     pdf.add_page()
@@ -46,12 +45,10 @@ def generate_lr_pdf(lr_data, show_fr):
     pdf.set_font("Arial", '', 7); pdf.multi_cell(190, 3, f"Address: {lr_data.get('BrAddr', '')}")
     pdf.line(10, 35, 200, 35); pdf.ln(8)
     
-    # Notice & LR Info
     pdf.set_font("Arial", 'B', 9)
     pdf.cell(60, 8, f"LR No: {lr_data.get('LR No', '')}", 1); pdf.cell(60, 8, f"Date: {lr_data.get('Date', '')}", 1)
     pdf.cell(70, 8, f"Vehicle: {lr_data.get('Vehicle', '')}", 1, ln=True)
 
-    # Multi-Party Section
     pdf.ln(2); pdf.set_fill_color(240, 240, 240)
     pdf.cell(63, 6, "CONSIGNOR", 1, 0, 'C', True); pdf.cell(63, 6, "CONSIGNEE", 1, 0, 'C', True); pdf.cell(64, 6, "BILLING PARTY", 1, 1, 'C', True)
     
@@ -63,7 +60,6 @@ def generate_lr_pdf(lr_data, show_fr):
 
     pdf.ln(2); pdf.set_font("Arial", 'B', 8); pdf.cell(190, 6, f"SHIP TO: {lr_data.get('ShipTo', '')}", 1, ln=True)
     
-    # Product Table
     pdf.ln(4); pdf.set_font("Arial", 'B', 8)
     pdf.cell(60, 7, "Material", 1); pdf.cell(20, 7, "Qty/Art", 1); pdf.cell(25, 7, "Pkg", 1); pdf.cell(25, 7, "Weight", 1); pdf.cell(30, 7, "Route", 1); pdf.cell(30, 7, "Freight", 1, ln=True)
     pdf.set_font("Arial", '', 8)
@@ -71,13 +67,12 @@ def generate_lr_pdf(lr_data, show_fr):
     amt = f"Rs. {lr_data.get('Freight',0)}" if show_fr else "T.B.B."
     pdf.cell(30, 10, amt, 1, ln=True)
 
-    # Footer
     pdf.ln(5); pdf.set_font("Arial", 'B', 8)
     pdf.cell(190, 5, f"Risk: {lr_data.get('Risk', '')} | BANK: {lr_data.get('Bank', '')} | Paid By: {lr_data.get('PaidBy', '')}", ln=True)
     pdf.ln(10); pdf.cell(95, 5, "Consignor Sign", 0, 0, 'L'); pdf.cell(95, 5, f"For {lr_data.get('BrName', '')}", 0, 1, 'R')
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 3. MAIN UI ---
+# --- 3. UI LOGIC ---
 df_m = load_data("masters")
 df_t = load_data("trips")
 
@@ -89,7 +84,7 @@ menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry"])
 if menu == "1. Masters Setup":
     st.header("🏗️ Professional Masters Setup")
     m_type = st.radio("Category", ["Party", "Branch", "Vehicle", "Bank", "Broker"], horizontal=True)
-    with st.form("master_v36", clear_on_submit=True):
+    with st.form("master_v37", clear_on_submit=True):
         c1, c2 = st.columns(2)
         with c1:
             name = st.text_input(f"{m_type} Name/No*"); gst = st.text_input("GST / Branch Code")
@@ -100,7 +95,7 @@ if menu == "1. Masters Setup":
     st.dataframe(df_m[df_m['Type'] == m_type] if not df_m.empty else [])
 
 elif menu == "2. LR Entry":
-    st.header("📝 Professional LR Entry v3.6")
+    st.header("📝 Professional LR Entry v3.7")
     if st.button("🆕 START NEW ENTRY"):
         st.session_state.reset_trigger += 1; st.session_state.pdf_ready = None; st.rerun()
     
@@ -108,8 +103,7 @@ elif menu == "2. LR Entry":
     def get_list(t): return df_m[df_m['Type'] == t] if not df_m.empty else pd.DataFrame()
     branches = get_list('Branch'); banks = get_list('Bank'); parties = get_list('Party'); vehicles = get_list('Vehicle'); brokers = get_list('Broker')
 
-    # --- TOP SETTINGS ---
-    st.markdown("### 🏢 Business Unit & Numbering")
+    st.markdown("### 🏢 Branch & LR Details")
     col_u1, col_u2, col_u3 = st.columns(3)
     with col_u1:
         sel_br = st.selectbox("Select Our Branch*", ["Select"] + branches['Name'].tolist(), key=f"br_{k}")
@@ -140,13 +134,11 @@ elif menu == "2. LR Entry":
         paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pby_{k}")
         ship_to = st.text_area("Ship-To Address", value=cnee_d.get('Address', ''), key=f"st_{k}")
 
-    # --- MAIN TRIP FORM ---
-    with st.form(f"main_form_v36_{k}"):
+    with st.form(f"lr_main_form_{k}"):
         st.markdown("---")
         f1, f2, f3 = st.columns(3)
         with f1:
             d = st.date_input("Date", date.today())
-            # FIXED OWN/MARKET LOGIC
             if v_cat == "Own Fleet":
                 v_no = st.selectbox("Own Vehicle*", ["Select"] + vehicles['Name'].tolist())
                 br_name = "OWN"
@@ -165,20 +157,26 @@ elif menu == "2. LR Entry":
             show_fr = st.checkbox("Print Freight?", value=True)
             hc = st.number_input("Hired Charges") if v_cat == "Market Hired" else 0.0
 
-        if st.form_submit_button("🚀 SAVE & GENERATE BILTY"):
-            if sel_br != "Select" and bill_pty != "Select" and v_no and fr > 0:
-                row = [str(d), lr_no, v_cat, bill_pty, cnee, paid_by, n_wt, c_wt, pkg, risk, mat, articles, v_no, "Driver", br_name, fl, tl, fr, hc, 0, 0, 0, 0, (fr-hc)]
-                if save_row("trips", row):
-                    st.success(f"LR {lr_no} Saved!")
-                    st.session_state.pdf_ready = {
-                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, "Risk": risk, "Articles": articles,
-                        "BrName": br_info.get('Name',''), "BrGST": br_info.get('GST',''), "BrAddr": br_info.get('Address',''),
-                        "BillP": bill_pty, "Cnor": cnor, "CnorGST": cnor_d.get('GST',''), "CnorAddr": cnor_d.get('Address',''),
-                        "Cnee": cnee, "CneeGST": cnee_d.get('GST',''), "CneeAddr": cnee_d.get('Address',''),
-                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, "From": fl, "To": tl, "Freight": fr,
-                        "Bank": f"{bk_d.get('Name','')} {bk_d.get('A_C_No','')}", "PaidBy": paid_by, "InvNo": inv, "ShipTo": ship_to
-                    }
-            else: st.error("Fields missing (Branch, Billing Party, Freight)!")
+        submitted = st.form_submit_button("🚀 SAVE LR & PREPARE DOWNLOAD")
 
+    if submitted:
+        if sel_br != "Select" and bill_pty != "Select" and v_no and fr > 0:
+            row = [str(d), lr_no, v_cat, bill_pty, cnee, paid_by, n_wt, c_wt, pkg, risk, mat, articles, v_no, "Driver", br_name, fl, tl, fr, hc, 0, 0, 0, 0, (fr-hc)]
+            if save_row("trips", row):
+                st.session_state.pdf_ready = {
+                    "LR No": lr_no, "Date": str(d), "Vehicle": v_no, "Risk": risk, "Articles": articles,
+                    "BrName": br_info.get('Name',''), "BrGST": br_info.get('GST',''), "BrAddr": br_info.get('Address',''),
+                    "BillP": bill_pty, "Cnor": cnor, "CnorGST": cnor_d.get('GST',''), "CnorAddr": cnor_d.get('Address',''),
+                    "Cnee": cnee, "CneeGST": cnee_d.get('GST',''), "CneeAddr": cnee_d.get('Address',''),
+                    "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, "From": fl, "To": tl, "Freight": fr,
+                    "Bank": f"{bk_d.get('Name','')} {bk_d.get('A_C_No','')}", "PaidBy": paid_by, "InvNo": inv, "ShipTo": ship_to
+                }
+                st.success(f"✅ LR {lr_no} Saved! Neeche se PDF download karein.")
+            else: st.error("Database Save Failed!")
+
+    # Fixed Download Button Position
     if st.session_state.pdf_ready:
-        st.download_button("📥 DOWNLOAD PDF", generate_lr_pdf(st.session_state.pdf_ready, show_fr), f"LR_{lr_no}.pdf")
+        st.divider()
+        col_down1, col_down2 = st.columns([1, 4])
+        pdf_bytes = generate_lr_pdf(st.session_state.pdf_ready, show_fr)
+        col_down1.download_button("📥 DOWNLOAD BILTY PDF", pdf_bytes, f"LR_{st.session_state.pdf_ready['LR No']}.pdf")
