@@ -127,7 +127,7 @@ elif menu == "2. LR Entry":
             sel_br = st.selectbox("Branch*", ["Select"] + gl("Branch"), key=f"f_br_{k}")
             br_r = df_m[(df_m['Name'] == sel_br) & (df_m['Type'] == 'Branch')].iloc[0] if sel_br != "Select" else {}
             
-            # TRIP TYPE SELECTION (OWN vs HIRED)
+            # TRIP TYPE SELECTION
             v_cat = st.radio("Trip Type*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"f_vcat_{k}")
             
             sel_broker = "OWN"
@@ -147,7 +147,7 @@ elif menu == "2. LR Entry":
 
         with cp3:
             ce = st.text_input("Consignee Name", value=str(ed.get('Consignee', '')), key=f"f_ce_{k}")
-            ce_gst = st.text_input("Consignee GST", key=f_cegst_{k})
+            ce_gst = st.text_input("Consignee GST", key=f"f_cegst_{k}") # FIXED SYNTAX
             pb = st.selectbox("Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"f_pb_{k}")
             bk = st.selectbox("Bank*", ["Select"] + gl("Bank"), key=f"f_bk_{k}")
 
@@ -175,7 +175,6 @@ elif menu == "2. LR Entry":
         st.subheader("💰 Trip Expenses")
         ex1, ex2, ex3 = st.columns(3)
         
-        # DYNAMIC EXPENSES BASED ON TRIP TYPE
         if v_cat == "Own Fleet": 
             dsl = ex1.number_input("Diesel Amount", min_value=0.0)
             toll = ex2.number_input("Toll / Border", min_value=0.0)
@@ -185,9 +184,7 @@ elif menu == "2. LR Entry":
             hc = ex1.number_input("Hired Charges (Market)", min_value=0.0)
             dsl = toll = drv = 0.0
 
-        # SAVE BUTTON
         if st.form_submit_button("🚀 SAVE LR & GENERATE BILTY"):
-            # Update row with all new columns
             row = [str(dt), lr_no, v_cat, bill_p, cn, cn_gst, cn_addr, ce, ce_gst, pkg, mt, art, vn, sel_broker, fl, tl, fr, cw, nw, (fr-hc-dsl-toll-drv)]
             
             if st.session_state.edit_lr_no:
@@ -196,12 +193,10 @@ elif menu == "2. LR Entry":
                 st.session_state.edit_lr_no = None
             
             save("trips", row)
-            # Store for PDF (Important: Names match generate_lr_pdf keys)
             st.session_state.last_pdf = {"LR No": lr_no, "Date": str(dt), "Vehicle": vn, "Consignor": cn, "Consignee": ce, "Party": bill_p, "From": fl, "To": tl, "Material": mt, "Weight": nw, "Freight": fr, "Paid_By": pb, "BrName": sel_br, "BrAddr": br_r.get('Address',''), "BrGST": br_r.get('GST',''), "Pkg": pkg, "Art": art, "CWt": cw, "show_fr": show_fr}
             st.session_state.reset_k += 1
             st.rerun()
 
-    # DOWNLOAD SECTION
     if st.session_state.last_pdf:
         st.success(f"✅ Saved Successfully!")
         st.download_button("📥 DOWNLOAD PDF", generate_lr_pdf(st.session_state.last_pdf, st.session_state.last_pdf.get('show_fr', True)), f"LR_{st.session_state.last_pdf['LR No']}.pdf")
@@ -300,6 +295,7 @@ elif menu == "4. Financial Ledger":
             st.dataframe(billed_df if r_cat == "Party" else payable_df, use_container_width=True)
             st.write("💵 Payment History")
             st.dataframe(df_p[df_p['Name'] == r_name], use_container_width=True)
+
 
 
 
