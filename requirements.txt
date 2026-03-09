@@ -3,4 +3,6 @@ pandas
 gspread
 google-auth
 fpdf
+reportlab
+openpyxl
 
