@@ -79,7 +79,7 @@ if 'edit_lr_no' not in st.session_state: st.session_state.edit_lr_no = None
 if 'reset_k' not in st.session_state: st.session_state.reset_k = 0
 if 'last_pdf' not in st.session_state: st.session_state.last_pdf = None
 
-menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry", "3. LR Register"])
+menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry", "3. LR Register", "4. Financial Ledger"])
 
 # MASTER SETUP
 if menu == "1. Masters Setup":
@@ -177,3 +177,4 @@ elif menu == "3. LR Register":
                     try: sh.worksheet("trips").delete_rows(sh.worksheet("trips").find(row['LR No']).row); st.rerun()
                     except: st.error("Not found")
                 st.download_button("📥 PDF", generate_lr_pdf(row.to_dict(), True), f"LR_{row['LR No']}.pdf", key=f"p_{i}")
+
