@@ -41,13 +41,17 @@ def delete_master_row(name_val):
         return True
     except: return False
 
-# --- 2. PROFESSIONAL PDF ENGINE (YOUR ORIGINAL CODE) ---
+# --- 2. PROFESSIONAL PDF ENGINE (UPDATED FOR DYNAMIC BRANCH/BANK) ---
 def generate_lr_pdf(lr_data, show_fr=True):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", 'B', 18); pdf.cell(100, 8, "Virat Logistics", ln=1)
+    # Branch Name & Address (Dynamic)
+    pdf.set_font("Arial", 'B', 18); pdf.cell(100, 8, lr_data.get('BrName', 'Virat Logistics'), ln=1)
+    pdf.set_font("Arial", '', 8); pdf.cell(190, 4, f"Address: {lr_data.get('BrAddr', '')}", ln=True)
+    pdf.cell(190, 4, f"GST No: {lr_data.get('BrGST', '')}", ln=True)
+    
     pdf.set_font("Arial", 'I', 8); pdf.cell(190, 5, "Your Goods Are In Good hand..", ln=True)
-    pdf.line(10, 30, 200, 30); pdf.ln(8)
+    pdf.line(10, 35, 200, 35); pdf.ln(12)
     
     pdf.set_font("Arial", 'B', 9)
     pdf.cell(45, 8, f"LR No: {lr_data.get('LR No', '')}", 1); pdf.cell(45, 8, f"Date: {lr_data.get('Date', '')}", 1)
@@ -68,7 +72,8 @@ def generate_lr_pdf(lr_data, show_fr=True):
     amt = f"Rs. {lr_data.get('Freight', 0)}" if show_fr else "T.B.B."
     pdf.cell(30, 10, amt, 1, ln=True)
     pdf.ln(5); pdf.set_font("Arial", 'B', 8)
-    pdf.cell(190, 5, f"BANK: {lr_data.get('Bank', 'N/A')} | Freight Paid By: {lr_data.get('PaidBy', 'N/A')}", ln=True)
+    # Bank Details (Dynamic)
+    pdf.cell(190, 5, f"BANK: {lr_data.get('BankInfo', 'N/A')} | Freight Paid By: {lr_data.get('PaidBy', 'N/A')}", ln=True)
     pdf.ln(10); pdf.cell(95, 5, "Consignor Sign", 0, 0, 'L'); pdf.cell(95, 5, "For VIRAT LOGISTICS", 0, 1, 'R')
     return pdf.output(dest='S').encode('latin-1')
 
@@ -86,9 +91,10 @@ if menu == "1. Masters Setup":
     m_type = st.selectbox("Category", ["Party", "Broker", "Vehicle", "Driver", "Bank", "Branch"])
     with st.form("m_form", clear_on_submit=True):
         val = st.text_input(f"New {m_type}")
-        code = st.text_input("Code/GST (Optional)")
+        code = st.text_input("GST No (For Branch) / Account No (For Bank)")
+        addr = st.text_area("Address (For Branch)")
         if st.form_submit_button("Add Master"):
-            if val: save("masters", [m_type, val, code]); st.success("Saved!"); st.rerun()
+            if val: save("masters", [m_type, val, code, addr]); st.success("Saved!"); st.rerun()
     st.divider()
     if not df_m.empty:
         curr_m = df_m[df_m['Type'] == m_type]
@@ -109,11 +115,11 @@ elif menu == "2. LR Entry":
     cp1, cp2, cp3 = st.columns(3)
     with cp1:
         sel_br = st.selectbox("Select Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
-        br_code = df_m[df_m['Name'] == sel_br].iloc[0].get('GST', '01') if sel_br != "Select" else "01"
+        br_row = df_m[(df_m['Name'] == sel_br) & (df_m['Type'] == 'Branch')].iloc[0] if sel_br != "Select" else {}
+        br_code = br_row.get('GST', '01') if sel_br != "Select" else "01"
         v_cat = st.radio("Trip Type*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"vcat_{k}")
         lr_mode = st.radio("LR No Mode", ["Auto", "Manual"], horizontal=True, key=f"lrmode_{k}")
-        lr_no_auto = f"VIL/25-26/{br_code}/{len(df_t)+1:03d}"
-        lr_no = st.text_input("LR Number*", value=lr_no_auto if lr_mode == "Auto" else "", key=f"lrno_{k}")
+        lr_no = st.text_input("LR Number*", value=f"VIL/25-26/{br_code}/{len(df_t)+1:03d}" if lr_mode == "Auto" else "", key=f"lrno_{k}")
         risk = st.radio("Risk*", ["At Owner Risk", "Insured"], horizontal=True, key=f"risk_{k}")
     with cp2:
         is_np = st.checkbox("New Party?")
@@ -126,6 +132,7 @@ elif menu == "2. LR Entry":
         cnee_gst = st.text_input("Consignee GST", key=f"cngst_{k}")
         paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pby_{k}")
         sel_bank = st.selectbox("Select Bank*", ["Select"] + gl("Bank"), key=f"bank_{k}")
+        bank_row = df_m[(df_m['Name'] == sel_bank) & (df_m['Type'] == 'Bank')].iloc[0] if sel_bank != "Select" else {}
 
     with st.form(f"lr_form_{k}"):
         st.markdown("---")
@@ -143,7 +150,6 @@ elif menu == "2. LR Entry":
             n_wt, c_wt = st.number_input("Net Wt", min_value=0.0), st.number_input("Chg Wt", min_value=0.0)
             fr_amt = st.number_input("Total Freight*", min_value=0.0)
             show_fr = st.checkbox("Show Freight in PDF?", value=True)
-            # --- OWN/HIRE LOGIC RE-INSTATED ---
             if v_cat == "Own Fleet": 
                 dsl, toll, drv = st.number_input("Diesel"), st.number_input("Toll"), st.number_input("Driver Adv")
                 hc = 0.0
@@ -152,11 +158,20 @@ elif menu == "2. LR Entry":
                 dsl = toll = drv = 0.0
 
         if st.form_submit_button("🚀 SAVE LR"):
-            if bill_pty != "Select" and fr_amt > 0:
+            if sel_br != "Select" and fr_amt > 0:
                 prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
                 row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, "Driver", br_name, fl, tl, fr_amt, (hc if v_cat == "Market Hired" else 0.0), dsl, drv, toll, 0, prof]
                 if save("trips", row):
-                    st.session_state.pdf_ready = {"LR No": lr_no, "Date": str(d), "Vehicle": v_no, "Cnor": cnor_name, "CnorGST": cnor_gst, "Cnee": cnee_name, "CneeGST": cnee_gst, "BillP": bill_pty, "From": fl, "To": tl, "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, "Freight": fr_amt, "PaidBy": paid_by, "Bank": sel_bank, "Risk": risk, "InsBy": ins_by, "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr}
+                    # Passing Branch & Bank data to PDF dictionary
+                    st.session_state.pdf_ready = {
+                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, "Cnor": cnor_name, "CnorGST": cnor_gst, 
+                        "Cnee": cnee_name, "CneeGST": cnee_gst, "BillP": bill_pty, "From": fl, "To": tl, 
+                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, "Freight": fr_amt, 
+                        "PaidBy": paid_by, "Risk": risk, "InsBy": ins_by, "InvNo": inv_no, "ShipTo": ship_to, 
+                        "show_fr": show_fr, 
+                        "BrName": sel_br, "BrAddr": br_row.get('Address', ''), "BrGST": br_row.get('GST', ''),
+                        "BankInfo": f"{sel_bank} - A/C: {bank_row.get('GST', '')}"
+                    }
                     st.success("Saved!"); st.rerun()
 
     if st.session_state.pdf_ready:
