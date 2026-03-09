@@ -30,15 +30,12 @@ def load(name):
 def save(name, row):
 def safe_float(val):
     try:
-        if val == "" or val is None: 
+        if val == "" or val is None:
             return 0.0
+        # Agar value list ya series hai (jaise sum karne par aati hai)
         return float(str(val).replace(',', ''))
     except:
         return 0.0
-    try:
-        sh.worksheet(name).append_row(row, value_input_option='USER_ENTERED')
-        return True
-    except: return False
 
 def delete_master_row(name_val):
     try:
@@ -256,5 +253,6 @@ elif menu == "4. Financial Ledger":
             st.dataframe(billed_df if r_cat == "Party" else payable_df, use_container_width=True)
             st.write("💵 Payment History")
             st.dataframe(df_p[df_p['Name'] == r_name], use_container_width=True)
+
 
 
