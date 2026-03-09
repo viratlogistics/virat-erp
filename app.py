@@ -36,8 +36,8 @@ def save(name, row):
 def generate_lr_pdf(lr_data, show_fr):
     pdf = FPDF()
     pdf.add_page()
-    # Header Section (Professional Style)
-    pdf.set_font("Arial", 'B', 18)
+    # Header Section
+    pdf.set_font("Arial", 'B', 16)
     pdf.cell(190, 8, "VIRAT LOGISTICS", ln=True, align='C')
     pdf.set_font("Arial", 'I', 8)
     pdf.cell(190, 5, "Your Goods Are In Good hand..", ln=True, align='C')
@@ -51,26 +51,25 @@ def generate_lr_pdf(lr_data, show_fr):
     pdf.cell(45, 8, f"LR No: {lr_data['LR No']}", 1)
     pdf.cell(45, 8, f"Date: {lr_data['Date']}", 1)
     pdf.cell(50, 8, f"Vehicle: {lr_data['Vehicle']}", 1)
-    pdf.cell(50, 8, f"Billing: {lr_data['PaidBy']}", 1, ln=True)
+    pdf.cell(50, 8, f"Paid By: {lr_data['PaidBy']}", 1, ln=True)
     
-    # Consignor/Consignee Box
+    # Consignor/Consignee
     pdf.ln(2)
     pdf.set_fill_color(240, 240, 240)
-    pdf.cell(95, 7, "CONSIGNOR (From)", 1, 0, 'C', True)
-    pdf.cell(95, 7, "CONSIGNEE (To)", 1, 1, 'C', True)
+    pdf.cell(95, 7, "CONSIGNOR", 1, 0, 'C', True)
+    pdf.cell(95, 7, "CONSIGNEE", 1, 1, 'C', True)
     
     pdf.set_font("Arial", '', 9)
-    y_start = pdf.get_y()
+    y_s = pdf.get_y()
     pdf.multi_cell(95, 6, f"Name: {lr_data['Party']}\nGST: {lr_data['Cnor_GST']}", 1, 'L')
-    y_end1 = pdf.get_y()
-    
-    pdf.set_y(y_start)
+    y_e1 = pdf.get_y()
+    pdf.set_y(y_s)
     pdf.set_x(105)
     pdf.multi_cell(95, 6, f"Name: {lr_data['Cnee']}\nGST: {lr_data['Cnee_GST']}", 1, 'L')
-    y_end2 = pdf.get_y()
-    pdf.set_y(max(y_end1, y_end2))
+    y_e2 = pdf.get_y()
+    pdf.set_y(max(y_e1, y_e2))
     
-    # Weight & Material Table
+    # Table Header
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 9)
     pdf.cell(60, 8, "Material & Packaging", 1)
@@ -79,15 +78,16 @@ def generate_lr_pdf(lr_data, show_fr):
     pdf.cell(35, 8, "Route", 1)
     pdf.cell(35, 8, "Freight", 1, ln=True)
     
+    # Table Content
     pdf.set_font("Arial", '', 9)
     pdf.cell(60, 10, f"{lr_data['Material']} ({lr_data['Pkg']})", 1)
     pdf.cell(30, 10, f"{lr_data['NetWt']} kg", 1)
     pdf.cell(30, 10, f"{lr_data['ChgWt']} kg", 1)
     pdf.cell(35, 10, f"{lr_data['From']}-{lr_data['To']}", 1)
-    amt = f"Rs. {lr_data['Freight']}" if show_fr else "T.B.B"
+    amt = f"Rs. {lr_data['Freight']}" if show_fr else "T.B.B."
     pdf.cell(35, 10, amt, 1, ln=True)
     
-    # Footer with Bank
+    # Footer
     pdf.ln(10)
     pdf.set_font("Arial", 'B', 8)
     pdf.cell(190, 5, "Bank: BOB | A/C: 53480400000059 | IFSC: BARBOSARSUR", ln=True)
@@ -113,18 +113,14 @@ if menu == "1. Masters Setup":
     if not df_m.empty:
         st.table(df_m[df_m['Type'] == m_type][['Name']])
 
-# --- LR ENTRY MODULE (Phase 1.10) ---
 elif menu == "2. LR Entry":
     st.header("📝 Consignment Note (LR)")
-    
-    # Refresh lists
     party_list = sorted(df_m[df_m['Type'] == 'Party']['Name'].unique().tolist()) if not df_m.empty else []
     broker_list = sorted(df_m[df_m['Type'] == 'Broker']['Name'].unique().tolist()) if not df_m.empty else []
     own_v = sorted(df_m[df_m['Type'] == 'Vehicle']['Name'].unique().tolist()) if not df_m.empty else []
     
     v_cat = st.radio("Trip Type*", ["Own Fleet", "Market Hired"], horizontal=True)
 
-    # --- PARTY & BROKER SELECTION (OUTSIDE FORM) ---
     cp1, cp2, cp3 = st.columns(3)
     with cp1:
         is_new_p = st.checkbox("New Consignor?")
@@ -138,12 +134,9 @@ elif menu == "2. LR Entry":
         paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee"])
     with cp3:
         show_fr_in_pdf = st.checkbox("Show Freight in Print?", value=True)
-        # NAYA: Reset Button taaki purana data saaf ho jaye
-        if st.button("♻️ Reset Form for New LR"):
-            st.rerun()
+        if st.button("♻️ Reset for New LR"): st.rerun()
 
-    # --- MAIN FORM ---
-    with st.form("lr_form_final", clear_on_submit=True): # clear_on_submit TRUE kar diya
+    with st.form("lr_form_final", clear_on_submit=True):
         st.markdown("---")
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -159,12 +152,8 @@ elif menu == "2. LR Entry":
             net_wt = st.number_input("Net Weight (kg)", min_value=0.0)
             chg_wt = st.number_input("Charged Weight (kg)", min_value=0.0)
             fr = st.number_input("Total Freight Amount*", min_value=0.0)
-            
             if v_cat == "Own Fleet":
-                st.write("**Expenses**")
-                dsl = st.number_input("Diesel")
-                toll = st.number_input("Toll")
-                drv = st.number_input("Driver Adv")
+                dsl, toll, drv = st.number_input("Diesel"), st.number_input("Toll"), st.number_input("Driver Adv")
                 hc = 0.0
             else:
                 hc = st.number_input("Hired Charges")
@@ -172,25 +161,18 @@ elif menu == "2. LR Entry":
         
         submitted = st.form_submit_button("🚀 SAVE LR DATA")
 
-    # Save logic remains same...
     if submitted:
         if pty and pty != "Select" and v_no and v_no != "Select" and fr > 0:
             if is_new_p: save("masters", ["Party", pty])
+            if v_cat == "Market Hired" and is_new_b: save("masters", ["Broker", br])
+            
             lr_id = f"LR-{date.today().strftime('%d%m')}-{v_no[-4:]}"
             prof = (fr - hc) if v_cat == "Market Hired" else (fr - dsl - toll - drv)
-            
             row = [str(d), lr_id, v_cat, pty, cnee, paid_by, net_wt, chg_wt, pkg, "", mat, 0, v_no, "Driver", br, fl, tl, fr, hc, dsl, drv, toll, 0, prof]
             
             if save("trips", row):
-                st.success(f"✅ LR {lr_id} Saved! Ab PDF download karein.")
-                p_data = {
-                    "LR No": lr_id, "Date": str(d), "Party": pty, "Vehicle": v_no, 
-                    "From": fl, "To": tl, "Material": mat, "Freight": fr, 
-                    "Cnee": cnee, "Cnee_GST": cnee_gst, "Cnor_GST": cnor_gst,
-                    "Pkg": pkg, "NetWt": net_wt, "ChgWt": chg_wt, "PaidBy": paid_by
-                }
-                st.download_button("🖨️ Download & Print LR", generate_lr_pdf(p_data, show_fr_in_pdf), f"{lr_id}.pdf")
-            else: st.error("Error!")
+                st.success(f"✅ LR {lr_id} Saved!")
+                p_data = {"LR No": lr_id, "Date": str(d), "Party": pty, "Vehicle": v_no, "From": fl, "To": tl, "Material": mat, "Freight": fr, "Cnee": cnee, "Cnee_GST": cnee_gst, "Cnor_GST": cnor_gst, "Pkg": pkg, "NetWt": net_wt, "ChgWt": chg_wt, "PaidBy": paid_by}
                 st.download_button("🖨️ Download Professional LR", generate_lr_pdf(p_data, show_fr_in_pdf), f"{lr_id}.pdf")
-            else: st.error("Error Saving!")
-
+            else: st.error("Save Error!")
+        else: st.error("Fields Missing!")
