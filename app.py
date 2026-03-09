@@ -89,10 +89,6 @@ elif menu == "2. LR Entry":
         else:
             br = "OWN"
             st.info("Own Fleet: No Broker Needed")
-            with c1:
-    consignee = st.text_input("Consignee Name*") # Yash Speciality chemicals LLP jaisa [cite: 17]
-    consignee_gst = st.text_input("Consignee GST No") # [cite: 18]
-    consignor_gst = st.text_input("Consignor GST No") # [cite: 10]
     with cp3:
         st.write("📄 **Print Options**")
         show_fr_in_pdf = st.checkbox("Show Freight in PDF?", value=True)
@@ -109,6 +105,11 @@ elif menu == "2. LR Entry":
                 v_no = st.text_input("Market Vehicle No*")
             fl = st.text_input("From Location")
             tl = st.text_input("To Location")
+            # --- Is hisse ko LR Entry form ke andar "c1" ya "c2" column mein paste karein ---
+with c1:
+    consignee = st.text_input("Consignee Name*") # Yash Speciality chemicals LLP jaisa [cite: 17]
+    consignee_gst = st.text_input("Consignee GST No") # [cite: 18]
+    consignor_gst = st.text_input("Consignor GST No") # [cite: 10]
 
         with c2:
             mat = st.text_input("Material/Weight")
@@ -142,5 +143,6 @@ elif menu == "2. LR Entry":
                 st.download_button("🖨️ Download PDF", btn_pdf, f"{lr_id}.pdf")
             else: st.error("Sync Failed!")
         else: st.error("Mandatory fields bharna zaroori hai (Party, Vehicle, Freight)!")
+
 
 
