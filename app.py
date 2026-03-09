@@ -7,7 +7,7 @@ from google.oauth2.service_account import Credentials
 import json
 import io
 
-# --- 1. CONNECTION & SETTINGS ---
+# --- 1. CONNECTION ---
 st.set_page_config(page_title="Virat Logistics ERP", layout="wide")
 
 @st.cache_resource
@@ -34,7 +34,6 @@ def save(name, row):
         return True
     except: return False
 
-# --- 2. PDF ENGINE ---
 def generate_lr_pdf(lr_data):
     pdf = FPDF()
     pdf.add_page()
@@ -50,9 +49,8 @@ def generate_lr_pdf(lr_data):
         pdf.cell(140, 10, str(v), 1, ln=True)
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 3. UI LOGIC ---
+# --- 2. LOGIC ---
 df_m = load("masters")
-
 menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry"])
 
 if menu == "1. Masters Setup":
@@ -64,57 +62,46 @@ if menu == "1. Masters Setup":
             if val: 
                 save("masters", [m_type, val])
                 st.success(f"{val} Saved!"); st.rerun()
-    st.divider()
-    if not df_m.empty:
-        st.write(f"Existing {m_type}s:")
-        st.table(df_m[df_m['Type'] == m_type][['Name']])
 
 elif menu == "2. LR Entry":
     st.header("📝 Create New LR")
     
-    # Pre-loading lists
     party_list = sorted(df_m[df_m['Type'] == 'Party']['Name'].unique().tolist()) if not df_m.empty else []
     broker_list = sorted(df_m[df_m['Type'] == 'Broker']['Name'].unique().tolist()) if not df_m.empty else []
     own_vehicles = sorted(df_m[df_m['Type'] == 'Vehicle']['Name'].unique().tolist()) if not df_m.empty else []
     
     v_cat = st.radio("Trip Category*", ["Own Fleet", "Market Hired"], horizontal=True)
 
-    with st.form("lr_form"):
-        c1, c2, c3 = st.columns(3)
-        
+    # --- YE HAI JADU: Form se bahar rakha hai taaki turant kaam kare ---
+    st.write("---")
+    c_p1, c_p2 = st.columns([1, 2])
+    is_new_p = c_p1.checkbox("Add New Party?")
+    if is_new_p:
+        pty = c_p2.text_input("Enter New Party Name*", key="new_pty_input")
+    else:
+        pty = c_p2.selectbox("Select Party*", ["Select"] + party_list, key="old_pty_select")
+
+    with st.form("lr_form_main"):
+        c1, c2 = st.columns(2)
         with c1:
             d = st.date_input("Date", date.today())
-            
-            # --- PARTY LOGIC ---
-            is_new_p = st.checkbox("Add New Party?")
-            if is_new_p:
-                pty = st.text_input("New Party Name*", placeholder="Type Name Here")
-            else:
-                pty = st.selectbox("Select Party*", ["Select"] + party_list)
-            
-            # --- VEHICLE LOGIC ---
             if v_cat == "Own Fleet":
                 v_no = st.selectbox("Select Own Vehicle*", ["Select"] + own_vehicles)
             else:
-                v_no = st.text_input("Market Vehicle No*", placeholder="Enter Truck Number")
-        
+                v_no = st.text_input("Market Vehicle No*")
+            fl = st.text_input("From Location")
+            tl = st.text_input("To Location")
+
         with c2:
-            fl, tl = st.text_input("From"), st.text_input("To")
             mat = st.text_input("Material/Weight")
             fr = st.number_input("Total Freight*", min_value=0.0)
-
-        with c3:
             if v_cat == "Market Hired":
-                is_new_b = st.checkbox("Add New Broker?")
-                if is_new_b:
-                    br = st.text_input("New Broker Name*", placeholder="Type Broker Name")
-                else:
-                    br = st.selectbox("Select Broker*", ["Select"] + broker_list)
+                is_new_b = st.checkbox("New Broker?")
+                br = st.text_input("New Broker Name") if is_new_b else st.selectbox("Select Broker", ["Select"] + broker_list)
                 hc = st.number_input("Hired Charges")
                 dsl, toll, drv_e = 0.0, 0.0, 0.0
             else:
                 br, hc = "OWN", 0.0
-                st.write("**Own Trip Expenses**")
                 dsl = st.number_input("Diesel Expense")
                 toll = st.number_input("Toll/Tax")
                 drv_e = st.number_input("Driver Advance")
@@ -122,29 +109,15 @@ elif menu == "2. LR Entry":
         submitted = st.form_submit_button("🚀 SAVE LR & GENERATE PDF")
 
     if submitted:
-        # Input Validation
         if pty and pty != "Select" and v_no and v_no != "Select" and fr > 0:
-            # 1. Save to Masters if New
             if is_new_p: save("masters", ["Party", pty])
-            if v_cat == "Market Hired" and is_new_b: save("masters", ["Broker", br])
-            
-            # 2. Generate LR ID
             lr_id = f"LR-{date.today().strftime('%d%m')}-{v_no[-4:]}"
-            
-            # 3. Calculation
             prof = (fr - hc) if v_cat == "Market Hired" else (fr - dsl - toll - drv_e)
-            
-            # 4. Save Trip
             row = [str(d), lr_id, v_cat, pty, "", "", "", "", "", "", mat, 0, v_no, "Driver", br, fl, tl, fr, hc, dsl, drv_e, toll, 0, prof]
             
             if save("trips", row):
-                st.success(f"✅ Success! LR {lr_id} Saved.")
-                
-                # PDF Generation
-                pdf_data = {"LR No": lr_id, "Date": str(d), "Party": pty, "Vehicle": v_no, "Route": f"{fl}-{tl}", "Total Freight": fr}
-                btn_pdf = generate_lr_pdf(pdf_data)
-                st.download_button("🖨️ Download & Print LR", btn_pdf, f"{lr_id}.pdf", "application/pdf")
-            else:
-                st.error("Sheet Sync Failed!")
-        else:
-            st.error("Error: Party, Vehicle aur Freight bharna mandatory hai!")
+                st.success(f"✅ LR {lr_id} Saved.")
+                pdf_data = {"LR No": lr_id, "Date": str(d), "Party": pty, "Vehicle": v_no, "Route": f"{fl}-{tl}", "Freight": fr}
+                st.download_button("🖨️ Download PDF", generate_lr_pdf(pdf_data), f"{lr_id}.pdf")
+            else: st.error("Sync Failed!")
+        else: st.error("Details missing!")
