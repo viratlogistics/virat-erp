@@ -66,8 +66,10 @@ if menu == "1. Masters Setup":
                 st.success(f"{val} Saved!"); st.rerun()
 
 elif menu == "2. LR Entry":
+   elif menu == "2. LR Entry":
     st.header("📝 Create New LR")
     
+    # Pre-loading lists for dropdowns
     party_list = sorted(df_m[df_m['Type'] == 'Party']['Name'].unique().tolist()) if not df_m.empty else []
     broker_list = sorted(df_m[df_m['Type'] == 'Broker']['Name'].unique().tolist()) if not df_m.empty else []
     own_vehicles = sorted(df_m[df_m['Type'] == 'Vehicle']['Name'].unique().tolist()) if not df_m.empty else []
@@ -81,7 +83,8 @@ elif menu == "2. LR Entry":
     with cp1:
         is_new_p = st.checkbox("New Party?")
         pty = st.text_input("New Party Name*") if is_new_p else st.selectbox("Select Party*", ["Select"] + party_list)
-    
+        consignor_gst = st.text_input("Consignor GST No")
+
     with cp2:
         if v_cat == "Market Hired":
             is_new_b = st.checkbox("New Broker?")
@@ -89,6 +92,7 @@ elif menu == "2. LR Entry":
         else:
             br = "OWN"
             st.info("Own Fleet: No Broker Needed")
+
     with cp3:
         st.write("📄 **Print Options**")
         show_fr_in_pdf = st.checkbox("Show Freight in PDF?", value=True)
@@ -103,14 +107,12 @@ elif menu == "2. LR Entry":
                 v_no = st.selectbox("Select Own Vehicle*", ["Select"] + own_vehicles)
             else:
                 v_no = st.text_input("Market Vehicle No*")
-            fl = st.text_input("From Location")
-            tl = st.text_input("To Location")
-            # --- Is hisse ko LR Entry form ke andar "c1" ya "c2" column mein paste karein ---
-    consignee = st.text_input("Consignee Name*") # Yash Speciality chemicals LLP jaisa [cite: 17]
-    consignee_gst = st.text_input("Consignee GST No") # [cite: 18]
-    consignor_gst = st.text_input("Consignor GST No") # [cite: 10]
+            consignee = st.text_input("Consignee Name*")
+            consignee_gst = st.text_input("Consignee GST No")
 
         with c2:
+            fl = st.text_input("From Location")
+            tl = st.text_input("To Location")
             mat = st.text_input("Material/Weight")
             fr = st.number_input("Total Freight Amount*", min_value=0.0)
             if v_cat == "Market Hired":
@@ -127,22 +129,31 @@ elif menu == "2. LR Entry":
 
     if submitted:
         if pty and pty != "Select" and v_no and v_no != "Select" and fr > 0:
-            # Auto-save masters
             if is_new_p: save("masters", ["Party", pty])
             if v_cat == "Market Hired" and is_new_b: save("masters", ["Broker", br])
             
             lr_id = f"LR-{date.today().strftime('%d%m')}-{v_no[-4:]}"
             prof = (fr - hc) if v_cat == "Market Hired" else (fr - dsl - toll - drv_e)
+            
+            # Yahan 24 columns ki matching ho rahi hai
             row = [str(d), lr_id, v_cat, pty, "", "", "", "", "", "", mat, 0, v_no, "Driver", br, fl, tl, fr, hc, dsl, drv_e, toll, 0, prof]
             
             if save("trips", row):
                 st.success(f"✅ LR {lr_id} Saved Successfully!")
-                pdf_data = {"LR No": lr_id, "Date": str(d), "Party": pty, "Vehicle": v_no, "Route": f"{fl}-{tl}", "Freight": fr}
+                # PDF ke liye data taiyar
+                pdf_data = {
+                    "LR No": lr_id, "Date": str(d), "Party": pty, 
+                    "Vehicle": v_no, "From": fl, "To": tl, 
+                    "Material": mat, "Freight": fr,
+                    "consignee": consignee,
+                    "consignee_gst": consignee_gst,
+                    "consignor_gst": consignor_gst
+                }
                 btn_pdf = generate_lr_pdf(pdf_data, show_fr_in_pdf)
-                st.download_button("🖨️ Download PDF", btn_pdf, f"{lr_id}.pdf")
-            else: st.error("Sync Failed!")
-        else: st.error("Mandatory fields bharna zaroori hai (Party, Vehicle, Freight)!")
-
-
+                st.download_button("🖨️ Download & Print LR", btn_pdf, f"{lr_id}.pdf")
+            else:
+                st.error("Sync Failed!")
+        else:
+            st.error("Mandatory fields bharna zaroori hai!")
 
 
