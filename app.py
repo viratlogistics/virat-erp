@@ -60,14 +60,14 @@ def generate_lr_pdf(lr_data, show_fr):
     pdf.set_font("Arial", '', 8); pdf.cell(70, 10, lr_data['Material'], 1); pdf.cell(30, 10, lr_data['Pkg'], 1); pdf.cell(30, 10, f"{lr_data['NetWt']}/{lr_data['ChgWt']}", 1); pdf.cell(30, 10, f"{lr_data['From']}-{lr_data['To']}", 1)
     amt = f"Rs. {lr_data['Freight']}" if show_fr else "T.B.B."
     pdf.cell(30, 10, amt, 1, ln=True)
-    pdf.ln(5); pdf.set_font("Arial", 'B', 8); pdf.cell(190, 5, f"BANK: {lr_data['Bank']} | Insurance By: {lr_data['InsBy']}", ln=True)
+    pdf.ln(5); pdf.set_font("Arial", 'B', 8); 
+    pdf.cell(190, 5, f"BANK: {lr_data['Bank']} | Insurance Paid By: {lr_data['InsBy']} | Freight Paid By: {lr_data['PaidBy']}", ln=True)
     pdf.ln(10); pdf.cell(95, 5, "Consignor Sign", 0, 0, 'L'); pdf.cell(95, 5, "For VIRAT LOGISTICS", 0, 1, 'R')
     return pdf.output(dest='S').encode('latin-1')
 
 # --- 3. MAIN LOGIC ---
 df_m = load("masters")
 
-# Initialization of Session States
 if 'reset_trigger' not in st.session_state: st.session_state.reset_trigger = 0
 if 'pdf_ready' not in st.session_state: st.session_state.pdf_ready = None
 
@@ -95,54 +95,50 @@ elif menu == "2. LR Entry":
     own_v = sorted(df_m[df_m['Type'] == 'Vehicle']['Name'].unique().tolist()) if not df_m.empty else []
     broker_list = sorted(df_m[df_m['Type'] == 'Broker']['Name'].unique().tolist()) if not df_m.empty else []
 
-    # UI with Reset Keys
     k = st.session_state.reset_trigger
     cp1, cp2, cp3 = st.columns(3)
     with cp1:
         v_cat = st.radio("Trip Type*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"vcat_{k}")
         lr_mode = st.radio("LR No Mode", ["Auto", "Manual"], horizontal=True, key=f"lrmode_{k}")
         lr_no = st.text_input("LR Number*", value=f"VL-{date.today().strftime('%y%m%d%H%M')}" if lr_mode == "Auto" else "", key=f"lrno_{k}")
+        risk = st.radio("Risk*", ["At Owner Risk", "Insured"], horizontal=True, key=f"risk_{k}")
     with cp2:
         bill_pty = st.selectbox("Billing Party*", ["Select"] + party_list, key=f"bp_{k}")
         cnor_name = st.text_input("Consignor Name*", key=f"cnor_{k}")
         cnor_gst = st.text_input("Consignor GST", key=f"cgst_{k}")
-        risk = st.radio("Risk*", ["At Owner Risk", "Insured"], horizontal=True, key=f"risk_{k}")
+        ins_by = st.selectbox("Insurance Paid By*", ["N/A", "Consignor", "Consignee", "Transporter"], key=f"ins_{k}")
     with cp3:
         cnee_name = st.text_input("Consignee Name*", key=f"cnee_{k}")
         cnee_gst = st.text_input("Consignee GST", key=f"cngst_{k}")
         sel_bank = st.selectbox("Select Bank*", ["Select"] + bank_list, key=f"bank_{k}")
-        show_fr_in_pdf = st.checkbox("Show Freight in Print?", value=True, key=f"frpr_{k}")
+        paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"paidby_{k}")
 
     with st.form(f"lr_form_{k}"):
         st.markdown("---")
         c1, c2, c3 = st.columns(3)
         with c1:
             d = st.date_input("Date", date.today())
-            if v_cat == "Own Fleet":
-                v_no = st.selectbox("Own Vehicle*", ["Select"] + own_v)
-                br = "OWN"
-            else:
-                v_no = st.text_input("Market Vehicle No*")
-                br = st.selectbox("Broker*", ["Select"] + broker_list)
+            v_no = st.selectbox("Own Vehicle*", ["Select"] + own_v) if v_cat == "Own Fleet" else st.text_input("Market Vehicle No*")
+            br = "OWN" if v_cat == "Own Fleet" else st.selectbox("Broker*", ["Select"] + broker_list)
             ship_to = st.text_area("Ship To Address")
         with c2:
             fl, tl = st.text_input("From City"), st.text_input("To City")
-            mat, pkg = st.text_input("Material"), st.selectbox("Packaging", ["Drums", "Bags", "Boxes", "Loose"])
+            mat, pkg = st.text_input("Material"), st.selectbox("Packaging", ["Drums", "Bags", "Boxes", "Loose", "Pallets"])
             inv_no = st.text_input("Invoice No & Date")
         with c3:
             n_wt, c_wt = st.number_input("Net Wt", min_value=0.0), st.number_input("Chg Wt", min_value=0.0)
             fr = st.number_input("Total Freight*", min_value=0.0)
-            ins_by = st.selectbox("Insurance By", ["N/A", "Consignor", "Consignee", "Transporter"]) if risk == "Insured" else "N/A"
+            show_fr_in_pdf = st.checkbox("Show Freight in Print?", value=True)
             if v_cat == "Own Fleet": dsl, toll, drv, hc = st.number_input("Diesel"), st.number_input("Toll"), st.number_input("Driver Adv"), 0.0
             else: hc, dsl, toll, drv = st.number_input("Hired Charges"), 0.0, 0.0, 0.0
 
         if st.form_submit_button("🚀 SAVE LR"):
             if bill_pty != "Select" and v_no and fr > 0:
                 prof = (fr - hc) if v_cat == "Market Hired" else (fr - dsl - toll - drv)
-                row = [str(d), lr_no, v_cat, bill_pty, cnee_name, "Paid", n_wt, c_wt, pkg, risk, mat, ins_by, v_no, "Driver", br, fl, tl, fr, hc, dsl, drv, toll, 0, prof]
+                row = [str(d), lr_no, v_cat, bill_pty, cnee_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, "Driver", br, fl, tl, fr, hc, dsl, drv, toll, 0, prof]
                 if save("trips", row):
                     st.success(f"✅ LR {lr_no} Saved!")
-                    st.session_state.pdf_ready = {"LR No": lr_no, "Date": str(d), "BillP": bill_pty, "Cnor": cnor_name, "CnorGST": cnor_gst, "Vehicle": v_no, "From": fl, "To": tl, "Material": mat, "Freight": fr, "Cnee": cnee_name, "CneeGST": cnee_gst, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, "Risk": risk, "InsBy": ins_by, "Bank": sel_bank, "InvNo": inv_no, "ShipTo": ship_to}
+                    st.session_state.pdf_ready = {"LR No": lr_no, "Date": str(d), "BillP": bill_pty, "Cnor": cnor_name, "CnorGST": cnor_gst, "Vehicle": v_no, "From": fl, "To": tl, "Material": mat, "Freight": fr, "Cnee": cnee_name, "CneeGST": cnee_gst, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, "Risk": risk, "InsBy": ins_by, "Bank": sel_bank, "InvNo": inv_no, "ShipTo": ship_to, "PaidBy": paid_by}
                 else: st.error("Save Error")
 
     if st.session_state.pdf_ready:
