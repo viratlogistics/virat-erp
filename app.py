@@ -128,7 +128,19 @@ elif menu == "2. LR Entry":
     with cp1:
         sel_br = st.selectbox("Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
         br_r = df_m[(df_m['Name'] == sel_br) & (df_m['Type'] == 'Branch')].iloc[0] if sel_br != "Select" else {}
+      with cp1:
+        sel_br = st.selectbox("Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
+        br_r = df_m[(df_m['Name'] == sel_br) & (df_m['Type'] == 'Branch')].iloc[0] if sel_br != "Select" else {}
+        
         v_cat = st.radio("Type*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"vcat_{k}")
+        
+        # --- NEW: BROKER SELECTION BOX ---
+        # Agar Market Hired select hai tabhi Broker ka box dikhao
+        if v_cat == "Market Hired":
+            sel_broker = st.selectbox("Select Broker*", ["Select"] + gl("Broker"), key=f"broker_sel_{k}")
+        else:
+            sel_broker = "OWN" # Own fleet ke liye default OWN
+        
         lr_no = st.text_input("LR No*", value=str(ed.get('LR No', f"VIL/25-26/{br_r.get('GST','01')}/{len(df_t)+1:03d}")), key=f"lrno_{k}")
     with cp2:
         bill_p = st.selectbox("Party*", ["Select"] + gl("Party"), key=f"bp_{k}")
@@ -257,6 +269,7 @@ elif menu == "4. Financial Ledger":
             st.dataframe(billed_df if r_cat == "Party" else payable_df, use_container_width=True)
             st.write("💵 Payment History")
             st.dataframe(df_p[df_p['Name'] == r_name], use_container_width=True)
+
 
 
 
