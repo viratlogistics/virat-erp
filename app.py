@@ -113,16 +113,18 @@ if menu == "1. Masters Setup":
     if not df_m.empty:
         st.table(df_m[df_m['Type'] == m_type][['Name']])
 
+# --- LR ENTRY MODULE (Phase 1.10) ---
 elif menu == "2. LR Entry":
     st.header("📝 Consignment Note (LR)")
     
+    # Refresh lists
     party_list = sorted(df_m[df_m['Type'] == 'Party']['Name'].unique().tolist()) if not df_m.empty else []
     broker_list = sorted(df_m[df_m['Type'] == 'Broker']['Name'].unique().tolist()) if not df_m.empty else []
     own_v = sorted(df_m[df_m['Type'] == 'Vehicle']['Name'].unique().tolist()) if not df_m.empty else []
     
     v_cat = st.radio("Trip Type*", ["Own Fleet", "Market Hired"], horizontal=True)
 
-    st.markdown("### 🏢 Core Details")
+    # --- PARTY & BROKER SELECTION (OUTSIDE FORM) ---
     cp1, cp2, cp3 = st.columns(3)
     with cp1:
         is_new_p = st.checkbox("New Consignor?")
@@ -136,8 +138,12 @@ elif menu == "2. LR Entry":
         paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee"])
     with cp3:
         show_fr_in_pdf = st.checkbox("Show Freight in Print?", value=True)
+        # NAYA: Reset Button taaki purana data saaf ho jaye
+        if st.button("♻️ Reset Form for New LR"):
+            st.rerun()
 
-    with st.form("lr_form"):
+    # --- MAIN FORM ---
+    with st.form("lr_form_final", clear_on_submit=True): # clear_on_submit TRUE kar diya
         st.markdown("---")
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -164,26 +170,27 @@ elif menu == "2. LR Entry":
                 hc = st.number_input("Hired Charges")
                 dsl, toll, drv = 0.0, 0.0, 0.0
         
-        submitted = st.form_submit_button("🚀 SAVE LR & GENERATE PDF")
+        submitted = st.form_submit_button("🚀 SAVE LR DATA")
 
+    # Save logic remains same...
     if submitted:
         if pty and pty != "Select" and v_no and v_no != "Select" and fr > 0:
             if is_new_p: save("masters", ["Party", pty])
-            if v_cat == "Market Hired" and 'is_new_b' in locals() and is_new_b: save("masters", ["Broker", br])
-            
             lr_id = f"LR-{date.today().strftime('%d%m')}-{v_no[-4:]}"
             prof = (fr - hc) if v_cat == "Market Hired" else (fr - dsl - toll - drv)
             
-            # 24 columns mapping (Weight aur PaidBy ko empty slots mein dala hai)
             row = [str(d), lr_id, v_cat, pty, cnee, paid_by, net_wt, chg_wt, pkg, "", mat, 0, v_no, "Driver", br, fl, tl, fr, hc, dsl, drv, toll, 0, prof]
             
             if save("trips", row):
-                st.success(f"LR {lr_id} Saved!")
+                st.success(f"✅ LR {lr_id} Saved! Ab PDF download karein.")
                 p_data = {
                     "LR No": lr_id, "Date": str(d), "Party": pty, "Vehicle": v_no, 
                     "From": fl, "To": tl, "Material": mat, "Freight": fr, 
                     "Cnee": cnee, "Cnee_GST": cnee_gst, "Cnor_GST": cnor_gst,
                     "Pkg": pkg, "NetWt": net_wt, "ChgWt": chg_wt, "PaidBy": paid_by
                 }
+                st.download_button("🖨️ Download & Print LR", generate_lr_pdf(p_data, show_fr_in_pdf), f"{lr_id}.pdf")
+            else: st.error("Error!")
                 st.download_button("🖨️ Download Professional LR", generate_lr_pdf(p_data, show_fr_in_pdf), f"{lr_id}.pdf")
             else: st.error("Error Saving!")
+
