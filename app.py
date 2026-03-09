@@ -147,13 +147,50 @@ elif menu == "2. LR Entry":
         bk_r = df_m[(df_m['Name'] == bk) & (df_m['Type'] == 'Bank')].iloc[0] if bk != "Select" else {}
 
     with st.form(f"lr_form_{k}"):
-        c1, c2, c3 = st.columns(3)
-        dt = c1.date_input("Date", date.today()); vn = c1.text_input("Vehicle", value=str(ed.get('Vehicle', '')))
-        fl, tl = c2.text_input("From", value=str(ed.get('From', ''))), c2.text_input("To", value=str(ed.get('To', '')))
-        mt = c2.text_input("Material", value=str(ed.get('Material', '')))
-        nw = c3.number_input("Weight", value=safe_float(ed.get('Weight', 0.0)))
-        fr = c3.number_input("Freight", value=safe_float(ed.get('Freight', 0.0)))
-        show_fr = st.checkbox("Show Freight in PDF?", value=True)
+       cp1, cp2, cp3 = st.columns(3)
+    with cp1:
+        sel_br = st.selectbox("Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
+        br_r = df_m[(df_m['Name'] == sel_br) & (df_m['Type'] == 'Branch')].iloc[0] if sel_br != "Select" else {}
+        v_cat = st.radio("Type*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"vcat_{k}")
+        
+        if v_cat == "Market Hired":
+            sel_broker = st.selectbox("Select Broker*", ["Select"] + gl("Broker"), key=f"broker_sel_{k}")
+        else:
+            sel_broker = "OWN"
+            
+        lr_no = st.text_input("LR No*", value=str(ed.get('LR No', f"VIL/25-26/{br_r.get('GST','01')}/{len(df_t)+1:03d}")), key=f"lrno_{k}")
+
+    with cp2:
+        # --- PARTY AUTO-FETCH LOGIC YAHAN LAGEGA ---
+        bill_p = st.selectbox("Billing Party*", ["Select"] + gl("Party"), key=f"bp_{k}")
+        # Master se party ka data nikalna
+        p_data = df_m[(df_m['Name'] == bill_p) & (df_m['Type'] == 'Party')].iloc[0] if bill_p != "Select" else {}
+        
+        cn = st.text_input("Consignor Name", value=str(p_data.get('Name', ed.get('Consignor', ''))), key=f"cn_{k}")
+        cn_gst = st.text_input("Consignor GST", value=str(p_data.get('GST', '')), key=f"cgst_{k}")
+        cn_addr = st.text_area("Consignor Address", value=str(p_data.get('Address', '')), key=f"caddr_{k}")
+
+    with cp3:
+        ce = st.text_input("Consignee Name", value=str(ed.get('Consignee', '')), key=f"ce_{k}")
+        ce_gst = st.text_input("Consignee GST", key=f"cegst_{k}")
+        pb = st.selectbox("Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pb_{k}")
+        bk = st.selectbox("Bank*", ["Select"] + gl("Bank"), key=f"bk_{k}")
+
+    with st.form(f"lr_form_{k}"):
+        f1, f2, f3 = st.columns(3)
+        dt = f1.date_input("Date", date.today())
+        vn = f1.text_input("Vehicle No", value=str(ed.get('Vehicle', '')))
+        
+        fl, tl = f2.text_input("From", value=str(ed.get('From', ''))), f2.text_input("To", value=str(ed.get('To', '')))
+        mt = f2.text_input("Material Name", value=str(ed.get('Material', '')))
+        pkg = f2.selectbox("Packaging Type", ["Bags", "Drums", "Boxes", "Loose", "Pallets", "Other"])
+        
+        art = f3.number_input("Article (Qty)", min_value=0)
+        nw = f3.number_input("Net Weight", value=safe_float(ed.get('Weight', 0.0)))
+        cw = f3.number_input("Charged Weight", value=safe_float(ed.get('ChargedWeight', 0.0)))
+        fr = f3.number_input("Total Freight", value=safe_float(ed.get('Freight', 0.0)))
+        
+        # ... baaki Diesel/Toll aur Submit Button waisa hi rahega ...
         
         if v_cat == "Own Fleet": dsl, toll, drv, hc = c1.number_input("Diesel"), c2.number_input("Toll"), c3.number_input("Adv"), 0.0
         else: hc, dsl, toll, drv = c1.number_input("Hired Charges"), 0, 0, 0
@@ -261,6 +298,7 @@ elif menu == "4. Financial Ledger":
             st.dataframe(billed_df if r_cat == "Party" else payable_df, use_container_width=True)
             st.write("💵 Payment History")
             st.dataframe(df_p[df_p['Name'] == r_name], use_container_width=True)
+
 
 
 
