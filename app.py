@@ -190,14 +190,22 @@ elif menu == "4. Financial Ledger":
             l_date = c2.date_input("Date", date.today())
             
             # Masters se naam uthaye Category ke hisab se
-           # --- FIXED DROPDOWN LOGIC ---
-            # Category ke hisab se Masters se filter karein
+          # --- FIXED DROPDOWN LOGIC v2 ---
+            # 1. Pehle category ke hisab se names nikal lo
             if not df_m.empty:
-                # 'Broker' aur 'Party' dono check karega
-                m_filter = df_m[df_m['Type'].str.contains(l_cat, case=False, na=False)]
-                names = sorted(m_filter['Name'].unique().tolist())
+                # Type check: Party ya Broker (Spaces saaf karke)
+                m_filter = df_m[df_m['Type'].str.strip() == l_cat]
+                names_list = sorted(m_filter['Name'].unique().tolist())
             else:
-                names = []
+                names_list = []
+
+            # 2. Dropdown: key mein l_cat daala hai taaki category badalte hi list refresh ho jaye
+            l_name = c2.selectbox(
+                f"Select {l_cat} Name*", 
+                ["Select"] + names_list, 
+                key=f"sel_name_{l_cat}"  # Ye key bohot zaroori hai
+            )
+            # -------------------------------
             
             l_name = c2.selectbox(f"Select {l_cat}*", ["Select"] + names, key="l_name_select")
             # ----------------------------
