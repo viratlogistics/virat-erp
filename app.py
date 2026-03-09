@@ -11,7 +11,7 @@ import io
 import json
 
 # --- 1. CONFIG & CONNECTION ---
-st.set_page_config(page_title="Virat ERP v6.2", layout="wide")
+st.set_page_config(page_title="Virat ERP v6.3", layout="wide")
 
 @st.cache_resource
 def get_sh():
@@ -24,24 +24,27 @@ def get_sh():
 sh = get_sh()
 
 def load_data(sheet):
-    try: return pd.DataFrame(sh.worksheet(sheet).get_all_records())
+    try: 
+        df = pd.DataFrame(sh.worksheet(sheet).get_all_records())
+        df.columns = [str(c).strip() for c in df.columns] # Clean column names
+        return df
     except: return pd.DataFrame()
 
 def save_row(sheet, row):
     try: sh.worksheet(sheet).append_row(row, value_input_option='USER_ENTERED'); return True
     except: return False
 
-# --- 2. DYNAMIC PDF ENGINE ---
+# --- 2. PDF ENGINE ---
 def generate_pdf(lr):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4)
     styles = getSampleStyleSheet()
     elements = [Paragraph(f"<b>VIRAT LOGISTICS</b>", styles['Title']), Spacer(1, 15)]
     data = [
-        ["LR No", lr.get('LR No'), "Date", lr.get('Date')],
-        ["Consignor", lr.get('Consignor'), "Consignee", lr.get('Consignee')],
-        ["Vehicle", lr.get('Vehicle'), "Material", lr.get('Material')],
-        ["Freight", f"Rs. {lr.get('Freight')}", "Paid By", lr.get('Paid_By')]
+        ["LR No", lr.get('LR No',''), "Date", lr.get('Date','')],
+        ["Consignor", lr.get('Consignor',''), "Consignee", lr.get('Consignee','')],
+        ["Vehicle", lr.get('Vehicle',''), "Material", lr.get('Material','')],
+        ["Freight", f"Rs. {lr.get('Freight',0)}", "From-To", f"{lr.get('From','')}-{lr.get('To','')}"]
     ]
     t = Table(data, colWidths=[100, 150, 100, 150])
     t.setStyle(TableStyle([('GRID',(0,0),(-1,-1),1,colors.black),('BACKGROUND',(0,0),(0,-1),colors.lightgrey)]))
@@ -59,61 +62,63 @@ if 'ed_d' not in st.session_state: st.session_state.ed_d = {}
 
 menu = st.sidebar.selectbox("Menu", ["Create LR", "LR Register", "Master Settings"])
 
-# --- MASTER SETTINGS (WITH DELETE/EDIT) ---
+# --- MASTER SETTINGS ---
 if menu == "Master Settings":
     st.title("🏗️ Master Management")
     m_type = st.radio("Category", ["Party", "Branch", "Vehicle", "Bank", "Broker"], horizontal=True)
-    with st.form("m_v62"):
+    with st.form("m_v63"):
         c1, c2 = st.columns(2)
         n = c1.text_input("Name*"); g = c1.text_input("GST")
         c = c2.text_input("Code (BC-01)"); a = c2.text_area("Address")
-        if st.form_submit_button("Save"):
+        if st.form_submit_button("Save Master"):
             if n: save_row("masters", [m_type, n, g, a, c, "", "", "", ""]); st.rerun()
     st.divider()
     if not df_m.empty:
-        for i, r in df_m[df_m['Type']==m_type].iterrows():
+        # Flexible key check to avoid KeyError
+        target_df = df_m[df_m['Type']==m_type]
+        for i, r in target_df.iterrows():
             mc1, mc2 = st.columns([5, 1])
-            mc1.write(f"**{r['Name']}** | {r['GST']} | {r['Code']}")
+            gst_val = r.get('GST', r.get('GST Number', 'N/A'))
+            code_val = r.get('Code', r.get('Branch Code', 'N/A'))
+            mc1.write(f"**{r['Name']}** | GST: {gst_val} | Code: {code_val}")
             if mc2.button("🗑️", key=f"d_{i}"):
                 sh.worksheet("masters").delete_rows(sh.worksheet("masters").find(r['Name']).row); st.rerun()
 
-# --- CREATE LR (WITH AUTO-NUMBERING & NEW PARTY) ---
+# --- CREATE LR ---
 elif menu == "Create LR":
     st.title("📝 EDIT LR" if st.session_state.ed_m else "📝 CREATE LR")
-    if st.button("🆕 RESET / NEW ENTRY"):
+    if st.button("🆕 RESET FORM"):
         st.session_state.ed_m = False; st.session_state.reset_k += 1; st.rerun()
 
     k, ed = st.session_state.reset_k, st.session_state.ed_d
     def gl(t): return df_m[df_m['Type']==t]['Name'].tolist() if not df_m.empty else []
 
-    # Branch & Numbering Logic
     c1, c2, c3 = st.columns(3)
     s_br = c1.selectbox("Branch*", ["Select"] + gl("Branch"), key=f"b_{k}")
-    b_c = df_m[df_m['Name']==s_br]['Code'].values[0] if s_br != "Select" else "XX"
-    v_c = c2.radio("Type*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"v_{k}")
-    # Instant Auto Numbering Fix
-    l_no = c3.text_input("LR No*", value=ed.get('LR No', f"VIL/25-26/{b_c}/{len(df_t)+1:03d}"), key=f"ln_{k}")
+    # Auto-fetch branch code
+    b_c = df_m[df_m['Name']==s_br]['Code'].values[0] if s_br != "Select" and 'Code' in df_m.columns else "XX"
+    v_c = c2.radio("Trip Category*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"v_{k}")
+    l_no = c3.text_input("LR Number*", value=ed.get('LR No', f"VIL/25-26/{b_c}/{len(df_t)+1:03d}"), key=f"ln_{k}")
 
     st.divider()
     cp1, cp2, cp3 = st.columns(3)
-    # New Party/Broker Checkboxes
-    p = cp1.text_input("New Party") if cp1.checkbox("New Party?") else cp1.selectbox("Party*", ["Select"] + gl("Party"), key=f"p_{k}")
+    # NEW PARTY / BROKER LOGIC
+    p = cp1.text_input("New Party Name") if cp1.checkbox("New Party?") else cp1.selectbox("Billing Party*", ["Select"] + gl("Party"), key=f"p_{k}")
     cn = cp1.text_input("New Consignor") if cp1.checkbox("New Consignor?") else cp1.selectbox("Consignor*", ["Select"] + gl("Party"), key=f"cn_{k}")
     ce = cp2.text_input("New Consignee") if cp2.checkbox("New Consignee?") else cp2.selectbox("Consignee*", ["Select"] + gl("Party"), key=f"ce_{k}")
     pb = cp2.selectbox("Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pb_{k}")
-    fr, to = cp3.text_input("From"), cp3.text_input("To")
-    bk = cp3.selectbox("Bank", ["Select"] + gl("Bank"), key=f"bk_{k}")
+    fr_loc, to_loc = cp3.text_input("From"), cp3.text_input("To")
+    bk = cp3.selectbox("Bank Details", ["Select"] + gl("Bank"), key=f"bk_{k}")
 
     with st.form(f"f_{k}"):
         f1, f2, f3 = st.columns(3)
         dt = f1.date_input("Date", date.today())
-        vn = f1.selectbox("Vehicle", ["Select"] + gl("Vehicle")) if v_c == "Own Fleet" else f1.text_input("Market Vehicle No")
-        mt, art = f2.text_input("Material"), f2.number_input("Nag", min_value=1)
+        vn = f1.selectbox("Own Vehicle", ["Select"] + gl("Vehicle")) if v_c == "Own Fleet" else f1.text_input("Market Vehicle No")
+        mt, art = f2.text_input("Material"), f2.number_input("Nag/Articles", min_value=1)
         wt, f_a = f3.number_input("Weight"), f3.number_input("Freight*", min_value=0.0)
         
-        # Own/Hired Expense
         if v_c == "Market Hired":
-            brk = st.text_input("New Broker") if st.checkbox("New Broker?") else st.selectbox("Broker", ["Select"] + gl("Broker"))
+            brk = st.text_input("New Broker Name") if st.checkbox("New Broker?") else st.selectbox("Select Broker", ["Select"] + gl("Broker"))
             hc = st.number_input("Hired Charges")
             dsl, toll, drv = 0, 0, 0
         else:
@@ -121,20 +126,21 @@ elif menu == "Create LR":
 
         if st.form_submit_button("SAVE BILTY"):
             prof = (f_a - hc) if v_c == "Market Hired" else (f_a - dsl - toll - drv)
-            row = [str(dt), l_no, v_c, p, cn, "", "", ce, "", "", mt, wt, vn, "Driver", brk, fr, to, f_a, hc, dsl, drv, toll, 0, prof]
+            row = [str(dt), l_no, v_c, p, cn, "", "", ce, "", "", mt, wt, vn, "Driver", brk, fr_loc, to_loc, f_a, hc, dsl, drv, toll, 0, prof]
             if save_row("trips", row): st.success("✅ Saved!"); st.rerun()
 
-# --- REGISTER (EDIT & PDF) ---
+# --- REGISTER ---
 elif menu == "LR Register":
     st.title("📋 LR REGISTER")
-    search = st.text_input("Search LR/Party")
-    df_f = df_t.copy()
-    if search: df_f = df_f[df_f.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
-    for i, r in df_f.iterrows():
-        with st.expander(f"LR: {r['LR No']} | {r['Consignee']} | ₹{r['Freight']}"):
-            rc1, rc2 = st.columns(2)
-            if rc1.button("✏️ Edit", key=f"e_{i}"):
-                st.session_state.ed_m, st.session_state.ed_d = True, r
-                st.rerun()
-            rc2.download_button("📥 PDF", generate_pdf(r.to_dict()), f"LR_{r['LR No']}.pdf", key=f"p_{i}")
-    st.dataframe(df_f)
+    search = st.text_input("Search LR/Party/Vehicle")
+    if not df_t.empty:
+        df_f = df_t.copy()
+        if search: df_f = df_f[df_f.apply(lambda r: search.lower() in str(r).lower(), axis=1)]
+        for i, r in df_f.iterrows():
+            with st.expander(f"LR: {r.get('LR No','')} | {r.get('Consignee','')} | ₹{r.get('Freight',0)}"):
+                rc1, rc2 = st.columns(2)
+                if rc1.button("✏️ Edit LR", key=f"e_{i}"):
+                    st.session_state.ed_m, st.session_state.ed_d = True, r
+                    st.rerun()
+                rc2.download_button("📥 PDF", generate_pdf(r.to_dict()), f"LR_{r.get('LR No','VL')}.pdf", key=f"p_{i}")
+        st.dataframe(df_f)
