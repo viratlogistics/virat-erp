@@ -23,7 +23,9 @@ sh = get_sh()
 def load(name):
     try:
         ws = sh.worksheet(name)
-        return pd.DataFrame(ws.get_all_records())
+        df = pd.DataFrame(ws.get_all_records())
+        df.columns = [str(c).strip() for c in df.columns]
+        return df
     except: return pd.DataFrame()
 
 def save(name, row):
@@ -32,7 +34,7 @@ def save(name, row):
         return True
     except: return False
 
-# PDF Generator (Same as before)
+# --- 2. PDF ENGINE ---
 def generate_lr_pdf(lr_data):
     pdf = FPDF()
     pdf.add_page()
@@ -41,23 +43,51 @@ def generate_lr_pdf(lr_data):
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(190, 10, "CONSIGNMENT NOTE (LR)", ln=True, align='C')
     pdf.ln(10)
+    pdf.set_font("Arial", 'B', 10)
     for key, value in lr_data.items():
-        pdf.set_font("Arial", 'B', 10)
-        pdf.cell(40, 10, f"{key.upper()}:", 1)
+        pdf.cell(50, 10, f"{key}:", 1)
         pdf.set_font("Arial", '', 10)
-        pdf.cell(150, 10, str(value), 1, ln=True)
+        pdf.cell(140, 10, str(value), 1, ln=True)
+        pdf.set_font("Arial", 'B', 10)
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 2. MAIN LOGIC ---
-df_m = load("masters")
-df_t = load("trips")
+# --- 3. MAIN NAVIGATION ---
+menu = st.sidebar.selectbox("🚀 MODULES", ["1. Masters Setup", "2. LR / Booking Entry"])
 
-menu = st.sidebar.selectbox("Modules", ["1. Masters Setup", "2. LR / Booking Entry"])
-
-if menu == "2. LR / Booking Entry":
-    st.header("📝 Consignment Entry (LR)")
+# --- MODULE 1: MASTER SETUP (FIXED) ---
+if menu == "1. Masters Setup":
+    st.header("🏗️ Master Data Management")
     
-    # Existing lists from Master
+    # Selection of type
+    m_type = st.selectbox("Select Category", ["Party", "Broker", "Vehicle", "Driver"])
+    
+    # Form to add new
+    with st.form("master_form", clear_on_submit=True):
+        new_val = st.text_input(f"Enter New {m_type} Name/No.")
+        if st.form_submit_button(f"Add {m_type}"):
+            if new_val:
+                save("masters", [m_type, new_val])
+                st.success(f"{new_val} added!"); st.rerun()
+    
+    st.divider()
+    
+    # Display Current Masters
+    st.subheader(f"Current {m_type} List")
+    df_m = load("masters")
+    if not df_m.empty:
+        filtered_m = df_m[df_m['Type'] == m_type]
+        if not filtered_m.empty:
+            st.table(filtered_m[['Name']])
+        else:
+            st.info(f"No {m_type} found. Please add one.")
+    else:
+        st.warning("Master sheet is empty. Please add your first entry above.")
+
+# --- MODULE 2: LR ENTRY (WITH PDF) ---
+elif menu == "2. LR / Booking Entry":
+    st.header("📝 Consignment Entry (LR)")
+    df_m = load("masters")
+    
     party_list = sorted(df_m[df_m['Type'] == 'Party']['Name'].unique().tolist()) if not df_m.empty else []
     broker_list = sorted(df_m[df_m['Type'] == 'Broker']['Name'].unique().tolist()) if not df_m.empty else []
     
@@ -65,65 +95,35 @@ if menu == "2. LR / Booking Entry":
 
     with st.form("lr_form"):
         c1, c2, c3 = st.columns(3)
-        
         with c1:
-            d = st.date_input("LR Date", date.today())
-            
-            # --- SMART PARTY SELECTION ---
-            new_pty_check = st.checkbox("New Party?")
-            if new_pty_check:
-                pty = st.text_input("Enter New Party Name*")
-            else:
-                pty = st.selectbox("Select Party*", ["Select"] + party_list)
-            
+            d = st.date_input("Date", date.today())
+            new_pty = st.checkbox("New Party?")
+            pty = st.text_input("New Party Name") if new_pty else st.selectbox("Select Party", ["Select"] + party_list)
             v_no = st.text_input("Vehicle No*")
-
         with c2:
-            floc = st.text_input("From Location")
-            tloc = st.text_input("To Location")
-            mat = st.text_input("Material & Weight")
-
+            fl, tl = st.text_input("From"), st.text_input("To")
+            mat = st.text_input("Material/Weight")
         with c3:
-            fr = st.number_input("Total Freight*", min_value=0.0)
-            
-            if v_cat == "Market Hired":
-                # --- SMART BROKER SELECTION ---
-                new_brk_check = st.checkbox("New Broker?")
-                if new_brk_check:
-                    br = st.text_input("Enter New Broker Name*")
-                else:
-                    br = st.selectbox("Select Broker*", ["Select"] + broker_list)
+            fr = st.number_input("Freight*", min_value=0.0)
+            if v_type := v_cat == "Market Hired":
+                new_brk = st.checkbox("New Broker?")
+                br = st.text_input("New Broker") if new_brk else st.selectbox("Select Broker", ["Select"] + broker_list)
                 hc = st.number_input("Hired Charges")
             else:
                 br, hc = "OWN", 0
         
-        submitted = st.form_submit_button("🚀 SAVE & PRINT")
-
-        if submitted:
+        if st.form_submit_button("🚀 SAVE & GENERATE PDF"):
             if pty and pty != "Select" and v_no and fr > 0:
-                # 1. Agar nayi party hai, toh Master mein save karo
-                if new_pty_check:
-                    save("masters", ["Party", pty])
+                # Save New Master on-the-fly
+                if new_pty: save("masters", ["Party", pty])
+                if v_cat == "Market Hired" and "new_brk" in locals() and new_brk: save("masters", ["Broker", br])
                 
-                # 2. Agar naya broker hai, toh Master mein save karo
-                if v_cat == "Market Hired" and new_brk_check:
-                    save("masters", ["Broker", br])
-                
-                # 3. LR No generate karo
                 lr_id = f"LR-{date.today().strftime('%d%m')}-{v_no[-4:]}"
-                
-                # 4. Sheet mein Save karo (24 columns match)
-                row = [str(d), lr_id, v_cat, pty, "", "", "", "", "", "", mat, 0, v_no, "Driver", br, floc, tloc, fr, hc, 0, 0, 0, 0, (fr-hc)]
+                row = [str(d), lr_id, v_cat, pty, "", "", "", "", "", "", mat, 0, v_no, "Driver", br, fl, tl, fr, hc, 0, 0, 0, 0, (fr-hc)]
                 
                 if save("trips", row):
-                    st.success(f"LR {lr_id} Saved! Naya data Master mein update ho gaya.")
-                    
-                    # 5. PDF Button
-                    lr_details = {'LR NO': lr_id, 'Date': str(d), 'Party': pty, 'Vehicle': v_no, 'Route': f"{floc} to {tloc}", 'Freight': fr}
-                    st.download_button("🖨️ Download PDF", generate_lr_pdf(lr_details), f"{lr_id}.pdf", "application/pdf")
-                    # Note: Rerun mandatory to refresh the dropdown list for next entry
-                    st.info("Agli entry ke liye page ko refresh karein.")
-                else:
-                    st.error("Save failed!")
+                    st.success(f"LR {lr_id} Saved!")
+                    lr_pdf_data = {"LR No": lr_id, "Date": str(d), "Party": pty, "Vehicle": v_no, "From": fl, "To": tl, "Freight": fr}
+                    st.download_button("🖨️ Download PDF", generate_lr_pdf(lr_pdf_data), f"{lr_id}.pdf")
             else:
-                st.warning("Details check karein!")
+                st.error("Please fill required fields.")
