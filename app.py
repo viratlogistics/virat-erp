@@ -327,6 +327,7 @@ if st.form_submit_button("🚀 SAVE LR"):
                     st.rerun() # Yeh line ab sahi alignment mein hai
             else:
                 st.error("Please fill Party Name and Freight!")
+                
     if st.session_state.pdf_ready:
         st.download_button("📥 DOWNLOAD PDF", generate_lr_pdf(st.session_state.pdf_ready, st.session_state.pdf_ready.get('show_fr', True)), f"LR_{st.session_state.pdf_ready['LR No']}.pdf")
 
@@ -540,6 +541,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
