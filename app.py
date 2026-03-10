@@ -224,13 +224,21 @@ elif menu == "2. LR Entry":
             n_wt, c_wt = st.number_input("Net Wt", min_value=0.0), st.number_input("Chg Wt", min_value=0.0)
             fr_amt = st.number_input("Total Freight*", min_value=0.0)
             show_fr = st.checkbox("Show Freight in PDF?", value=True)
+            with c3:
+            n_wt = st.number_input("Weight")
+            fr_amt = st.number_input("Total Freight*")
+            inv_no = st.text_input("Invoice No/Date")
+            
+            # --- Yahan se alignment check karein ---
             if v_cat == "Own Fleet": 
-    dsl, toll, drv_adv = st.number_input("Diesel"), st.number_input("Toll"), st.number_input("Driver Adv")
-    hc = 0.0
+                dsl = st.number_input("Diesel")
+                toll = st.number_input("Toll")
+                drv_adv = st.number_input("Driver Adv")
+                hc = 0.0
             else: 
                 hc = st.number_input("Hired Charges")
-                dsl = toll = drv = 0.0
-
+                dsl = toll = drv_adv = 0.0
+                
         if st.form_submit_button("🚀 SAVE LR"):
             if bill_pty and bill_pty != "Select" and fr_amt > 0:
                 # 1. Calculation (Sahi variables: dsl, toll, drv_adv)
@@ -473,6 +481,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
