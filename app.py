@@ -142,24 +142,49 @@ def gl(t):
 
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
-    m_type = st.selectbox("Category", ["Party", "Broker", "Vehicle", "Driver", "Bank", "Branch"])
+    m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver"])
+    
     with st.form("m_form", clear_on_submit=True):
-        val = st.text_input(f"New {m_type}")
-        code = st.text_input("Code/GST (Optional)")
-        if st.form_submit_button("Add Master"):
-            if val: 
-                save("masters", [m_type, val, code])
-                st.success("Saved!")
-                st.rerun()
+        col1, col2 = st.columns(2)
+        name, gst, addr, cont, ac, ifsc, d_name, d_no = "", "", "", "", "", "", "", ""
+
+        if m_type == "Branch (Company)":
+            with col1:
+                name = st.text_input("Branch Name (e.g. Virat Kim)")
+                gst = st.text_input("Branch GST")
+                addr = st.text_area("Branch Address")
+            with col2:
+                ac = st.text_input("Bank A/C No")
+                ifsc = st.text_input("Bank IFSC")
+                cont = st.text_input("Branch Contact No")
+        elif m_type in ["Party", "Broker"]:
+            with col1:
+                name = st.text_input(f"{m_type} Name")
+                gst = st.text_input("GST Number")
+            with col2:
+                addr = st.text_area("Full Address")
+                cont = st.text_input("Contact Number")
+        elif m_type == "Driver":
+            with col1:
+                d_name = st.text_input("Driver Full Name")
+            with col2:
+                d_no = st.text_input("License Number / Mobile")
+        elif m_type == "Vehicle":
+            name = st.text_input("Vehicle Number (e.g. GJ05BX1234)")
+
+        if st.form_submit_button(f"Save {m_type}"):
+            if name or d_name:
+                new_row = [m_type, name, gst, addr, cont, ac, ifsc, d_name, d_no]
+                if save("masters", new_row):
+                    st.success(f"{m_type} Saved!"); st.rerun()
+            else:
+                st.error("Please enter Name!")
+
     st.divider()
     if not df_m.empty:
+        st.write(f"### Current {m_type} List")
         curr_m = df_m[df_m['Type'] == m_type]
-        for i, r in curr_m.iterrows():
-            mc1, mc2 = st.columns([5,1])
-            mc1.write(f"**{r['Name']}** | {r.get('GST', '')}")
-            if mc2.button("🗑️", key=f"del_{i}"):
-                if delete_master_row(r['Name']): 
-                    st.rerun()
+        st.dataframe(curr_m.dropna(axis=1, how='all'), use_container_width=True, hide_index=True)
 
 elif menu == "2. LR Entry":
     st.header("📝 Professional LR Entry")
@@ -466,5 +491,6 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
