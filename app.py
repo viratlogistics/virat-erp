@@ -266,7 +266,7 @@ elif menu == "2. LR Entry":
             fr_amt = st.number_input("Total Freight*", min_value=0.0)
             show_fr = st.checkbox("Show Freight in PDF?", value=True)
             if v_cat == "Own Fleet": 
-                dsl, toll, drv = st.number_input("Diesel"), st.number_input("Toll"), st.number_input("Driver Adv")
+                dsl, toll, drv = st.number_input("Diesel"), st.number_input("Toll"), drv_adv = st.number_input("Driver Advance", 0.0, key=f"drv_adv_input_{k}")
                 hc = 0.0
             else: 
                 hc = st.number_input("Hired Charges")
@@ -559,6 +559,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
