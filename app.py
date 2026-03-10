@@ -135,12 +135,6 @@ elif menu == "2. LR Entry":
         paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pby_{k}")
         sel_bank = st.selectbox("Select Bank*", ["Select"] + gl("Bank"), key=f"bank_{k}")
 
-    with cp3:
-        cnee_name = st.text_input("Consignee Name*", key=f"cnee_{k}")
-        cnee_gst = st.text_input("Consignee GST", key=f"cngst_{k}")
-        paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pby_{k}")
-        sel_bank = st.selectbox("Select Bank*", ["Select"] + gl("Bank"), key=f"bank_{k}")
-
     with st.form(f"lr_form_{k}"):
         st.markdown("---")
         c1, c2, c3 = st.columns(3)
@@ -501,6 +495,7 @@ elif menu == "7. Driver Khata":
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
