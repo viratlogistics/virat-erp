@@ -297,8 +297,7 @@ elif menu == "2. LR Entry":
                     if is_np and bill_pty not in gl("Party"): save("masters", ["Party", bill_pty])
                     if is_nc and cnor_name not in gl("Consignor"): save("masters", ["Consignor", cnor_name])
 
-                    # 2. PDF Dictionary (Keys matched to your Master columns exactly)
-                    if save("trips", row):
+                if save("trips", row):
                     # 2. PDF ke liye data bundle banana
                     st.session_state.pdf_ready = {
                         "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
@@ -588,6 +587,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
