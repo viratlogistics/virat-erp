@@ -75,8 +75,7 @@ df_t = load("trips")
 if 'reset_trigger' not in st.session_state: st.session_state.reset_trigger = 0
 if 'pdf_ready' not in st.session_state: st.session_state.pdf_ready = None
 
-menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry", "3. LR Register", "4. Financials", "5. Business Insights"])
-
+menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry", "3. LR Register", "4. Financials", "5. Business Insights", "6. Expense Manager"])
 def gl(t): return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
@@ -360,6 +359,43 @@ elif menu == "5. Business Insights":
 
     else:
         st.error("❌ Business data missing!")
+elif menu == "6. Expense Manager":
+    st.header("🏢 Office & General Expense Manager")
+    
+    # 1. Load Office Expense Data
+    df_oe = load("office_expenses")
+    
+    tab_add, tab_view = st.tabs(["➕ Add Expense", "📊 View Expenses"])
+    
+    with tab_add:
+        with st.form("office_exp_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                e_date = st.date_input("Date", date.today())
+                # Category choices for office expenses
+                e_cat = st.selectbox("Category", ["Office Rent", "Electricity", "Staff Salary", "Stationery", "Tea/Coffee", "Repairs", "Others"])
+            with col2:
+                e_amt = st.number_input("Amount (₹)", min_value=0.0)
+                e_mode = st.selectbox("Payment Mode", ["Cash", "Online", "Cheque"])
+            
+            e_desc = st.text_input("Description (e.g. Electricity bill for March)")
+            
+            if st.form_submit_button("Save Office Expense"):
+                if e_amt > 0:
+                    # Saving to 'office_expenses' sheet
+                    if save("office_expenses", [str(e_date), e_cat, e_desc, e_amt, e_mode]):
+                        st.success("Office Expense Saved Successfully!")
+                        st.rerun()
+
+    with tab_view:
+        if not df_oe.empty:
+            df_oe.columns = [str(c).strip() for c in df_oe.columns]
+            st.subheader("Monthly Expense Summary")
+            st.dataframe(df_oe, use_container_width=True)
+            st.info(f"Total Office Expenses: ₹{pd.to_numeric(df_oe['Amount'], errors='coerce').sum():,.2f}")
+        else:
+            st.warning("કોઈ ઓફિસ ખર્ચ મળ્યો નથી.")
+
 
 
 
