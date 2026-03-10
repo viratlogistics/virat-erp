@@ -53,13 +53,14 @@ def generate_lr_pdf(lr_data, show_fr=True):
     # --- PAGE 1: MAIN LR ---
     pdf.add_page()
     
-    # 1. Header (Company Name & Slogan) 
+    # 1. Header (Yahan check karein ki [cite] na ho)
     pdf.set_font("Arial", 'B', 20)
     pdf.set_text_color(20, 50, 100)
-    pdf.cell(0, 10, lr_data.get('BranchName', 'Virat Logistics').upper(), ln=1, align='C') [cite: 1]
+    pdf.cell(0, 10, lr_data.get('BranchName', 'Virat Logistics').upper(), ln=1, align='C')
+    
     pdf.set_font("Arial", 'I', 10)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 5, "Your Goods Are In Good hand..", ln=1, align='C') [cite: 1]
+    pdf.cell(0, 5, "Your Goods Are In Good hand..", ln=1, align='C')
     
     # Branch Address 
     pdf.set_font("Arial", '', 8)
@@ -332,6 +333,7 @@ if st.session_state.pdf_ready:
 elif menu == "3. LR Register":
     st.title("📋 LR REGISTER")
     if not df_t.empty:
+        # Columns clean karein
         df_t.columns = [str(c).strip() for c in df_t.columns]
         
         for i, row in df_t.iterrows():
@@ -340,8 +342,8 @@ elif menu == "3. LR Register":
             br_row = df_m[df_m['Name'] == br_name]
             br_info = br_row.iloc[0] if not br_row.empty else {}
 
-            # PDF Dictionary mapping
-            lr_data_for_pdf = {
+            # Dictionary mapping
+            lr_dict = {
                 "LR No": row.get('LR No', 'N/A'),
                 "Date": row.get('Date', ''),
                 "Vehicle": row.get('Vehicle', ''),
@@ -367,17 +369,19 @@ elif menu == "3. LR Register":
                 "BankIFSC": br_info.get('IFSC', 'N/A')
             }
 
-            with st.expander(f"LR: {lr_data_for_pdf['LR No']} | {lr_data_for_pdf['Cnee']}"):
+            with st.expander(f"LR: {lr_dict['LR No']} | {lr_dict['Cnee']}"):
                 try:
-                    pdf_output = generate_lr_pdf(lr_data_for_pdf, True)
+                    # Clear function call bina kisi cite ke
+                    pdf_output = generate_lr_pdf(lr_dict, True)
                     st.download_button(
                         label="📥 DOWNLOAD PDF",
                         data=pdf_output,
-                        file_name=f"LR_{lr_data_for_pdf['LR No']}.pdf",
-                        key=f"dl_reg_{i}"
+                        file_name=f"LR_{lr_dict['LR No']}.pdf",
+                        key=f"reg_btn_{i}"
                     )
                 except Exception as e:
-                    st.error(f"PDF Error: {e}")
+                    # Agar abhi bhi error aaye toh ye line batayegi kya galti hai
+                    st.error(f"PDF Error: {str(e)}")
         
         st.dataframe(df_t)
         
@@ -583,6 +587,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
