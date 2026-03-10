@@ -6,6 +6,72 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json, io
 
+# --- 1. CONFIG & CONNECTION ---
+st.set_page_config(page_title="Virat Logistics ERP", layout="wide")
+
+@st.cache_resource
+def get_sh():
+    try:
+        info = json.loads(st.secrets["gcp_service_account"]["json_key"])
+        creds = Credentials.from_service_account_info(info, scopes=["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"])
+        return gspread.authorize(creds).open("Virat_Logistics_Data")
+    except:
+        return None
+
+sh = get_sh()
+
+def load(name):
+    try:
+        ws = sh.worksheet(name)
+        df = pd.DataFrame(ws.get_all_records())
+        df.columns = [str(c).strip() for c in df.columns]
+        return df
+    except:
+        return pd.DataFrame()
+
+def save(name, row):
+    try:
+        sh.worksheet(name).append_row(row, value_input_option='USER_ENTERED')
+        return True
+    except:
+        return False
+
+def delete_master_row(name_val):
+    try:
+        ws = sh.worksheet("masters")
+        cell = ws.find(name_val)
+        ws.delete_rows(cell.row)
+        return True
+    except:
+        return False
+
+# --- 2. PDF ENGINE ---
+def generate_lr_pdf(lr_data, show_fr=True):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 18); pdf.cell(100, 8, "Virat Logistics", ln=1)
+    pdf.set_font("Arial", 'I', 8); pdf.cell(190, 5, "Your Goods Are In Good hand..", ln=True)
+    pdf.line(10, 30, 200, 30); pdf.ln(8)
+    pdf.set_font("Arial", 'B', 9)
+    pdf.cell(45, 8, f"LR No: {lr_data.get('LR No', '')}", 1); pdf.cell(45, 8, f"Date: {lr_data.get('Date', '')}", 1)
+    pdf.cell(50, 8, f"Vehicle: {lr_data.get('Vehicle', '')}", 1); pdf.cell(50, 8, f"Risk: {lr_data.get('Risk', 'Owner Risk')}", 1, ln=True)
+    pdf.ln(2); pdf.set_fill_color(240, 240, 240)
+    pdf.cell(63, 6, "CONSIGNOR", 1, 0, 'C', True); pdf.cell(63, 6, "CONSIGNEE", 1, 0, 'C', True); pdf.cell(64, 6, "BILLING PARTY", 1, 1, 'C', True)
+    pdf.set_font("Arial", '', 8); y_s = pdf.get_y()
+    pdf.multi_cell(63, 5, f"{lr_data.get('Cnor', '')}\nGST: {lr_data.get('CnorGST', '')}", 1, 'L'); y_e1 = pdf.get_y()
+    pdf.set_y(y_s); pdf.set_x(73); pdf.multi_cell(63, 5, f"{lr_data.get('Cnee', '')}\nGST: {lr_data.get('CneeGST', '')}", 1, 'L'); y_e2 = pdf.get_y()
+    pdf.set_y(y_s); pdf.set_x(136); pdf.multi_cell(64, 5, f"{lr_data.get('BillP', '')}\nInv: {lr_data.get('InvNo', '')}", 1, 'L'); y_e3 = pdf.get_y()
+    pdf.set_y(max(y_e1, y_e2, y_e3))
+    pdf.ln(2); pdf.set_font("Arial", 'B', 8); pdf.cell(190, 6, f"SHIP TO: {lr_data.get('ShipTo', 'N/A')}", 1, ln=True)
+    pdf.ln(4); pdf.cell(70, 7, "Material", 1); pdf.cell(30, 7, "Pkg", 1); pdf.cell(30, 7, "Weight", 1); pdf.cell(30, 7, "Route", 1); pdf.cell(30, 7, "Freight", 1, ln=True)
+    pdf.set_font("Arial", '', 8); pdf.cell(70, 10, lr_data.get('Material', ''), 1); pdf.cell(30, 10, lr_data.get('Pkg', ''), 1); pdf.cell(30, 10, f"{lr_data.get('NetWt', 0)}/{lr_data.get('ChgWt', 0)}", 1); pdf.cell(30, 10, f"{lr_data.get('From', '')}-{lr_data.get('To', '')}", 1)
+    amt = f"Rs. {lr_data.get('Freight', 0)}" if show_fr else "T.B.B."
+    pdf.cell(30, 10, amt, 1, ln=True)
+    pdf.ln(5); pdf.set_font("Arial", 'B', 8)
+    pdf.cell(190, 5, f"BANK: {lr_data.get('Bank', 'N/A')} | Freight Paid By: {lr_data.get('PaidBy', 'N/A')}", ln=True)
+    pdf.ln(10); pdf.cell(95, 5, "Consignor Sign", 0, 0, 'L'); pdf.cell(95, 5, "For VIRAT LOGISTICS", 0, 1, 'R')
+    return pdf.output(dest='S').encode('latin-1')
+
 elif menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
@@ -61,33 +127,6 @@ elif menu == "1. Masters Setup":
         st.write(f"### Current {m_type} List")
         curr_m = df_m[df_m['Type'] == m_type]
         st.dataframe(curr_m.dropna(axis=1, how='all'), use_container_width=True)
-
-# --- 2. PDF ENGINE ---
-def generate_lr_pdf(lr_data, show_fr=True):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 18); pdf.cell(100, 8, "Virat Logistics", ln=1)
-    pdf.set_font("Arial", 'I', 8); pdf.cell(190, 5, "Your Goods Are In Good hand..", ln=True)
-    pdf.line(10, 30, 200, 30); pdf.ln(8)
-    pdf.set_font("Arial", 'B', 9)
-    pdf.cell(45, 8, f"LR No: {lr_data.get('LR No', '')}", 1); pdf.cell(45, 8, f"Date: {lr_data.get('Date', '')}", 1)
-    pdf.cell(50, 8, f"Vehicle: {lr_data.get('Vehicle', '')}", 1); pdf.cell(50, 8, f"Risk: {lr_data.get('Risk', 'Owner Risk')}", 1, ln=True)
-    pdf.ln(2); pdf.set_fill_color(240, 240, 240)
-    pdf.cell(63, 6, "CONSIGNOR", 1, 0, 'C', True); pdf.cell(63, 6, "CONSIGNEE", 1, 0, 'C', True); pdf.cell(64, 6, "BILLING PARTY", 1, 1, 'C', True)
-    pdf.set_font("Arial", '', 8); y_s = pdf.get_y()
-    pdf.multi_cell(63, 5, f"{lr_data.get('Cnor', '')}\nGST: {lr_data.get('CnorGST', '')}", 1, 'L'); y_e1 = pdf.get_y()
-    pdf.set_y(y_s); pdf.set_x(73); pdf.multi_cell(63, 5, f"{lr_data.get('Cnee', '')}\nGST: {lr_data.get('CneeGST', '')}", 1, 'L'); y_e2 = pdf.get_y()
-    pdf.set_y(y_s); pdf.set_x(136); pdf.multi_cell(64, 5, f"{lr_data.get('BillP', '')}\nInv: {lr_data.get('InvNo', '')}", 1, 'L'); y_e3 = pdf.get_y()
-    pdf.set_y(max(y_e1, y_e2, y_e3))
-    pdf.ln(2); pdf.set_font("Arial", 'B', 8); pdf.cell(190, 6, f"SHIP TO: {lr_data.get('ShipTo', 'N/A')}", 1, ln=True)
-    pdf.ln(4); pdf.cell(70, 7, "Material", 1); pdf.cell(30, 7, "Pkg", 1); pdf.cell(30, 7, "Weight", 1); pdf.cell(30, 7, "Route", 1); pdf.cell(30, 7, "Freight", 1, ln=True)
-    pdf.set_font("Arial", '', 8); pdf.cell(70, 10, lr_data.get('Material', ''), 1); pdf.cell(30, 10, lr_data.get('Pkg', ''), 1); pdf.cell(30, 10, f"{lr_data.get('NetWt', 0)}/{lr_data.get('ChgWt', 0)}", 1); pdf.cell(30, 10, f"{lr_data.get('From', '')}-{lr_data.get('To', '')}", 1)
-    amt = f"Rs. {lr_data.get('Freight', 0)}" if show_fr else "T.B.B."
-    pdf.cell(30, 10, amt, 1, ln=True)
-    pdf.ln(5); pdf.set_font("Arial", 'B', 8)
-    pdf.cell(190, 5, f"BANK: {lr_data.get('Bank', 'N/A')} | Freight Paid By: {lr_data.get('PaidBy', 'N/A')}", ln=True)
-    pdf.ln(10); pdf.cell(95, 5, "Consignor Sign", 0, 0, 'L'); pdf.cell(95, 5, "For VIRAT LOGISTICS", 0, 1, 'R')
-    return pdf.output(dest='S').encode('latin-1')
 
 # --- 3. MAIN LOGIC ---
 df_m = load("masters")
@@ -427,4 +466,5 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
