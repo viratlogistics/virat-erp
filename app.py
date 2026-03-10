@@ -294,10 +294,20 @@ elif menu == "5. Business Insights":
                 st.bar_chart(party_data)
             
             with c_right:
-                st.write("#### 📊 Trip Distribution")
-                trip_counts = df_t['Type'].value_counts()
-                st.dataframe(trip_counts, use_container_width=True)
-
+                st.write("#### 📊 Trip Distribution & Revenue")
+                # Type ke hisab se Count aur Amount dono nikalna
+                dist_data = df_t.groupby('Type').agg({
+                    'Type': 'count',
+                    'Freight': 'sum'
+                }).rename(columns={'Type': 'Total Trips', 'Freight': 'Total Freight'})
+                
+                # Table format mein display karna
+                st.dataframe(dist_data.style.format({'Total Freight': '₹{:,.0f}'}), use_container_width=True)
+                
+                # Chota comparison text
+                own_f = dist_data.loc['Own Fleet', 'Total Freight'] if 'Own Fleet' in dist_data.index else 0
+                mkt_f = dist_data.loc['Market Hired', 'Total Freight'] if 'Market Hired' in dist_data.index else 0
+                st.info(f"Own Revenue: ₹{own_f:,.0f} | Market Revenue: ₹{mkt_f:,.0f}")
         with tab_own:
             if not df_own.empty:
                 st.subheader("🚛 Own Vehicle Profitability Analysis")
@@ -350,6 +360,7 @@ elif menu == "5. Business Insights":
 
     else:
         st.error("❌ Business data missing!")
+
 
 
 
