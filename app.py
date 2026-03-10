@@ -48,106 +48,103 @@ def delete_master_row(name_val):
 # --- 2. PDF ENGINE ---
 def generate_lr_pdf(lr_data, show_fr=True):
     pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    
+    # --- PAGE 1: MAIN LR ---
     pdf.add_page()
     
-    # --- 1. HEADER (Branding & Slogan) ---
-    pdf.set_font("Arial", 'B', 18)
-    pdf.set_text_color(20, 50, 100) # Dark Blue
-    pdf.cell(0, 10, lr_data.get('BranchName', 'VIRAT LOGISTICS').upper(), ln=1, align='C')
-    
+    # 1. Header (Company Name & Slogan) 
+    pdf.set_font("Arial", 'B', 20)
+    pdf.set_text_color(20, 50, 100)
+    pdf.cell(0, 10, lr_data.get('BranchName', 'Virat Logistics').upper(), ln=1, align='C') [cite: 1]
     pdf.set_font("Arial", 'I', 10)
-    pdf.set_text_color(80, 80, 80) # Grey Slogan
-    pdf.cell(0, 5, "Your Goods Are In Good Hands..", ln=1, align='C')
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 5, "Your Goods Are In Good hand..", ln=1, align='C') [cite: 1]
     
+    # Branch Address 
     pdf.set_font("Arial", '', 8)
     pdf.set_text_color(0, 0, 0)
-    pdf.cell(0, 4, lr_data.get('BranchAddr', 'N/A'), ln=1, align='C')
-    pdf.cell(0, 4, f"GSTIN: {lr_data.get('BranchGST', 'N/A')}", ln=1, align='C')
-    pdf.ln(6)
+    pdf.multi_cell(0, 4, f"{lr_data.get('BranchAddr', 'Plot No 130, Kosamba, Gujarat 394120')}\nGST No: {lr_data.get('BranchGST', '24ELFPP6185K1ZJ')}", align='C') [cite: 1, 3]
+    pdf.ln(5)
 
-    # --- 2. LR BASIC INFO (Top Tabs) ---
-    pdf.set_fill_color(230, 235, 245) # Very Light Blue
-    pdf.set_font("Arial", 'B', 9)
-    pdf.cell(47, 9, f" LR No: {lr_data.get('LR No', '')}", 1, 0, 'L', True)
-    pdf.cell(47, 9, f" Date: {lr_data.get('Date', '')}", 1, 0, 'L', True)
-    pdf.cell(48, 9, f" Vehicle: {lr_data.get('Vehicle', '')}", 1, 0, 'L', True)
-    pdf.cell(48, 9, f" Risk: {lr_data.get('Risk', 'Owner Risk')}", 1, 1, 'L', True)
-    pdf.ln(2)
+    # 2. Notice Section 
+    pdf.set_fill_color(245, 245, 245)
+    pdf.set_font("Arial", 'B', 8)
+    pdf.cell(0, 5, " Notice", 1, 1, 'L', True)
+    pdf.set_font("Arial", '', 7)
+    notice_text = "Without the consignee's written permission this consignment will not be diverted, re-routed, or rebooked. Lorry Receipt will be delivered to the only consignee." [cite: 1, 2]
+    pdf.multi_cell(0, 4, notice_text, 1, 'L')
+    pdf.ln(3)
 
-    # --- 3. CONSIGNOR / CONSIGNEE / BILLING ---
+    # 3. Party Details (Consignor & Consignee) [cite: 3, 4]
     pdf.set_font("Arial", 'B', 9)
-    pdf.cell(63, 6, " CONSIGNOR (From)", 1, 0, 'L', True)
-    pdf.cell(63, 6, " CONSIGNEE (To)", 1, 0, 'L', True)
-    pdf.cell(64, 6, " BILLING PARTY / INV DETAILS", 1, 1, 'L', True)
+    pdf.cell(95, 6, " CONSIGNOR", 1, 0, 'L', True)
+    pdf.cell(95, 6, " CONSIGNEE", 1, 1, 'L', True)
     
     pdf.set_font("Arial", '', 8)
     y_start = pdf.get_y()
+    # Consignor [cite: 3]
+    pdf.multi_cell(95, 4, f"{lr_data.get('Cnor', '')}\nGST: {lr_data.get('CnorGST', '')}\nAddr: {lr_data.get('CnorAddr', '')}", 1, 'L')
+    y_end1 = pdf.get_y()
     
-    # Column 1
-    pdf.multi_cell(63, 5, f"{lr_data.get('Cnor', '')}\nGST: {lr_data.get('CnorGST', 'N/A')}", 1, 'L')
-    y_e1 = pdf.get_y()
-    
-    # Column 2
-    pdf.set_y(y_start); pdf.set_x(73)
-    pdf.multi_cell(63, 5, f"{lr_data.get('Cnee', '')}\nGST: {lr_data.get('CneeGST', 'N/A')}", 1, 'L')
-    y_e2 = pdf.get_y()
-    
-    # Column 3
-    pdf.set_y(y_start); pdf.set_x(136)
-    inv_txt = f"Bill Party: {lr_data.get('BillP', '')}\nInv/Challan: {lr_data.get('InvNo', 'N/A')}\nInsurance: {lr_data.get('InsBy', 'N/A')}"
-    pdf.multi_cell(64, 5, inv_txt, 1, 'L')
-    y_e3 = pdf.get_y()
-    
-    pdf.set_y(max(y_e1, y_e2, y_e3)); pdf.ln(3)
+    # Consignee [cite: 4]
+    pdf.set_y(y_start); pdf.set_x(105)
+    pdf.multi_cell(95, 4, f"{lr_data.get('Cnee', '')}\nGST: {lr_data.get('CneeGST', '')}\nAddr: {lr_data.get('CneeAddr', '')}", 1, 'L')
+    y_end2 = pdf.get_y()
+    pdf.set_y(max(y_end1, y_end2)); pdf.ln(2)
 
-    # --- 4. MATERIAL TABLE ---
-    pdf.set_font("Arial", 'B', 9)
-    pdf.cell(75, 8, " Description of Goods", 1, 0, 'C', True)
-    pdf.cell(25, 8, " Pkg", 1, 0, 'C', True)
-    pdf.cell(30, 8, " Net/Chg Wt", 1, 0, 'C', True)
-    pdf.cell(30, 8, " Paid By", 1, 0, 'C', True)
-    pdf.cell(30, 8, " Freight", 1, 1, 'C', True)
-    
-    pdf.set_font("Arial", '', 9)
-    amt_val = f"Rs. {lr_data.get('Freight', 0)}" if show_fr else "T.B.B."
-    
-    pdf.cell(75, 12, f" {lr_data.get('Material', '')}", 1, 0, 'L')
-    pdf.cell(25, 12, f" {lr_data.get('Pkg', '')}", 1, 0, 'C')
-    pdf.cell(30, 12, f" {lr_data.get('NetWt', 0)} / {lr_data.get('ChgWt', 0)}", 1, 0, 'C')
-    pdf.cell(30, 12, f" {lr_data.get('PaidBy', 'N/A')}", 1, 0, 'C')
-    pdf.set_font("Arial", 'B', 10)
-    pdf.cell(30, 12, f" {amt_val}", 1, 1, 'C')
-    
+    # 4. Material Table [cite: 5]
     pdf.set_font("Arial", 'B', 8)
-    pdf.cell(190, 7, f" DELIVERY ADDRESS: {lr_data.get('ShipTo', 'As per party address')}", 1, 1, 'L')
-    pdf.ln(2)
-
-    # --- 5. BANK DETAILS (Right after LR Box) ---
-    pdf.set_font("Arial", 'B', 9)
-    pdf.set_fill_color(240, 240, 240)
-    pdf.cell(110, 7, " PAYMENT BANK DETAILS", 1, 0, 'L', True)
-    pdf.cell(80, 7, f" FOR {lr_data.get('BranchName', 'VIRAT LOGISTICS')}", 1, 1, 'C', True)
+    pdf.cell(70, 7, " Product/Material", 1, 0, 'C', True)
+    pdf.cell(30, 7, " Pkg Type", 1, 0, 'C', True)
+    pdf.cell(20, 7, " Articles", 1, 0, 'C', True)
+    pdf.cell(35, 7, " Actual/Chg Wt", 1, 0, 'C', True)
+    pdf.cell(35, 7, " Freight Status", 1, 1, 'C', True)
     
     pdf.set_font("Arial", '', 8)
-    # Important: Fetching from Branch Master
-    b_name = lr_data.get('BankName', 'N/A')
-    b_acc = lr_data.get('BankAC', 'N/A')
-    b_ifsc = lr_data.get('BankIFSC', 'N/A')
-    
-    pdf.cell(110, 6, f" Bank: {b_name} | A/C No: {b_acc} | IFSC: {b_ifsc}", 1, 0, 'L')
+    status = "To be billed" if not show_fr else f"Rs. {lr_data.get('Freight', 0)}" [cite: 7, 8]
+    pdf.cell(70, 10, f" {lr_data.get('Material', '')}", 1, 0, 'L')
+    pdf.cell(30, 10, f" {lr_data.get('Pkg', '')}", 1, 0, 'C')
+    pdf.cell(20, 10, f" {lr_data.get('Articles', '1')}", 1, 0, 'C')
+    pdf.cell(35, 10, f" {lr_data.get('NetWt', 0)}/{lr_data.get('ChgWt', 0)} KGS", 1, 0, 'C') [cite: 5]
     pdf.set_font("Arial", 'B', 8)
-    pdf.cell(80, 6, " (Computer Generated Document)", 1, 1, 'C')
+    pdf.cell(35, 10, f" {status}", 1, 1, 'C') [cite: 8]
+    pdf.ln(2)
 
-    # --- 6. TERMS & FOOTER ---
-    pdf.set_y(-35)
-    pdf.set_font("Arial", 'I', 7)
-    pdf.set_text_color(50, 50, 50)
-    pdf.multi_cell(190, 3.5, "Terms & Conditions:\n1. Subject to Kosamba Jurisdiction. 2. We are not responsible for any leakage, breakage or damage during transit. 3. Detention charges applicable if vehicle not released within 24 hours of arrival. 4. Insurance of goods to be done by Consignor/Consignee.")
+    # 5. LR Info & Bank Details [cite: 6, 7]
+    pdf.set_font("Arial", 'B', 8)
+    pdf.cell(95, 5, f" LR No: {lr_data.get('LR No', '')} | Date: {lr_data.get('Date', '')}", 0, 0, 'L') [cite: 6]
+    pdf.cell(95, 5, f" Vehicle: {lr_data.get('Vehicle', '')} | From-To: {lr_data.get('From', '')}-{lr_data.get('To', '')}", 0, 1, 'R') [cite: 6, 7]
     
     pdf.ln(2)
+    pdf.set_fill_color(240, 240, 240)
+    pdf.cell(100, 6, " BANK DETAILS", 1, 0, 'L', True) [cite: 6]
+    pdf.cell(90, 6, " FOR VIRAT LOGISTICS", 1, 1, 'C', True) [cite: 8]
+    
+    pdf.set_font("Arial", '', 8)
+    bank_txt = f"Bank: {lr_data.get('BankName', 'N/A')} | A/C: {lr_data.get('BankAC', 'N/A')} | IFSC: {lr_data.get('BankIFSC', 'N/A')}" [cite: 6]
+    pdf.cell(100, 12, bank_txt, 1, 0, 'L') [cite: 6]
     pdf.set_font("Arial", 'B', 8)
-    pdf.set_text_color(180, 180, 180)
-    pdf.cell(0, 5, f"Printed: {lr_data.get('Date', '')} | Virat Logistics ERP System", 0, 0, 'C')
+    pdf.cell(90, 12, "Authorized Signatory", 1, 1, 'C') [cite: 9]
+    pdf.set_font("Arial", 'I', 7)
+    pdf.cell(0, 5, "This is computer generated LR/ Bilty. No signature required.", 0, 1, 'C') [cite: 8]
+
+    # --- PAGE 2: TERMS AND CONDITIONS  ---
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, "Terms and Conditions", ln=1, align='C') [cite: 10]
+    pdf.set_font("Arial", '', 7)
+    terms = [
+        "1) The transport operator is liable directly to the bank concerned for the full value of goods. ",
+        "2) The transport Operator undertakes to deliver the goods in the same order and condition as received. [cite: 11]",
+        "3) Right to entrust goods to any other lorry or service rests with the Transport Operator. [cite: 14]",
+        "4) Perishable goods lying undelivered after 48 hours can be disposed of at Operator's discretion. [cite: 17]",
+        "5) Goods undelivered after 30 days can be disposed of after a 15-day notice. [cite: 18]",
+        "6) Subject to Kosamba local jurisdiction legal procedures for any disputes. [cite: 24]"
+    ]
+    for term in terms:
+        pdf.multi_cell(0, 4, term)
+        pdf.ln(1)
 
     return pdf.output(dest='S').encode('latin-1')
     
@@ -542,6 +539,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
