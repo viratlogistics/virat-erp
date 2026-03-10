@@ -79,7 +79,7 @@ df_t = load("trips")
 if 'reset_trigger' not in st.session_state: st.session_state.reset_trigger = 0
 if 'pdf_ready' not in st.session_state: st.session_state.pdf_ready = None
 
-menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry", "3. LR Register"])
+menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry", "3. LR Register","4. Financials"])
 
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
@@ -167,5 +167,67 @@ elif menu == "3. LR Register":
     if not df_t.empty:
         for i, row in df_t.iterrows():
             with st.expander(f"LR: {row.get('LR No', 'N/A')} | {row.get('Consignee', 'N/A')}"):
+elif menu == "4. Financials":
+    st.header("💰 Financial Accounting")
+    tab1, tab2 = st.tabs(["Payment Entry", "Party Ledger"])
+
+    with tab1:
+        st.subheader("Add Transaction")
+        with st.form("pay_form", clear_on_submit=True):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                p_date = st.date_input("Transaction Date", date.today())
+                # Party aur Broker dono ki list merge karke di hai
+                all_accs = gl("Party") + gl("Broker")
+                acc_name = st.selectbox("Select Account", ["Select"] + all_accs)
+            with col2:
+                p_type = st.selectbox("Payment Type", ["Receipt (In)", "Payment (Out)"])
+                amt = st.number_input("Amount", min_value=0.0)
+            with col3:
+                p_mode = st.selectbox("Mode", ["Cash", "NEFT", "Cheque", "UPI"])
+                ref = st.text_input("Ref/Cheque No")
+            
+            if st.form_submit_button("Save Transaction"):
+                if acc_name != "Select" and amt > 0:
+                    pay_row = [str(p_date), acc_name, p_type, amt, p_mode, ref]
+                    if save("payments", pay_row):
+                        st.success("Payment Recorded!")
+                        st.rerun()
+
+    with tab2:
+        st.subheader("Statement of Account")
+        sel_acc = st.selectbox("Select Party/Broker for Ledger", ["Select"] + gl("Party") + gl("Broker"))
+        
+        if sel_acc != "Select":
+            # 1. Trips (Bills) nikalna
+            bills = df_t[df_t['Billing Party'] == sel_acc]
+            total_billed = bills['Total Freight'].sum() if not bills.empty else 0
+            
+            # 2. Payments nikalna
+            df_p = load("payments")
+            if not df_p.empty:
+                # Receipt (+) aur Payment (-) ka logic
+                acc_pays = df_p[df_p['Account_Name'] == sel_acc]
+                rec = acc_pays[acc_pays['Type'] == "Receipt (In)"]['Amount'].sum()
+                paid = acc_pays[acc_pays['Type'] == "Payment (Out)"]['Amount'].sum()
+            else:
+                rec = paid = 0
+            
+            # 3. Calculation
+            balance = total_billed - rec + paid # Simple formula
+            
+            # Display Dashboard
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total Billed", f"₹{total_billed:,}")
+            c2.metric("Total Received/Paid", f"₹{rec + paid:,}")
+            c3.metric("Outstanding Balance", f"₹{balance:,}", delta_color="inverse")
+            
+            st.divider()
+            st.write(f"Recent Transactions for {sel_acc}")
+            st.dataframe(acc_pays if not df_p.empty else "No payments found")
+
+
+                
                 st.download_button("📥 PDF", generate_lr_pdf(row.to_dict(), True), f"LR_{row.get('LR No','VL')}.pdf", key=f"p_{i}")
         st.dataframe(df_t)
+
