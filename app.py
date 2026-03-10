@@ -167,6 +167,7 @@ elif menu == "3. LR Register":
     if not df_t.empty:
         for i, row in df_t.iterrows():
             with st.expander(f"LR: {row.get('LR No', 'N/A')} | {row.get('Consignee', 'N/A')}"):
+                
 elif menu == "4. Financials":
     st.header("💰 Financial Accounting")
     tab1, tab2 = st.tabs(["Payment Entry", "Party Ledger"])
@@ -230,4 +231,5 @@ elif menu == "4. Financials":
                 
                 st.download_button("📥 PDF", generate_lr_pdf(row.to_dict(), True), f"LR_{row.get('LR No','VL')}.pdf", key=f"p_{i}")
         st.dataframe(df_t)
+
 
