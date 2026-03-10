@@ -177,14 +177,7 @@ elif menu == "2. LR Entry":
 
     k = st.session_state.reset_trigger
     cp1, cp2, cp3 = st.columns(3)
-    
-    with cp1:
-        sel_br = st.selectbox("Select Branch (Company)*", ["Select"] + gl("Branch (Company)"), key=f"br_{k}")
-# Branch select hote hi uska saara data master se nikaal lo
-br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
-k = st.session_state.reset_trigger
-    cp1, cp2, cp3 = st.columns(3)
-    
+       
     with cp1:
         sel_br = st.selectbox("Select Branch*", ["Select"] + gl("Branch (Company)"), key=f"br_{k}")
         # Branch Details Fetch Logic
@@ -468,6 +461,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
