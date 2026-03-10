@@ -134,40 +134,11 @@ if menu == "1. Masters Setup":
                 st.error("Please enter Name!")
 
     st.divider()
-    # --- Display & Manage Masters ---
+    # Display existing masters
     if not df_m.empty:
-        st.write(f"### Manage {m_type}")
+        st.write(f"### Current {m_type} List")
         curr_m = df_m[df_m['Type'] == m_type]
-        
-        # Displaying records one by one with action buttons
-        for i, r in curr_m.iterrows():
-            # Har record ke liye ek alag box
-            with st.container(border=True):
-                c1, c2, c3 = st.columns([4, 1, 1])
-                
-                # Display Name or Driver Name
-                display_name = r['Name'] if r['Name'] else r['Driver_Name']
-                c1.write(f"**{display_name}**")
-                if r['GST']: c1.caption(f"GST: {r['GST']} | {r['Address']}")
-                if r['Driver_No']: c1.caption(f"License/Mob: {r['Driver_No']}")
-
-                # DELETE BUTTON
-                if c3.button("🗑️", key=f"del_{i}", help="Delete this record"):
-                    try:
-                        ws = sh.worksheet("masters")
-                        # Sheet mein exact row dhoond kar delete karna
-                        cell = ws.find(str(display_name))
-                        ws.delete_rows(cell.row)
-                        st.success("Deleted!")
-                        st.rerun()
-                    except:
-                        st.error("Could not delete. Check if name is unique.")
-
-                # EDIT BUTTON (Note: Streamlit doesn't auto-fill forms easily, 
-                # so we show the data in an info box for manual update or use session_state)
-                if c2.button("📝", key=f"ed_{i}", help="Edit details"):
-                    st.info(f"Editing feature: Please update the form above with these details and save again. Name: {display_name}")
-                    
+        st.dataframe(curr_m.dropna(axis=1, how='all'), use_container_width=True)
 elif menu == "2. LR Entry":
     st.header("📝 Professional LR Entry")
     if st.button("🆕 RESET FORM"):
@@ -177,25 +148,37 @@ elif menu == "2. LR Entry":
 
     k = st.session_state.reset_trigger
     cp1, cp2, cp3 = st.columns(3)
-       
+    
     with cp1:
-        sel_br = st.selectbox("Select Branch*", ["Select"] + gl("Branch (Company)"), key=f"br_{k}")
-        # Branch Details Fetch Logic
-        br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
-        
+        sel_br = st.selectbox("Select Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
+        br_code = df_m[df_m['Name'] == sel_br].iloc[0].get('GST', '01') if sel_br != "Select" else "01"
         v_cat = st.radio("Trip Type*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"vcat_{k}")
-        lr_no = st.text_input("LR Number*", key=f"lrno_{k}")
+        lr_mode = st.radio("LR No Mode", ["Auto", "Manual"], horizontal=True, key=f"lrmode_{k}")
+        lr_no_auto = f"VIL/25-26/{br_code}/{len(df_t)+1:03d}"
+        lr_no = st.text_input("LR Number*", value=lr_no_auto if lr_mode == "Auto" else "", key=f"lrno_{k}")
+        risk = st.radio("Risk*", ["At Owner Risk", "Insured"], horizontal=True, key=f"risk_{k}")
 
     with cp2:
-        bill_pty = st.selectbox("Billing Party*", ["Select"] + gl("Party"), key=f"bp_{k}")
-        cnor_name = st.selectbox("Consignor Name*", ["Select"] + gl("Party"), key=f"cnor_{k}")
+        is_np = st.checkbox("New Party?", key=f"isnp_{k}")
+        if is_np:
+            bill_pty = st.text_input("Enter New Party Name*", key=f"np_{k}")
+        else:
+            bill_pty = st.selectbox("Billing Party*", ["Select"] + gl("Party"), key=f"bp_{k}")
+
+        is_nc = st.checkbox("New Consignor?", key=f"isnc_{k}")
+        if is_nc:
+            cnor_name = st.text_input("Enter New Consignor Name*", key=f"nc_{k}")
+        else:
+            cnor_name = st.selectbox("Consignor Name*", ["Select"] + gl("Party"), key=f"cnor_{k}")
+            
         cnor_gst = st.text_input("Consignor GST", key=f"cgst_{k}")
+        ins_by = st.selectbox("Insurance Paid By*", ["N/A", "Consignor", "Consignee", "Transporter"], key=f"ins_{k}")
 
     with cp3:
         cnee_name = st.text_input("Consignee Name*", key=f"cnee_{k}")
+        cnee_gst = st.text_input("Consignee GST", key=f"cngst_{k}")
         paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pby_{k}")
-        # Bank dropdown hata diya, ab sirf info dikhegi
-        st.info(f"🏦 Bank: {br_info.get('A_C_No', 'Select Branch')}")
+        sel_bank = st.selectbox("Select Bank*", ["Select"] + gl("Bank"), key=f"bank_{k}")
 
     with st.form(f"lr_form_{k}"):
         st.markdown("---")
@@ -224,49 +207,29 @@ elif menu == "2. LR Entry":
             n_wt, c_wt = st.number_input("Net Wt", min_value=0.0), st.number_input("Chg Wt", min_value=0.0)
             fr_amt = st.number_input("Total Freight*", min_value=0.0)
             show_fr = st.checkbox("Show Freight in PDF?", value=True)
-            with c3:
-            n_wt = st.number_input("Weight")
-            fr_amt = st.number_input("Total Freight*")
-            inv_no = st.text_input("Invoice No/Date")
-            
-            # --- Yahan se alignment check karein ---
             if v_cat == "Own Fleet": 
-                dsl = st.number_input("Diesel")
-                toll = st.number_input("Toll")
-                drv_adv = st.number_input("Driver Adv")
+                dsl, toll, drv = st.number_input("Diesel"), st.number_input("Toll"), st.number_input("Driver Adv")
                 hc = 0.0
             else: 
                 hc = st.number_input("Hired Charges")
-                dsl = toll = drv_adv = 0.0
-                
+                dsl = toll = drv = 0.0
+
         if st.form_submit_button("🚀 SAVE LR"):
             if bill_pty and bill_pty != "Select" and fr_amt > 0:
-                # 1. Calculation (Sahi variables: dsl, toll, drv_adv)
-                prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl + toll + drv_adv)))
-                
-                # 2. PDF Ready Data (Master se details ke saath)
-                st.session_state.pdf_ready = {
-                    "LR No": lr_no, "Date": str(d), "Vehicle": v_no,
-                    "BranchName": sel_br,
-                    "BranchAddr": br_info.get('Address', ''),
-                    "BranchGST": br_info.get('GST', ''),
-                    "BranchCont": br_info.get('Contact', ''),
-                    "Bank": f"{br_info.get('A_C_No', '')} | IFSC: {br_info.get('IFSC', '')}",
-                    "Cnor": cnor_name, "Cnee": cnee_name, "BillP": bill_pty,
-                    "From": fl, "To": tl, "Material": mat, "Pkg": pkg,
-                    "NetWt": n_wt, "ChgWt": n_wt, "Freight": fr_amt, "PaidBy": paid_by,
-                    "InvNo": inv_no, "ShipTo": tl, "Risk": risk
-                }
-                
-                # 3. Trips Sheet Row (Sahi sequence aur variable names)
-                # Note: sel_drv aur sel_br upar wale dropdown se aa rahe hain
-                row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, n_wt, pkg, risk, mat, "N/A", v_no, sel_drv, sel_br, fl, tl, fr_amt, hc, dsl, drv_adv, toll, 0, prof]
+                prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
+                row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, sel_driver, br_name, fl, tl, fr_amt, (hc if v_cat == "Market Hired" else 0.0), dsl, drv, toll, 0, prof]
                 
                 if save("trips", row):
-                    st.success("LR Saved Successfully!")
+                    if is_np and bill_pty not in gl("Party"):
+                        save("masters", ["Party", bill_pty])
+                    if is_nc and cnor_name not in gl("Consignor"):
+                        save("masters", ["Consignor", cnor_name])
+
+                    st.session_state.pdf_ready = {"LR No": lr_no, "Date": str(d), "Vehicle": v_no, "Cnor": cnor_name, "CnorGST": cnor_gst, "Cnee": cnee_name, "CneeGST": cnee_gst, "BillP": bill_pty, "From": fl, "To": tl, "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, "Freight": fr_amt, "PaidBy": paid_by, "Bank": sel_bank, "Risk": risk, "InsBy": ins_by, "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr}
+                    st.success("LR Saved and Masters Updated!")
                     st.rerun()
             else:
-                st.error("Please fill Billing Party and Freight!")`
+                st.error("Please fill Party Name and Freight!")
 
     if st.session_state.pdf_ready:
         st.download_button("📥 DOWNLOAD PDF", generate_lr_pdf(st.session_state.pdf_ready, st.session_state.pdf_ready.get('show_fr', True)), f"LR_{st.session_state.pdf_ready['LR No']}.pdf")
@@ -481,11 +444,3 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
-
-
-
-
-
-
-
-
