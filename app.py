@@ -269,7 +269,109 @@ elif menu == "4. Financials":
 
                 st.download_button("📥 Download PDF Statement", download_ledger_pdf(full_df, sel_a), f"Statement_{sel_a}.pdf")
             else:
-                st.info("No transactions found for this account.")
+                st.info("No transactions found for this account.")elif menu == "4. Financials":
+    st.header("⚖️ Party & Broker Full Statement")
+    
+    df_p = load("payments")
+    df_t = load("trips")
+    
+    if not df_t.empty: df_t.columns = [str(c).strip() for c in df_t.columns]
+    if not df_p.empty: df_p.columns = [str(c).strip() for c in df_p.columns]
+        
+    all_accs = sorted(gl("Party") + gl("Broker"))
+    
+    t1, t2 = st.tabs(["💸 Add Transaction", "📖 Full Statement"])
+    
+    with t1:
+        with st.form("p_form", clear_on_submit=True):
+            f1, f2, f3 = st.columns(3)
+            with f1: p_d = st.date_input("Date", date.today()); acc = st.selectbox("Account*", ["Select"]+all_accs)
+            with f2: p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)"]); p_a = st.number_input("Amount*", min_value=0.0)
+            with f3: p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque"]); p_r = st.text_input("Ref/Remarks")
+            if st.form_submit_button("Save Entry"):
+                if acc != "Select" and p_a > 0:
+                    if save("payments", [str(p_d), acc, p_t, p_a, p_m, p_r]): st.success("Saved!"); st.rerun()
+
+    with t2:
+        sel_a = st.selectbox("Select Account for Statement", ["Select"] + all_accs)
+        if sel_a != "Select":
+            ledger_entries = []
+            
+            # 1. TRIPS DATA (Freight/Hired)
+            if not df_t.empty:
+                # Party Side
+                p_trips = df_t[df_t['Party'] == sel_a]
+                for _, r in p_trips.iterrows():
+                    ledger_entries.append({
+                        'Date': r.get('Date', date.today()), 
+                        'Particulars': f"LR: {r.get('LR No','--')} ({r.get('From','')} to {r.get('To','')})", 
+                        'Debit': pd.to_numeric(r.get('Freight', 0), errors='coerce'), 
+                        'Credit': 0
+                    })
+                # Broker Side
+                b_trips = df_t[df_t['Broker'] == sel_a]
+                for _, r in b_trips.iterrows():
+                    ledger_entries.append({
+                        'Date': r.get('Date', date.today()), 
+                        'Particulars': f"LR: {r.get('LR No','--')} (Hired Charges)", 
+                        'Debit': 0, 
+                        'Credit': pd.to_numeric(r.get('HiredCharges', 0), errors='coerce')
+                    })
+
+            # 2. PAYMENTS DATA (Receipts/Payments)
+            if not df_p.empty:
+                p_entries = df_p[df_p['Account_Name'] == sel_a]
+                for _, r in p_entries.iterrows():
+                    amt = pd.to_numeric(r.get('Amount', 0), errors='coerce')
+                    mode = r.get('Mode', 'N/A')
+                    # Safe check for Ref_No or Ref No
+                    ref = r.get('Ref_No', r.get('Ref No', 'N/A'))
+                    
+                    if "Receipt" in str(r.get('Type','')):
+                        ledger_entries.append({'Date': r.get('Date', date.today()), 'Particulars': f"Payment Recd ({mode}) Ref:{ref}", 'Debit': 0, 'Credit': amt})
+                    else:
+                        ledger_entries.append({'Date': r.get('Date', date.today()), 'Particulars': f"Payment Paid ({mode}) Ref:{ref}", 'Debit': amt, 'Credit': 0})
+
+            # --- RENDER LEDGER ---
+            if ledger_entries:
+                full_df = pd.DataFrame(ledger_entries)
+                full_df['Date'] = pd.to_datetime(full_df['Date']).dt.date
+                full_df = full_df.sort_values(by='Date')
+                
+                # Running Balance calculation
+                full_df['Balance'] = (full_df['Debit'] - full_df['Credit']).cumsum()
+                
+                # Summary Metrics
+                st.divider()
+                c1, c2, c3 = st.columns(3)
+                dr_total, cr_total = full_df['Debit'].sum(), full_df['Credit'].sum()
+                bal = dr_total - cr_total
+                c1.metric("Total Debit (+)", f"₹{dr_total:,.0f}")
+                c2.metric("Total Credit (-)", f"₹{cr_total:,.0f}")
+                c3.metric("Closing Balance", f"₹{abs(bal):,.0f}", delta="Receivable" if bal > 0 else "Payable")
+                
+                # Show Table
+                st.dataframe(full_df, use_container_width=True, hide_index=True)
+
+                # PDF Logic (Using .get() for safety)
+                def make_pdf(df, name):
+                    pdf = FPDF()
+                    pdf.add_page()
+                    pdf.set_font("Arial", 'B', 16); pdf.cell(190, 10, "VIRAT LOGISTICS - Statement", 0, 1, 'C')
+                    pdf.set_font("Arial", 'B', 12); pdf.cell(190, 10, f"Account: {name}", 0, 1, 'L')
+                    pdf.ln(5)
+                    pdf.set_font("Arial", 'B', 10); pdf.set_fill_color(220, 220, 220)
+                    pdf.cell(25, 8, "Date", 1, 0, 'C', True); pdf.cell(85, 8, "Particulars", 1, 0, 'C', True)
+                    pdf.cell(25, 8, "Debit", 1, 0, 'C', True); pdf.cell(25, 8, "Credit", 1, 0, 'C', True); pdf.cell(30, 8, "Balance", 1, 1, 'C', True)
+                    pdf.set_font("Arial", '', 9)
+                    for _, row in df.iterrows():
+                        pdf.cell(25, 7, str(row['Date']), 1); pdf.cell(85, 7, str(row['Particulars'])[:48], 1)
+                        pdf.cell(25, 7, str(row['Debit']), 1); pdf.cell(25, 7, str(row['Credit']), 1); pdf.cell(30, 7, str(row['Balance']), 1, 1)
+                    return pdf.output(dest='S').encode('latin-1')
+
+                st.download_button("📥 Download PDF Statement", make_pdf(full_df, sel_a), f"Ledger_{sel_a}.pdf")
+            else:
+                st.info("No records found for this account.")
 elif menu == "5. Business Insights":
     st.header("📊 Business Dashboard & Own Fleet Analytics")
     
@@ -471,6 +573,7 @@ elif menu == "7. Driver Khata":
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
