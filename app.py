@@ -332,8 +332,7 @@ elif menu == "2. LR Entry":
     "BankIFSC": br_info.get('IFSC', 'N/A')
 }
                     st.success("LR Saved!")
-                    try:
-        return pdf.output(dest='S').encode('latin-1')
+                    return()
     except UnicodeEncodeError:
         # Agar ₹ symbol ya special character error de raha hai to use ignore karein
         return pdf.output(dest='S').encode('utf-8', errors='replace')
@@ -598,6 +597,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
