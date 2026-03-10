@@ -45,100 +45,41 @@ def delete_master_row(name_val):
     except:
         return False
 
-# --- 2. PDF ENGINE ---
-def generate_lr_pdf(lr_data, show_fr=True):
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    
-    # --- PAGE 1: MAIN LR ---
-    pdf.add_page()
-    
-    # Header Section
-    pdf.set_font("Arial", 'B', 20)
-    pdf.set_text_color(20, 50, 100)
-    pdf.cell(0, 10, lr_data.get('BranchName', 'Virat Logistics').upper(), ln=1, align='C')
-    
-    pdf.set_font("Arial", 'I', 10)
-    pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 5, "Your Goods Are In Good hand..", ln=1, align='C')
-    
-    pdf.set_font("Arial", '', 8)
-    pdf.set_text_color(0, 0, 0)
-    pdf.multi_cell(0, 4, f"{lr_data.get('BranchAddr', 'N/A')}\nGST No: {lr_data.get('BranchGST', 'N/A')}", align='C')
-    pdf.ln(5)
+if st.form_submit_button("🚀 SAVE LR"):
+            if bill_pty and bill_pty != "Select" and fr_amt > 0:
+                # 1. Branch Master se sara data fetch karna
+                br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
+                
+                prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
+                row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, sel_driver, br_name, fl, tl, fr_amt, (hc if v_cat == "Market Hired" else 0.0), dsl, drv, toll, 0, prof]
+                
+                if save("trips", row):
+                    # 2. AGAR NEW PARTY/CONSIGNOR HAI TO MASTER MEIN SAVE KARO
+                    if is_np and bill_pty not in gl("Party"):
+                        save("masters", ["Party", bill_pty])
+                    if is_nc and cnor_name not in gl("Consignor"):
+                        save("masters", ["Consignor", cnor_name])
 
-    # LR Basic Details
-    pdf.set_fill_color(230, 230, 230)
-    pdf.set_font("Arial", 'B', 9)
-    pdf.cell(47, 8, f" LR No: {lr_data.get('LR No', '')}", 1, 0, 'L', True)
-    pdf.cell(47, 8, f" Date: {lr_data.get('Date', '')}", 1, 0, 'L', True)
-    pdf.cell(48, 8, f" Vehicle: {lr_data.get('Vehicle', '')}", 1, 0, 'L', True)
-    pdf.cell(48, 8, f" Risk: {lr_data.get('Risk', 'Owner Risk')}", 1, 1, 'L', True)
-    pdf.ln(2)
-
-    # Party Details
-    pdf.set_font("Arial", 'B', 9)
-    pdf.cell(95, 6, " CONSIGNOR", 1, 0, 'L', True)
-    pdf.cell(95, 6, " CONSIGNEE", 1, 1, 'L', True)
-    
-    pdf.set_font("Arial", '', 8)
-    y_start = pdf.get_y()
-    pdf.multi_cell(95, 4, f"{lr_data.get('Cnor', '')}\nGST: {lr_data.get('CnorGST', 'N/A')}", 1, 'L')
-    y_end1 = pdf.get_y()
-    
-    pdf.set_y(y_start); pdf.set_x(105)
-    pdf.multi_cell(95, 4, f"{lr_data.get('Cnee', '')}\nGST: {lr_data.get('CneeGST', 'N/A')}", 1, 'L')
-    y_end2 = pdf.get_y()
-    pdf.set_y(max(y_end1, y_end2)); pdf.ln(2)
-
-    # Material Table
-    pdf.set_font("Arial", 'B', 8)
-    pdf.cell(75, 7, " Description of Goods", 1, 0, 'C', True)
-    pdf.cell(25, 7, " Pkg", 1, 0, 'C', True)
-    pdf.cell(30, 7, " Net/Chg Wt", 1, 0, 'C', True)
-    pdf.cell(30, 7, " Paid By", 1, 0, 'C', True)
-    pdf.cell(30, 7, " Freight", 1, 1, 'C', True)
-    
-    pdf.set_font("Arial", '', 8)
-    amt_text = f"Rs. {lr_data.get('Freight', 0)}" if show_fr else "To be billed"
-    pdf.cell(75, 10, f" {lr_data.get('Material', '')}", 1, 0, 'L')
-    pdf.cell(25, 10, f" {lr_data.get('Pkg', '')}", 1, 0, 'C')
-    pdf.cell(30, 10, f" {lr_data.get('NetWt', 0)}/{lr_data.get('ChgWt', 0)}", 1, 0, 'C')
-    pdf.cell(30, 10, f" {lr_data.get('PaidBy', 'N/A')}", 1, 0, 'C')
-    pdf.set_font("Arial", 'B', 8)
-    pdf.cell(30, 10, f" {amt_text}", 1, 1, 'C')
-    pdf.ln(1)
-    pdf.cell(0, 6, f" DELIVERY ADDRESS: {lr_data.get('ShipTo', 'N/A')}", 1, 1, 'L')
-
-    # Bank Details (Positioned right after Material table)
-    pdf.ln(2)
-    pdf.set_font("Arial", 'B', 8)
-    pdf.cell(110, 6, " PAYMENT BANK DETAILS", 1, 0, 'L', True)
-    pdf.cell(80, 6, " FOR VIRAT LOGISTICS", 1, 1, 'C', True)
-    
-    pdf.set_font("Arial", '', 7)
-    bank_info = f"Bank: {lr_data.get('BankName', 'N/A')} | A/C: {lr_data.get('BankAC', 'N/A')} | IFSC: {lr_data.get('BankIFSC', 'N/A')}"
-    pdf.cell(110, 8, bank_info, 1, 0, 'L')
-    pdf.set_font("Arial", 'B', 8)
-    pdf.cell(80, 8, "Authorized Signatory", 1, 1, 'C')
-    pdf.set_font("Arial", 'I', 7)
-    pdf.cell(0, 5, "This is a computer generated document, no signature required.", 0, 1, 'C')
-
-    # --- PAGE 2: TERMS ---
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, "Terms and Conditions", ln=1, align='C')
-    pdf.set_font("Arial", '', 8)
-    terms = [
-        "1) Subject to Kosamba Jurisdiction.",
-        "2) No responsibility for leakage/damage after delivery.",
-        "3) Detention charges applicable after 24 hours.",
-        "4) Goods not insured unless specified."
-    ]
-    for line in terms:
-        pdf.multi_cell(0, 5, line)
-    
-    return pdf.output(dest='S').encode('latin-1')
+                    # 3. PDF ke liye Branch/Company ka sara data bundle karna
+                    st.session_state.pdf_ready = {
+                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
+                        "Cnor": cnor_name, "CnorGST": cnor_gst, 
+                        "Cnee": cnee_name, "CneeGST": cnee_gst, 
+                        "BillP": bill_pty, "From": fl, "To": tl, 
+                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, 
+                        "Freight": fr_amt, "PaidBy": paid_by, "Risk": risk, 
+                        "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr, "InsBy": ins_by,
+                        "BranchName": sel_br,
+                        "BranchGST": br_info.get('GST', 'N/A'),
+                        "BranchAddr": br_info.get('Address', 'N/A'),
+                        "BankName": br_info.get('Name', 'N/A'),
+                        "BankAC": br_info.get('A_C_No', 'N/A'),
+                        "BankIFSC": br_info.get('IFSC', 'N/A')
+                    }
+                    st.success("LR Saved and Masters Updated!")
+                    st.rerun()
+            else:
+                st.error("Please fill Party Name and Freight!")
     
 # --- 3. MAIN LOGIC ---
 df_m = load("masters")
@@ -572,6 +513,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
