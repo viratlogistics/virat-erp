@@ -216,7 +216,8 @@ elif menu == "2. LR Entry":
     k = st.session_state.reset_trigger
     
     # 1. Branch selection aur data fetching form se pehle
-    sel_br = st.selectbox("Select Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
+    # 'key' mein 'entry' word add karne se ye unique ho jayega
+sel_br = st.selectbox("Select Branch*", ["Select"] + gl("Branch"), key=f"br_entry_{k}")
     
     # Branch ki details nikalna (Data Fetching Fix)
     br_info = {}
@@ -576,6 +577,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
