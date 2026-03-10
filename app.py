@@ -112,24 +112,28 @@ elif menu == "2. LR Entry":
         risk = st.radio("Risk*", ["At Owner Risk", "Insured"], horizontal=True, key=f"risk_{k}")
 
     with cp2:
-        with cp2:
-        # --- BILLING PARTY LOGIC ---
-        is_np = st.checkbox("New Party?")
+        # Dhyaan dein: Ye saari lines 'with cp2:' se 4 spaces aage hain
+        is_np = st.checkbox("New Party?", key=f"isnp_{k}")
         if is_np:
             bill_pty = st.text_input("Enter New Party Name*", key=f"np_{k}")
         else:
             bill_pty = st.selectbox("Billing Party*", ["Select"] + gl("Party"), key=f"bp_{k}")
 
-        # --- CONSIGNOR DROPDOWN (Now shows Party List) ---
-        is_nc = st.checkbox("New Consignor?")
+        is_nc = st.checkbox("New Consignor?", key=f"isnc_{k}")
         if is_nc:
             cnor_name = st.text_input("Enter New Consignor Name*", key=f"nc_{k}")
         else:
-            # Yahan hum gl("Party") use kar rahe hain taaki wahi list yahan bhi dikhe
+            # Ab yahan bhi gl("Party") ki list dikhegi
             cnor_name = st.selectbox("Consignor Name*", ["Select"] + gl("Party"), key=f"cnor_{k}")
             
         cnor_gst = st.text_input("Consignor GST", key=f"cgst_{k}")
         ins_by = st.selectbox("Insurance Paid By*", ["N/A", "Consignor", "Consignee", "Transporter"], key=f"ins_{k}")
+
+    with cp3:
+        cnee_name = st.text_input("Consignee Name*", key=f"cnee_{k}")
+        cnee_gst = st.text_input("Consignee GST", key=f"cngst_{k}")
+        paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pby_{k}")
+        sel_bank = st.selectbox("Select Bank*", ["Select"] + gl("Bank"), key=f"bank_{k}")
 
     with cp3:
         cnee_name = st.text_input("Consignee Name*", key=f"cnee_{k}")
@@ -497,6 +501,7 @@ elif menu == "7. Driver Khata":
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
