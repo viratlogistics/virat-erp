@@ -232,21 +232,33 @@ elif menu == "2. LR Entry":
                 dsl = toll = drv = 0.0
 
         if st.form_submit_button("🚀 SAVE LR"):
-            if bill_pty and bill_pty != "Select" and fr_amt > 0:
-                prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
-                row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, sel_driver, br_name, fl, tl, fr_amt, (hc if v_cat == "Market Hired" else 0.0), dsl, drv, toll, 0, prof]
+            if bill_pty != "Select" and fr_amt > 0:
+                # 1. Calculation Logic
+                prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl + toll + drv_adv)))
+                
+                # 2. PDF Ready Data (Master se auto-fetch details ke saath)
+                st.session_state.pdf_ready = {
+                    "LR No": lr_no, "Date": str(d), "Vehicle": v_no,
+                    "BranchName": sel_br,
+                    "BranchAddr": br_info.get('Address', ''),
+                    "BranchGST": br_info.get('GST', ''),
+                    "BranchCont": br_info.get('Contact', ''),
+                    "Bank": f"{br_info.get('A_C_No', '')} | IFSC: {br_info.get('IFSC', '')}",
+                    "Cnor": cnor_name, "Cnee": cnee_name, "BillP": bill_pty,
+                    "From": fl, "To": tl, "Material": mat, "Pkg": pkg,
+                    "NetWt": n_wt, "ChgWt": n_wt, "Freight": fr_amt, "PaidBy": paid_by,
+                    "InvNo": inv_no, "ShipTo": tl, "Risk": risk
+                }
+                
+                # 3. Trips Sheet Row (Sahi variables ke saath)
+                # Note: 'ins_by' ki jagah 'risk' aur 'sel_driver' ki jagah 'sel_drv' use kiya hai
+                row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, n_wt, pkg, risk, mat, "N/A", v_no, sel_drv, sel_br, fl, tl, fr_amt, hc, dsl, drv_adv, toll, 0, prof]
                 
                 if save("trips", row):
-                    if is_np and bill_pty not in gl("Party"):
-                        save("masters", ["Party", bill_pty])
-                    if is_nc and cnor_name not in gl("Consignor"):
-                        save("masters", ["Consignor", cnor_name])
-
-                    st.session_state.pdf_ready = {"LR No": lr_no, "Date": str(d), "Vehicle": v_no, "Cnor": cnor_name, "CnorGST": cnor_gst, "Cnee": cnee_name, "CneeGST": cnee_gst, "BillP": bill_pty, "From": fl, "To": tl, "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, "Freight": fr_amt, "PaidBy": paid_by, "Bank": sel_bank, "Risk": risk, "InsBy": ins_by, "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr}
-                    st.success("LR Saved and Masters Updated!")
+                    st.success("LR Saved Successfully!")
                     st.rerun()
             else:
-                st.error("Please fill Party Name and Freight!")
+                st.error("Please fill Billing Party and Freight!")
 
     if st.session_state.pdf_ready:
         st.download_button("📥 DOWNLOAD PDF", generate_lr_pdf(st.session_state.pdf_ready, st.session_state.pdf_ready.get('show_fr', True)), f"LR_{st.session_state.pdf_ready['LR No']}.pdf")
@@ -461,6 +473,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
