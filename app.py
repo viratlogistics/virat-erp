@@ -106,33 +106,34 @@ def generate_lr_pdf(lr_data, show_fr=True):
     pdf.cell(30, 10, amt, 1, 1, 'C')
     
     # --- BANK DETAILS SECTION ---
+    # --- BANK DETAILS SECTION (Indentation Fix) ---
     pdf.ln(2)
     pdf.set_font("Arial", 'B', 9)
     
-    # Data fetch karein (Ensure keys match your Master Sheet)
+    # 1. Variables Fetch Karein (Masters Sheet se)
     b_name = lr_data.get('BankName', 'N/A')
     b_acc = lr_data.get('BankAC', 'N/A')
     b_ifsc = lr_data.get('BankIFSC', 'N/A')
     
     y_bank = pdf.get_y()
     
-    # Left Box: Bank Details (3 Lines)
+    # 2. Left Box: Bank Details (3 Lines format)
     pdf.set_xy(10, y_bank)
     bank_text = f"Bank Name: {b_name}\nA/C No: {b_acc}\nIFSC Code: {b_ifsc}"
     pdf.multi_cell(100, 5, bank_text, 1, 'L') 
     y_bank_end = pdf.get_y()
 
-    # Right Box: Authorized Signatory
+    # 3. Right Box: Authorized Signatory
     pdf.set_xy(110, y_bank)
     box_h = y_bank_end - y_bank
     pdf.cell(90, box_h, " (Computer Generated - No Sign Required)", 1, 1, 'C')
 
-    # --- FINAL RETURN WITH TRY-EXCEPT (Correct Indentation) ---
+    # --- 4. FINAL RETURN (Indentation Check) ---
     try:
-        # Pehle latin-1 try karein
+        # Standard encoding
         return pdf.output(dest='S').encode('latin-1')
-    except:
-        # Agar error aaye (Special characters ki wajah se), toh utf-8 use karein
+    except Exception:
+        # Agar ₹ ya special character ho to utf-8 use karein
         return pdf.output(dest='S').encode('utf-8', errors='ignore')
     
 # --- 3. MAIN LOGIC ---
@@ -597,6 +598,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
