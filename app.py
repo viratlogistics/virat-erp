@@ -280,10 +280,16 @@ elif menu == "5. Business Insights":
             total_cost = df_t[['HiredCharges', 'Diesel', 'DriverExp', 'Toll', 'Other']].sum().sum()
             net_profit = total_rev - total_cost
             
-            m1, m2, m3 = st.columns(3)
+            # --- Metrics Display Section ---
+        m1, m2, m3 = st.columns(3)
         m1.metric("Total Revenue", f"₹{total_rev:,.0f}")
         m2.metric("Total Expenses (Trip+Office)", f"₹{(trip_costs + office_total):,.0f}")
         m3.metric("Final Net Profit", f"₹{net_profit:,.0f}", delta=f"Office Exp: ₹{office_total:,.0f}", delta_color="inverse")
+        
+        st.divider() # Yeh line m1, m2, m3 waali line ki seedh mein honi chahiye
+
+        # --- Baaki ka code iske niche ---
+        c_left, c_right = st.columns(2)
             
             st.divider()
             
@@ -405,6 +411,7 @@ elif menu == "6. Expense Manager":
             st.info(f"Total Office Expenses: ₹{pd.to_numeric(df_oe['Amount'], errors='coerce').sum():,.2f}")
         else:
             st.warning("કોઈ ઓફિસ ખર્ચ મળ્યો નથી.")
+
 
 
 
