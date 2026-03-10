@@ -293,7 +293,6 @@ elif menu == "2. LR Entry":
                 hc = st.number_input("Hired Charges")
                 dsl = toll = drv = 0.0
 
-        # LR Entry menu ke andar jahan PDF data ready hota hai:
 if st.form_submit_button("🚀 SAVE LR"):
     if bill_pty and bill_pty != "Select" and fr_amt > 0:
         # Branch ki details fetch karo
@@ -543,5 +542,6 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
