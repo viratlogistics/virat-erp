@@ -275,54 +275,38 @@ elif menu == "2. LR Entry":
         # --- YE FORM KA END HAI ---
         if st.form_submit_button("🚀 SAVE LR"):
             if bill_pty and bill_pty != "Select" and fr_amt > 0:
-                # 1. Branch Master se sara data fetch karna
-                br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
+                # 1. Branch ki details fetch karna
+                br_row = df_m[(df_m['Type'].str.contains('Branch', na=False)) & (df_m['Name'] == sel_br)]
+                br_info = br_row.iloc[0] if not br_row.empty else {}
                 
-                prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
-                row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, sel_driver, br_name, fl, tl, fr_amt, (hc if v_cat == "Market Hired" else 0.0), dsl, drv, toll, 0, prof]
+                prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv_adv)))
+                row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, sel_driver, br_name, fl, tl, fr_amt, hired_charges, dsl, drv_adv, toll, 0, prof]
                 
                 if save("trips", row):
-                    # 2. AGAR NEW PARTY/CONSIGNOR HAI TO MASTER MEIN SAVE KARO
-                    if is_np and bill_pty not in gl("Party"):
-                        save("masters", ["Party", bill_pty])
-                    if is_nc and cnor_name not in gl("Consignor"):
-                        save("masters", ["Consignor", cnor_name])
+                    # 2. Naya Party/Consignor save karne ka logic
+                    if is_np: save("masters", ["Party", bill_pty])
+                    if is_nc: save("masters", ["Consignor", cnor_name])
 
-                    # Submit button ke andar ye block update karein
-st.session_state.pdf_ready = {
-    "LR No": lr_no, 
-    "Date": str(d), 
-    "Vehicle": v_no,
-    "Cnor": cnor_name, 
-    "CnorGST": cnor_gst,
-    "Cnee": cnee_name, 
-    "CneeGST": cnee_gst,
-    "BillP": bill_pty, 
-    "From": fl, 
-    "To": tl,
-    "Material": mat, 
-    "Pkg": pkg, 
-    "NetWt": n_wt, 
-    "ChgWt": c_wt,
-    "Freight": fr_amt, 
-    "PaidBy": paid_by, 
-    "Risk": risk,
-    "InvNo": inv_no, 
-    "ShipTo": ship_to, 
-    "show_fr": show_fr,
-    "InsBy": ins_by,
-    "BranchName": sel_br,
-    # Ye keys aapki Sheet ke column names se match honi chahiye
-    "BranchGST": br_info.get('GST', 'N/A'),
-    "BranchAddr": br_info.get('Address', 'N/A'),
-    "BankName": br_info.get('Name', 'N/A'),
-    "BankAC": br_info.get('A_C_No', 'N/A'), # Check if it is 'A/C No' or 'A_C_No'
-    "BankIFSC": br_info.get('IFSC', 'N/A')
-}
+                    # 3. PDF ke liye data bundle (Correct Keys)
+                    st.session_state.pdf_ready = {
+                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
+                        "Cnor": cnor_name, "CnorGST": cnor_gst, 
+                        "Cnee": cnee_name, "CneeGST": cnee_gst, 
+                        "BillP": bill_pty, "From": fl, "To": tl, 
+                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, 
+                        "Freight": fr_amt, "PaidBy": paid_by, "Risk": risk, 
+                        "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr, "InsBy": ins_by,
+                        "BranchName": sel_br,
+                        "BranchGST": br_info.get('GST', 'N/A'),
+                        "BranchAddr": br_info.get('Address', 'N/A'),
+                        "BankName": br_info.get('Bank_Name', 'N/A'), # Asli Bank Name yahan se aayega
+                        "BankAC": br_info.get('A_C_No', 'N/A'), 
+                        "BankIFSC": br_info.get('IFSC', 'N/A')
+                    }
                     st.success("LR Saved and Masters Updated!")
-                    st.rerun()
+                    st.rerun() # Yeh line ab sahi alignment mein hai
             else:
-                st.error("Please fill Party Name and Freight!")
+                st.error("Please fill required fields (Party & Freight)!")
     # --- YE LINE FORM KE BAHAR (LEFT MARGIN SE MATCH KAREIN) ---
     if st.session_state.pdf_ready:
         st.divider()
