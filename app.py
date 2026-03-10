@@ -332,30 +332,56 @@ if st.session_state.pdf_ready:
 elif menu == "3. LR Register":
     st.title("📋 LR REGISTER")
     if not df_t.empty:
+        # Columns ko clean karein taaki matching mein galti na ho
+        df_t.columns = [str(c).strip() for c in df_t.columns]
+        
         for i, row in df_t.iterrows():
-            # Dictionary taiyar karein jo generate_lr_pdf ko chahiye
-            lr_dict = row.to_dict()
-            
-            # Agar trips sheet mein branch details nahi hain, toh masters se fetch karein
-            br_name = row.get('Branch', 'Virat Logistics')
+            # Dictionary taiyar karein jo PDF function ko chahiye
+            # Hum trips ke data ko PDF ke standard keys mein map kar rahe hain
+            lr_dict = {
+                "LR No": row.get('LR No', 'N/A'),
+                "Date": row.get('Date', ''),
+                "Vehicle": row.get('Vehicle', ''),
+                "Risk": row.get('Risk', 'At Owner Risk'),
+                "Cnor": row.get('Consignor', 'N/A'),
+                "Cnee": row.get('Consignee', 'N/A'),
+                "BillP": row.get('Party', 'N/A'),
+                "Material": row.get('Material', 'N/A'),
+                "Pkg": row.get('Pkg', 'N/A'),
+                "NetWt": row.get('NetWt', 0),
+                "ChgWt": row.get('ChgWt', 0),
+                "Freight": row.get('Freight', 0),
+                "PaidBy": row.get('PaidBy', 'N/A'),
+                "From": row.get('From', ''),
+                "To": row.get('To', ''),
+                "ShipTo": row.get('ShipTo', 'N/A'),
+                "InsBy": row.get('InsBy', 'N/A'),
+            }
+
+            # Branch/Bank details fetch karna (kyunki trips sheet mein bank info nahi hoti)
+            br_name = row.get('Branch', 'Select') 
             br_row = df_m[df_m['Name'] == br_name]
             br_info = br_row.iloc[0] if not br_row.empty else {}
 
-            # Dictionary mein Branch/Bank keys add karein jo PDF mang raha hai
+            # Dictionary ko Branch/Bank data se update karein
             lr_dict.update({
-                "BranchName": br_name,
+                "BranchName": br_name if br_name != 'Select' else "Virat Logistics",
                 "BranchAddr": br_info.get('Address', 'N/A'),
                 "BranchGST": br_info.get('GST', 'N/A'),
                 "BankName": br_info.get('Name', 'N/A'),
                 "BankAC": br_info.get('A_C_No', 'N/A'),
-                "BankIFSC": br_info.get('IFSC', 'N/A'),
-                "Cnor": row.get('Consignor', ''),
-                "Cnee": row.get('Consignee', '') # Ensure names match your generate_lr_pdf logic
+                "BankIFSC": br_info.get('IFSC', 'N/A')
             })
 
-            with st.expander(f"LR: {row.get('LR No', 'N/A')} | {row.get('Consignee', 'N/A')}"):
-                # Ab lr_dict pass karein row.to_dict() ki jagah
-                st.download_button("📥 DOWNLOAD PDF", generate_lr_pdf(lr_dict, True), f"LR_{row.get('LR No','VL')}.pdf", key=f"p_{i}")
+            with st.expander(f"LR: {lr_dict['LR No']} | {lr_dict['Cnee']}"):
+                # Ab corrected lr_dict pass karein
+                pdf_data = generate_lr_pdf(lr_dict, True)
+                st.download_button(
+                    label="📥 DOWNLOAD PDF",
+                    data=pdf_data,
+                    file_name=f"LR_{lr_dict['LR No']}.pdf",
+                    key=f"btn_{i}"
+                )
         
         st.dataframe(df_t)
 elif menu == "4. Financials":
@@ -560,6 +586,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
