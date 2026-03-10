@@ -155,13 +155,31 @@ elif menu == "2. LR Entry":
             else: 
                 hc = st.number_input("Hired Charges"); dsl = toll = drv = 0.0
 
-        if st.form_submit_button("🚀 SAVE LR"):
-            if bill_pty != "Select" and fr_amt > 0:
-                prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
-                row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, "Driver", br_name, fl, tl, fr_amt, (hc if v_cat == "Market Hired" else 0.0), dsl, drv, toll, 0, prof]
+        if st.form_submit_button("Create LR"):
+            if v_no and p_name != "Select" and freight > 0:
+                # 1. Taiyaar karein LR data row
+                row = [str(d), v_cat, v_no, sel_driver, p_name, f_from, f_to, item, weight, freight, hired, diesel, d_exp, toll, other, br_name, ship_to]
+                
+                # 2. LR Save karein
                 if save("trips", row):
-                    st.session_state.pdf_ready = {"LR No": lr_no, "Date": str(d), "Vehicle": v_no, "Cnor": cnor_name, "CnorGST": cnor_gst, "Cnee": cnee_name, "CneeGST": cnee_gst, "BillP": bill_pty, "From": fl, "To": tl, "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, "Freight": fr_amt, "PaidBy": paid_by, "Bank": sel_bank, "Risk": risk, "InsBy": ins_by, "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr}
-                    st.success("Saved!"); st.rerun()
+                    
+                    # --- YAHAN HAI MASTER UPDATE KA MAGIC ---
+                    # Agar "New Party" wala checkbox on hai, toh use Masters mein save karo
+                    if is_new_party and p_name != "Select":
+                        # Masters sheet mein: Category = 'Party', Name = p_name
+                        # gl("Party") check karta hai ki wo pehle se hai ya nahi
+                        if p_name not in gl("Party"):
+                            save("masters", ["Party", p_name])
+                    
+                    # Agar "New Broker" wala checkbox on hai (agar banaya ho toh)
+                    if 'is_new_broker' in locals() and is_new_broker and br_name not in ["Select", "OWN"]:
+                        if br_name not in gl("Broker"):
+                            save("masters", ["Broker", br_name])
+                    
+                    st.success(f"LR {row[4]} Created & Master Updated!")
+                    st.rerun()
+            else:
+                st.error("Please fill all required fields (Vehicle, Party, Freight)")
 
     if st.session_state.pdf_ready:
         st.download_button("📥 DOWNLOAD PDF", generate_lr_pdf(st.session_state.pdf_ready, st.session_state.pdf_ready.get('show_fr', True)), f"LR_{st.session_state.pdf_ready['LR No']}.pdf")
