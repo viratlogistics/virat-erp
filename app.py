@@ -126,8 +126,21 @@ elif menu == "2. LR Entry":
         c1, c2, c3 = st.columns(3)
         with c1:
             d = st.date_input("Date", date.today())
-            v_no = st.selectbox("Vehicle*", ["Select"] + gl("Vehicle")) if v_cat == "Own Fleet" else st.text_input("Market Vehicle No*")
-            br_name = "OWN" if v_cat == "Own Fleet" else st.selectbox("Broker*", ["Select"] + gl("Broker"))
+            
+            # --- VEHICLE DROP-DOWN ---
+            # Own Fleet ho ya Market, drop-down dikhega (Market ke liye naya likh sakte hain)
+            v_list = gl("Vehicle")
+            v_no = st.selectbox("Vehicle No*", ["Select"] + v_list) if v_cat == "Own Fleet" else st.text_input("Market Vehicle No*")
+            
+            # --- DRIVER DROP-DOWN (Only for Own Fleet) ---
+            if v_cat == "Own Fleet":
+                d_list = gl("Driver")
+                sel_driver = st.selectbox("Driver Name*", ["Select"] + d_list)
+                br_name = "OWN" # Own fleet ke liye broker ki zaroorat nahi
+            else:
+                sel_driver = "Market Driver"
+                br_name = st.selectbox("Broker*", ["Select"] + gl("Broker"))
+                
             ship_to = st.text_area("Ship To Address")
         with c2:
             fl, tl = st.text_input("From City"), st.text_input("To City")
@@ -455,6 +468,7 @@ elif menu == "7. Driver Khata":
             
             st.error(f"## 🚩 Total Payable/Due by Driver: ₹{final_due:,.2f}")
             st.caption("Yeh amount Driver ko di gayi total cash (Trips + Salary + Extra) hai.")
+
 
 
 
