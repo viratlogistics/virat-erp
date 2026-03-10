@@ -247,9 +247,11 @@ elif menu == "2. LR Entry":
             v_no = st.selectbox("Vehicle No*", ["Select"] + v_list) if v_cat == "Own Fleet" else st.text_input("Market Vehicle No*")
             
             if v_cat == "Own Fleet":
-                d_list = gl("Driver")
-                sel_driver = st.selectbox("Driver Name*", ["Select"] + d_list)
-                br_name = "OWN"
+                dsl = st.number_input("Diesel Exp", 0.0, key=f"dsl_{k}")
+                toll = st.number_input("Toll Exp", 0.0, key=f"toll_{k}")
+                # DRIVER ADV ko yahan variable mein store karein
+                drv_adv = st.number_input("Driver Advance", 0.0, key=f"drv_adv_input_{k}")
+                hired_charges = 0.0
             else:
                 sel_driver = "Market Driver"
                 br_name = st.selectbox("Broker*", ["Select"] + gl("Broker"))
@@ -559,6 +561,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
