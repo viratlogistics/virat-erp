@@ -258,27 +258,24 @@ elif menu == "4. Financials":
 elif menu == "5. Business Insights":
     st.header("📊 Business Dashboard & Own Fleet Analytics")
     
-    # 1. Fresh Data Load (Impact dikhne ke liye refresh bypass)
+    # Fresh Data Load
     df_t = load("trips")
     
     if not df_t.empty:
         # Data Cleaning
         df_t.columns = [str(c).strip() for c in df_t.columns]
-        # Numbers ko math-ready banana
         num_cols = ['Freight', 'HiredCharges', 'Diesel', 'DriverExp', 'Toll', 'Other', 'Profit']
         for col in num_cols:
             if col in df_t.columns:
                 df_t[col] = pd.to_numeric(df_t[col], errors='coerce').fillna(0)
 
-        # Strictly Filter for OWN FLEET ONLY for vehicle analysis
+        # Filter for OWN FLEET ONLY
         df_own = df_t[df_t['Type'] == "Own Fleet"].copy()
         
-        # --- UI LAYOUT ---
         tab_sum, tab_own = st.tabs(["📈 Business Overview", "🚛 Own Vehicle Profitability"])
 
         with tab_sum:
             st.subheader("Total Company Performance")
-            # Key Metrics
             total_rev = df_t['Freight'].sum()
             total_cost = df_t[['HiredCharges', 'Diesel', 'DriverExp', 'Toll', 'Other']].sum().sum()
             net_profit = total_rev - total_cost
@@ -290,22 +287,20 @@ elif menu == "5. Business Insights":
             
             st.divider()
             
-            # Party Wise Revenue Chart
             c_left, c_right = st.columns(2)
             with c_left:
                 st.write("#### 🏆 Top 5 Parties (Revenue)")
                 party_data = df_t.groupby('Party')['Freight'].sum().sort_values(ascending=False).head(5)
-                st.bar_chart(party_data, color="#2ecc71")
+                st.bar_chart(party_data)
             
             with c_right:
                 st.write("#### 📊 Trip Distribution")
                 trip_counts = df_t['Type'].value_counts()
-                st.write(f"**Total Trips:** {len(df_t)}")
-                st.info(f"Own Fleet: {trip_counts.get('Own Fleet', 0)} | Market Hired: {trip_counts.get('Market Hired', 0)}")
+                st.dataframe(trip_counts, use_container_width=True)
 
         with tab_own:
             if not df_own.empty:
-                st.subheader("🚛 Individual Own Vehicle Profitability")
+                st.subheader("🚛 Own Vehicle Profitability Analysis")
                 
                 # Grouping for Vehicle Analytics
                 v_analysis = df_own.groupby('Vehicle').agg({
@@ -316,36 +311,46 @@ elif menu == "5. Business Insights":
                     'Other': 'sum'
                 }).reset_index()
 
-                # Calculate Net Profit
+                # Net Profit Calculation
                 v_analysis['Total_Exp'] = v_analysis[['Diesel', 'DriverExp', 'Toll', 'Other']].sum(axis=1)
                 v_analysis['Net_Profit'] = v_analysis['Freight'] - v_analysis['Total_Exp']
                 v_analysis = v_analysis.sort_values(by='Net_Profit', ascending=False)
 
-                # Summary Box for Own Fleet
+                # Total Profit Highlight
                 st.success(f"💰 **Total Profit from Own Fleet:** ₹{v_analysis['Net_Profit'].sum():,.2f}")
                 
-                # Profit Chart per Vehicle
-                st.write("#### Net Profit Comparison by Vehicle")
-                st.bar_chart(v_analysis.set_index('Vehicle')['Net_Profit'], color="#3498db")
+                # Visual Chart
+                st.write("#### Vehicle-wise Profit Comparison")
+                st.bar_chart(v_analysis.set_index('Vehicle')['Net_Profit'])
 
                 st.divider()
                 
-                # Interactive Data Table with Colors
+                # Simple and Clean Data Table (No matplotlib required)
                 st.write("#### Detailed Own Vehicle Report")
-                # Table ko attractive banane ke liye background gradient (Green for high profit)
-                st.dataframe(v_analysis.style.background_gradient(subset=['Net_Profit'], cmap='RdYlGn').format({
-                    'Freight': '₹{:,.0f}',
-                    'Total_Exp': '₹{:,.0f}',
-                    'Net_Profit': '₹{:,.0f}',
-                    'Diesel': '₹{:,.0f}',
-                    'Toll': '₹{:,.0f}'
-                }), use_container_width=True, hide_index=True)
+                
+                # Displaying a clean table with formatted numbers
+                display_df = v_analysis.copy()
+                # Adding some manual styling for the dashboard look
+                st.dataframe(
+                    display_df,
+                    column_config={
+                        "Vehicle": "Vehicle No",
+                        "Freight": st.column_config.NumberColumn("Total Freight", format="₹%d"),
+                        "Total_Exp": st.column_config.NumberColumn("Total Expense", format="₹%d"),
+                        "Net_Profit": st.column_config.ProgressColumn("Net Profit Profitability", format="₹%d", min_value=0, max_value=int(v_analysis['Net_Profit'].max())),
+                        "Diesel": st.column_config.NumberColumn("Diesel", format="₹%d"),
+                        "Toll": st.column_config.NumberColumn("Toll", format="₹%d"),
+                    },
+                    use_container_width=True,
+                    hide_index=True
+                )
                 
             else:
-                st.warning("⚠️ Own Fleet ka data nahi mila. LR Entry karte waqt 'Own Fleet' select karein.")
+                st.warning("⚠️ Own Fleet ka data nahi mila. LR Entry mein 'Own Fleet' select karein.")
 
     else:
-        st.error("❌ Business data missing! Pehle 'LR Entry' modual mein trips add karein.")
+        st.error("❌ Business data missing!")
+
 
 
 
