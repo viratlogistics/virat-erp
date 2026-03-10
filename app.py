@@ -174,6 +174,8 @@ if menu == "1. Masters Setup":
                 gst = st.text_input("Branch GST")
                 addr = st.text_area("Branch Address")
             with col2:
+                # --- BANK NAME FIELD ADDED ---
+                bank_name = st.text_input("Bank Name (e.g. SBI/BOB)") 
                 ac = st.text_input("Bank A/C No")
                 ifsc = st.text_input("Bank IFSC")
                 cont = st.text_input("Branch Contact No")
@@ -198,8 +200,9 @@ if menu == "1. Masters Setup":
         # Save Button
         if st.form_submit_button(f"Save {m_type}"):
             if name or d_name:
-                # Order: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name, Driver_No
-                new_row = [m_type, name, gst, addr, cont, ac, ifsc, d_name, d_no]
+                # Naya Order: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name, Driver_No, Bank_Name
+                # Note: Bank Name ko save karne ke liye 'bank_name' variable pass karna hoga
+                new_row = [m_type, name, gst, addr, cont, ac, ifsc, d_name, d_no, bank_name]
                 if save("masters", new_row):
                     st.success(f"{m_type} Saved!"); st.rerun()
             else:
@@ -600,6 +603,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
