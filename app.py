@@ -226,7 +226,6 @@ elif menu == "2. LR Entry":
         if not temp_df.empty:
             br_info = temp_df.iloc[0].to_dict()
     cp1, cp2, cp3 = st.columns(3)
-    
     with cp1:
         sel_br = st.selectbox("Select Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
         br_code = df_m[df_m['Name'] == sel_br].iloc[0].get('GST', '01') if sel_br != "Select" else "01"
@@ -235,7 +234,6 @@ elif menu == "2. LR Entry":
         lr_no_auto = f"VIL/25-26/{br_code}/{len(df_t)+1:03d}"
         lr_no = st.text_input("LR Number*", value=lr_no_auto if lr_mode == "Auto" else "", key=f"lrno_{k}")
         risk = st.radio("Risk*", ["At Owner Risk", "Insured"], horizontal=True, key=f"risk_{k}")
-
     with cp2:
         is_np = st.checkbox("New Party?", key=f"isnp_{k}")
         if is_np:
@@ -251,7 +249,6 @@ elif menu == "2. LR Entry":
             
         cnor_gst = st.text_input("Consignor GST", key=f"cgst_{k}")
         ins_by = st.selectbox("Insurance Paid By*", ["N/A", "Consignor", "Consignee", "Transporter"], key=f"ins_{k}")
-
     with cp3:
         cnee_name = st.text_input("Consignee Name*", key=f"cnee_{k}")
         cnee_gst = st.text_input("Consignee GST", key=f"cngst_{k}")
@@ -579,6 +576,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
