@@ -256,60 +256,72 @@ elif menu == "4. Financials":
             st.write("#### Detailed History")
             st.dataframe(history, use_container_width=True)
 elif menu == "5. Business Insights":
-    st.header("📊 Business Profit & Loss Dashboard")
+    st.header("📊 Business Insights & Vehicle Profitability")
     
-    # Reload fresh data
+    # Fresh Data Load
     df_t = load("trips")
     
     if not df_t.empty:
-        # Data Cleaning for Calculations
+        # Data Cleaning
         df_t.columns = [str(c).strip() for c in df_t.columns]
         num_cols = ['Freight', 'HiredCharges', 'Diesel', 'DriverExp', 'Toll', 'Other', 'Profit']
         for col in num_cols:
             if col in df_t.columns:
                 df_t[col] = pd.to_numeric(df_t[col], errors='coerce').fillna(0)
 
-        # --- 1. KEY PERFORMANCE INDICATORS (KPI) ---
-        total_revenue = df_t['Freight'].sum()
-        total_hired_cost = df_t['HiredCharges'].sum()
-        total_own_fleet_expenses = df_t['Diesel'].sum() + df_t['DriverExp'].sum() + df_t['Toll'].sum() + df_t['Other'].sum()
-        net_profit = total_revenue - (total_hired_cost + total_own_fleet_expenses)
+        # Tabs for different views
+        t_overall, t_vehicle = st.tabs(["📈 Overall Summary", "🚛 Vehicle-wise Profit"])
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total Revenue (Freight)", f"₹{total_revenue:,.0f}")
-        c2.metric("Market Hired Cost", f"₹{total_hired_cost:,.0f}")
-        c3.metric("Own Fleet Expenses", f"₹{total_own_fleet_expenses:,.0f}")
-        c4.metric("Net Business Profit", f"₹{net_profit:,.0f}", delta=f"{(net_profit/total_revenue*100):.1f}% Margin" if total_revenue > 0 else "0%")
-
-        st.divider()
-
-        # --- 2. EXPENSE BREAKDOWN ---
-        col_left, col_right = st.columns(2)
-        
-        with col_left:
-            st.subheader("⛽ Own Fleet Expense Breakdown")
-            exp_data = {
-                "Category": ["Diesel", "Driver Exp", "Toll", "Other"],
-                "Amount": [df_t['Diesel'].sum(), df_t['DriverExp'].sum(), df_t['Toll'].sum(), df_t['Other'].sum()]
-            }
-            st.table(pd.DataFrame(exp_data))
-
-        with col_right:
-            st.subheader("🚛 Own vs Market Share")
-            # Filter checks
-            own_count = len(df_t[df_t['Type'] == "Own Fleet"])
-            market_count = len(df_t[df_t['Type'] == "Market Hired"])
-            st.write(f"**Own Fleet Trips:** {own_count}")
-            st.write(f"**Market Hired Trips:** {market_count}")
+        with t_overall:
+            total_rev = df_t['Freight'].sum()
+            total_exp = df_t[['HiredCharges', 'Diesel', 'DriverExp', 'Toll', 'Other']].sum().sum()
+            net_prof = total_rev - total_exp
             
-        st.divider()
-        
-        # --- 3. TOP PARTIES BY REVENUE ---
-        st.subheader("🏆 Top 5 Billing Parties")
-        top_parties = df_t.groupby('Party')['Freight'].sum().sort_values(ascending=False).head(5)
-        st.bar_chart(top_parties)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total Revenue", f"₹{total_rev:,.0f}")
+            c2.metric("Total Expenses", f"₹{total_exp:,.0f}")
+            c3.metric("Net Profit", f"₹{net_prof:,.0f}", delta=f"{(net_prof/total_rev*100 if total_rev>0 else 0):.1f}% Margin")
+            
+            st.divider()
+            st.subheader("🏆 Top Parties by Revenue")
+            st.bar_chart(df_t.groupby('Party')['Freight'].sum().sort_values(ascending=False).head(5))
+
+        with t_vehicle:
+            st.subheader("Individual Vehicle Performance")
+            
+            # Grouping by Vehicle Number
+            # We calculate: Freight - (Diesel + DriverExp + Toll + Other + HiredCharges)
+            v_profit = df_t.groupby('Vehicle').agg({
+                'Freight': 'sum',
+                'Diesel': 'sum',
+                'DriverExp': 'sum',
+                'Toll': 'sum',
+                'HiredCharges': 'sum',
+                'Other': 'sum'
+            }).reset_index()
+
+            # Calculate Net Profit per Vehicle
+            v_profit['Total_Expense'] = v_profit[['Diesel', 'DriverExp', 'Toll', 'HiredCharges', 'Other']].sum(axis=1)
+            v_profit['Net_Profit'] = v_profit['Freight'] - v_profit['Total_Expense']
+            
+            # Sort by highest profit
+            v_profit = v_profit.sort_values(by='Net_Profit', ascending=False)
+
+            # Display Table
+            st.dataframe(v_profit.style.format({
+                'Freight': '₹{:,.0f}',
+                'Total_Expense': '₹{:,.0f}',
+                'Net_Profit': '₹{:,.0f}'
+            }), use_container_width=True)
+
+            st.divider()
+            
+            # Profit Chart
+            st.subheader("Vehicle Profit Comparison")
+            st.bar_chart(v_profit.set_index('Vehicle')['Net_Profit'])
 
     else:
-        st.warning("No trip data found to generate insights.")
+        st.warning("No trip data found.")
+
 
 
