@@ -53,7 +53,7 @@ def generate_lr_pdf(lr_data, show_fr=True):
     # --- PAGE 1: MAIN LR ---
     pdf.add_page()
     
-    # 1. Header (Yahan check karein ki [cite] na ho)
+    # Header Section
     pdf.set_font("Arial", 'B', 20)
     pdf.set_text_color(20, 50, 100)
     pdf.cell(0, 10, lr_data.get('BranchName', 'Virat Logistics').upper(), ln=1, align='C')
@@ -62,91 +62,82 @@ def generate_lr_pdf(lr_data, show_fr=True):
     pdf.set_text_color(100, 100, 100)
     pdf.cell(0, 5, "Your Goods Are In Good hand..", ln=1, align='C')
     
-    # Branch Address 
     pdf.set_font("Arial", '', 8)
     pdf.set_text_color(0, 0, 0)
-    pdf.multi_cell(0, 4, f"{lr_data.get('BranchAddr', 'Plot No 130, Kosamba, Gujarat 394120')}\nGST No: {lr_data.get('BranchGST', '24ELFPP6185K1ZJ')}", align='C') [cite: 1, 3]
+    pdf.multi_cell(0, 4, f"{lr_data.get('BranchAddr', 'N/A')}\nGST No: {lr_data.get('BranchGST', 'N/A')}", align='C')
     pdf.ln(5)
 
-    # 2. Notice Section 
-    pdf.set_fill_color(245, 245, 245)
-    pdf.set_font("Arial", 'B', 8)
-    pdf.cell(0, 5, " Notice", 1, 1, 'L', True)
-    pdf.set_font("Arial", '', 7)
-    notice_text = "Without the consignee's written permission this consignment will not be diverted, re-routed, or rebooked. Lorry Receipt will be delivered to the only consignee." [cite: 1, 2]
-    pdf.multi_cell(0, 4, notice_text, 1, 'L')
-    pdf.ln(3)
+    # LR Basic Details
+    pdf.set_fill_color(230, 230, 230)
+    pdf.set_font("Arial", 'B', 9)
+    pdf.cell(47, 8, f" LR No: {lr_data.get('LR No', '')}", 1, 0, 'L', True)
+    pdf.cell(47, 8, f" Date: {lr_data.get('Date', '')}", 1, 0, 'L', True)
+    pdf.cell(48, 8, f" Vehicle: {lr_data.get('Vehicle', '')}", 1, 0, 'L', True)
+    pdf.cell(48, 8, f" Risk: {lr_data.get('Risk', 'Owner Risk')}", 1, 1, 'L', True)
+    pdf.ln(2)
 
-    # 3. Party Details (Consignor & Consignee) [cite: 3, 4]
+    # Party Details
     pdf.set_font("Arial", 'B', 9)
     pdf.cell(95, 6, " CONSIGNOR", 1, 0, 'L', True)
     pdf.cell(95, 6, " CONSIGNEE", 1, 1, 'L', True)
     
     pdf.set_font("Arial", '', 8)
     y_start = pdf.get_y()
-    # Consignor [cite: 3]
-    pdf.multi_cell(95, 4, f"{lr_data.get('Cnor', '')}\nGST: {lr_data.get('CnorGST', '')}\nAddr: {lr_data.get('CnorAddr', '')}", 1, 'L')
+    pdf.multi_cell(95, 4, f"{lr_data.get('Cnor', '')}\nGST: {lr_data.get('CnorGST', 'N/A')}", 1, 'L')
     y_end1 = pdf.get_y()
     
-    # Consignee [cite: 4]
     pdf.set_y(y_start); pdf.set_x(105)
-    pdf.multi_cell(95, 4, f"{lr_data.get('Cnee', '')}\nGST: {lr_data.get('CneeGST', '')}\nAddr: {lr_data.get('CneeAddr', '')}", 1, 'L')
+    pdf.multi_cell(95, 4, f"{lr_data.get('Cnee', '')}\nGST: {lr_data.get('CneeGST', 'N/A')}", 1, 'L')
     y_end2 = pdf.get_y()
     pdf.set_y(max(y_end1, y_end2)); pdf.ln(2)
 
-    # 4. Material Table [cite: 5]
+    # Material Table
     pdf.set_font("Arial", 'B', 8)
-    pdf.cell(70, 7, " Product/Material", 1, 0, 'C', True)
-    pdf.cell(30, 7, " Pkg Type", 1, 0, 'C', True)
-    pdf.cell(20, 7, " Articles", 1, 0, 'C', True)
-    pdf.cell(35, 7, " Actual/Chg Wt", 1, 0, 'C', True)
-    pdf.cell(35, 7, " Freight Status", 1, 1, 'C', True)
+    pdf.cell(75, 7, " Description of Goods", 1, 0, 'C', True)
+    pdf.cell(25, 7, " Pkg", 1, 0, 'C', True)
+    pdf.cell(30, 7, " Net/Chg Wt", 1, 0, 'C', True)
+    pdf.cell(30, 7, " Paid By", 1, 0, 'C', True)
+    pdf.cell(30, 7, " Freight", 1, 1, 'C', True)
     
     pdf.set_font("Arial", '', 8)
-    status = "To be billed" if not show_fr else f"Rs. {lr_data.get('Freight', 0)}" [cite: 7, 8]
-    pdf.cell(70, 10, f" {lr_data.get('Material', '')}", 1, 0, 'L')
-    pdf.cell(30, 10, f" {lr_data.get('Pkg', '')}", 1, 0, 'C')
-    pdf.cell(20, 10, f" {lr_data.get('Articles', '1')}", 1, 0, 'C')
-    pdf.cell(35, 10, f" {lr_data.get('NetWt', 0)}/{lr_data.get('ChgWt', 0)} KGS", 1, 0, 'C') [cite: 5]
+    amt_text = f"Rs. {lr_data.get('Freight', 0)}" if show_fr else "To be billed"
+    pdf.cell(75, 10, f" {lr_data.get('Material', '')}", 1, 0, 'L')
+    pdf.cell(25, 10, f" {lr_data.get('Pkg', '')}", 1, 0, 'C')
+    pdf.cell(30, 10, f" {lr_data.get('NetWt', 0)}/{lr_data.get('ChgWt', 0)}", 1, 0, 'C')
+    pdf.cell(30, 10, f" {lr_data.get('PaidBy', 'N/A')}", 1, 0, 'C')
     pdf.set_font("Arial", 'B', 8)
-    pdf.cell(35, 10, f" {status}", 1, 1, 'C') [cite: 8]
-    pdf.ln(2)
+    pdf.cell(30, 10, f" {amt_text}", 1, 1, 'C')
+    pdf.ln(1)
+    pdf.cell(0, 6, f" DELIVERY ADDRESS: {lr_data.get('ShipTo', 'N/A')}", 1, 1, 'L')
 
-    # 5. LR Info & Bank Details [cite: 6, 7]
-    pdf.set_font("Arial", 'B', 8)
-    pdf.cell(95, 5, f" LR No: {lr_data.get('LR No', '')} | Date: {lr_data.get('Date', '')}", 0, 0, 'L') [cite: 6]
-    pdf.cell(95, 5, f" Vehicle: {lr_data.get('Vehicle', '')} | From-To: {lr_data.get('From', '')}-{lr_data.get('To', '')}", 0, 1, 'R') [cite: 6, 7]
-    
+    # Bank Details (Positioned right after Material table)
     pdf.ln(2)
-    pdf.set_fill_color(240, 240, 240)
-    pdf.cell(100, 6, " BANK DETAILS", 1, 0, 'L', True) [cite: 6]
-    pdf.cell(90, 6, " FOR VIRAT LOGISTICS", 1, 1, 'C', True) [cite: 8]
-    
-    pdf.set_font("Arial", '', 8)
-    bank_txt = f"Bank: {lr_data.get('BankName', 'N/A')} | A/C: {lr_data.get('BankAC', 'N/A')} | IFSC: {lr_data.get('BankIFSC', 'N/A')}" [cite: 6]
-    pdf.cell(100, 12, bank_txt, 1, 0, 'L') [cite: 6]
     pdf.set_font("Arial", 'B', 8)
-    pdf.cell(90, 12, "Authorized Signatory", 1, 1, 'C') [cite: 9]
+    pdf.cell(110, 6, " PAYMENT BANK DETAILS", 1, 0, 'L', True)
+    pdf.cell(80, 6, " FOR VIRAT LOGISTICS", 1, 1, 'C', True)
+    
+    pdf.set_font("Arial", '', 7)
+    bank_info = f"Bank: {lr_data.get('BankName', 'N/A')} | A/C: {lr_data.get('BankAC', 'N/A')} | IFSC: {lr_data.get('BankIFSC', 'N/A')}"
+    pdf.cell(110, 8, bank_info, 1, 0, 'L')
+    pdf.set_font("Arial", 'B', 8)
+    pdf.cell(80, 8, "Authorized Signatory", 1, 1, 'C')
     pdf.set_font("Arial", 'I', 7)
-    pdf.cell(0, 5, "This is computer generated LR/ Bilty. No signature required.", 0, 1, 'C') [cite: 8]
+    pdf.cell(0, 5, "This is a computer generated document, no signature required.", 0, 1, 'C')
 
-    # --- PAGE 2: TERMS AND CONDITIONS  ---
+    # --- PAGE 2: TERMS ---
     pdf.add_page()
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, "Terms and Conditions", ln=1, align='C') [cite: 10]
-    pdf.set_font("Arial", '', 7)
+    pdf.cell(0, 10, "Terms and Conditions", ln=1, align='C')
+    pdf.set_font("Arial", '', 8)
     terms = [
-        "1) The transport operator is liable directly to the bank concerned for the full value of goods. ",
-        "2) The transport Operator undertakes to deliver the goods in the same order and condition as received. [cite: 11]",
-        "3) Right to entrust goods to any other lorry or service rests with the Transport Operator. [cite: 14]",
-        "4) Perishable goods lying undelivered after 48 hours can be disposed of at Operator's discretion. [cite: 17]",
-        "5) Goods undelivered after 30 days can be disposed of after a 15-day notice. [cite: 18]",
-        "6) Subject to Kosamba local jurisdiction legal procedures for any disputes. [cite: 24]"
+        "1) Subject to Kosamba Jurisdiction.",
+        "2) No responsibility for leakage/damage after delivery.",
+        "3) Detention charges applicable after 24 hours.",
+        "4) Goods not insured unless specified."
     ]
-    for term in terms:
-        pdf.multi_cell(0, 4, term)
-        pdf.ln(1)
-
+    for line in terms:
+        pdf.multi_cell(0, 5, line)
+    
     return pdf.output(dest='S').encode('latin-1')
     
 # --- 3. MAIN LOGIC ---
@@ -333,17 +324,15 @@ if st.session_state.pdf_ready:
 elif menu == "3. LR Register":
     st.title("📋 LR REGISTER")
     if not df_t.empty:
-        # Columns clean karein
         df_t.columns = [str(c).strip() for c in df_t.columns]
-        
         for i, row in df_t.iterrows():
-            # Branch/Bank details masters se fetch karein
+            # Masters se branch details uthana
             br_name = row.get('Branch', 'Select')
             br_row = df_m[df_m['Name'] == br_name]
             br_info = br_row.iloc[0] if not br_row.empty else {}
 
-            # Dictionary mapping
-            lr_dict = {
+            # Dictionary mapping (Clean)
+            lr_data = {
                 "LR No": row.get('LR No', 'N/A'),
                 "Date": row.get('Date', ''),
                 "Vehicle": row.get('Vehicle', ''),
@@ -360,8 +349,7 @@ elif menu == "3. LR Register":
                 "From": row.get('From', ''),
                 "To": row.get('To', ''),
                 "ShipTo": row.get('ShipTo', 'N/A'),
-                "InsBy": row.get('InsBy', 'N/A'),
-                "BranchName": br_name if br_name != 'Select' else "VIRAT LOGISTICS",
+                "BranchName": br_name,
                 "BranchAddr": br_info.get('Address', 'N/A'),
                 "BranchGST": br_info.get('GST', 'N/A'),
                 "BankName": br_info.get('Name', 'N/A'),
@@ -369,20 +357,17 @@ elif menu == "3. LR Register":
                 "BankIFSC": br_info.get('IFSC', 'N/A')
             }
 
-            with st.expander(f"LR: {lr_dict['LR No']} | {lr_dict['Cnee']}"):
+            with st.expander(f"LR: {lr_data['LR No']} | {lr_data['Cnee']}"):
                 try:
-                    # Clear function call bina kisi cite ke
-                    pdf_output = generate_lr_pdf(lr_dict, True)
+                    pdf_out = generate_lr_pdf(lr_data, True)
                     st.download_button(
                         label="📥 DOWNLOAD PDF",
-                        data=pdf_output,
-                        file_name=f"LR_{lr_dict['LR No']}.pdf",
-                        key=f"reg_btn_{i}"
+                        data=pdf_out,
+                        file_name=f"LR_{lr_data['LR No']}.pdf",
+                        key=f"dl_btn_{i}"
                     )
                 except Exception as e:
-                    # Agar abhi bhi error aaye toh ye line batayegi kya galti hai
-                    st.error(f"PDF Error: {str(e)}")
-        
+                    st.error(f"Error: {e}")
         st.dataframe(df_t)
         
 elif menu == "4. Financials":
@@ -587,6 +572,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
