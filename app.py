@@ -105,36 +105,30 @@ def generate_lr_pdf(lr_data, show_fr=True):
     pdf.set_font("Arial", 'B', 9)
     pdf.cell(30, 10, amt, 1, 1, 'C')
     
-    # --- BANK DETAILS SECTION ---
-    # --- BANK DETAILS SECTION (Indentation Fix) ---
     pdf.ln(2)
+    pdf.cell(190, 6, f" DELIVERY ADDRESS: {lr_data.get('ShipTo', 'N/A')}", 1, 1, 'L')
+
+    # Bottom Bank & T&C
+    pdf.set_y(-55)
     pdf.set_font("Arial", 'B', 9)
+    pdf.cell(100, 5, "PAYMENT BANK DETAILS:", 0, 0, 'L')
+    pdf.cell(90, 5, f"FOR {lr_data.get('BranchName', 'VIRAT LOGISTICS')}", 0, 1, 'R')
     
-    # 1. Variables Fetch Karein (Masters Sheet se)
-    b_name = lr_data.get('BankName', 'N/A')
-    b_acc = lr_data.get('BankAC', 'N/A')
-    b_ifsc = lr_data.get('BankIFSC', 'N/A')
+    pdf.set_font("Arial", '', 8)
+    pdf.cell(100, 4, f"Bank: {lr_data.get('BankName', 'N/A')}", ln=1)
+    pdf.cell(100, 4, f"A/C No: {lr_data.get('BankAC', 'N/A')}", ln=1)
+    pdf.cell(100, 4, f"IFSC Code: {lr_data.get('BankIFSC', 'N/A')}", ln=1)
     
-    y_bank = pdf.get_y()
+    pdf.ln(4)
+    pdf.set_font("Arial", 'I', 7)
+    pdf.multi_cell(190, 3, "Terms: 1. Subject to Kosamba Jurisdiction. 2. No responsibility for damage after delivery. 3. Detention charges applicable if not unloaded in 24 hrs.")
     
-    # 2. Left Box: Bank Details (3 Lines format)
-    pdf.set_xy(10, y_bank)
-    bank_text = f"Bank Name: {b_name}\nA/C No: {b_acc}\nIFSC Code: {b_ifsc}"
-    pdf.multi_cell(100, 5, bank_text, 1, 'L') 
-    y_bank_end = pdf.get_y()
+    pdf.ln(2)
+    pdf.set_font("Arial", 'B', 8)
+    pdf.set_text_color(150, 150, 150)
+    pdf.cell(0, 5, "--- COMPUTER GENERATED DOCUMENT, NO SIGNATURE REQUIRED ---", 0, 1, 'C')
 
-    # 3. Right Box: Authorized Signatory
-    pdf.set_xy(110, y_bank)
-    box_h = y_bank_end - y_bank
-    pdf.cell(90, box_h, " (Computer Generated - No Sign Required)", 1, 1, 'C')
-
-    # --- 4. FINAL RETURN (Indentation Check) ---
-    try:
-        # Standard encoding
-        return pdf.output(dest='S').encode('latin-1')
-    except Exception:
-        # Agar ₹ ya special character ho to utf-8 use karein
-        return pdf.output(dest='S').encode('utf-8', errors='ignore')
+    return pdf.output(dest='S').encode('latin-1')
     
 # --- 3. MAIN LOGIC ---
 df_m = load("masters")
@@ -166,8 +160,6 @@ if menu == "1. Masters Setup":
                 gst = st.text_input("Branch GST")
                 addr = st.text_area("Branch Address")
             with col2:
-                # --- BANK NAME FIELD ADDED ---
-                bank_name = st.text_input("Bank Name (e.g. SBI/BOB)") 
                 ac = st.text_input("Bank A/C No")
                 ifsc = st.text_input("Bank IFSC")
                 cont = st.text_input("Branch Contact No")
@@ -192,9 +184,8 @@ if menu == "1. Masters Setup":
         # Save Button
         if st.form_submit_button(f"Save {m_type}"):
             if name or d_name:
-                # Naya Order: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name, Driver_No, Bank_Name
-                # Note: Bank Name ko save karne ke liye 'bank_name' variable pass karna hoga
-                new_row = [m_type, name, gst, addr, cont, ac, ifsc, d_name, d_no, bank_name]
+                # Order: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name, Driver_No
+                new_row = [m_type, name, gst, addr, cont, ac, ifsc, d_name, d_no]
                 if save("masters", new_row):
                     st.success(f"{m_type} Saved!"); st.rerun()
             else:
@@ -214,27 +205,17 @@ elif menu == "2. LR Entry":
         st.rerun()
 
     k = st.session_state.reset_trigger
-    
-    # 1. Branch selection (Key unique rakhi hai taaki Duplicate Key error na aaye)
-    sel_br = st.selectbox("Select Branch*", ["Select"] + gl("Branch"), key=f"br_entry_unique_{k}")
-    
-    # 2. Branch details fetching logic (Properly Aligned)
-    br_info = {}
-    if sel_br != "Select":
-        # Type aur Name dono check karke sahi branch uthana
-        mask = (df_m['Type'].str.contains('Branch', case=False, na=False)) & (df_m['Name'] == sel_br)
-        temp_df = df_m[mask]
-        if not temp_df.empty:
-            br_info = temp_df.iloc[0].to_dict()
-
-    # Form Columns
     cp1, cp2, cp3 = st.columns(3)
+    
     with cp1:
+        sel_br = st.selectbox("Select Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
+        br_code = df_m[df_m['Name'] == sel_br].iloc[0].get('GST', '01') if sel_br != "Select" else "01"
         v_cat = st.radio("Trip Type*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"vcat_{k}")
         lr_mode = st.radio("LR No Mode", ["Auto", "Manual"], horizontal=True, key=f"lrmode_{k}")
-        lr_no_auto = f"VIL/25-26/{len(df_t)+1:03d}"
+        lr_no_auto = f"VIL/25-26/{br_code}/{len(df_t)+1:03d}"
         lr_no = st.text_input("LR Number*", value=lr_no_auto if lr_mode == "Auto" else "", key=f"lrno_{k}")
         risk = st.radio("Risk*", ["At Owner Risk", "Insured"], horizontal=True, key=f"risk_{k}")
+
     with cp2:
         is_np = st.checkbox("New Party?", key=f"isnp_{k}")
         if is_np:
@@ -250,6 +231,7 @@ elif menu == "2. LR Entry":
             
         cnor_gst = st.text_input("Consignor GST", key=f"cgst_{k}")
         ins_by = st.selectbox("Insurance Paid By*", ["N/A", "Consignor", "Consignee", "Transporter"], key=f"ins_{k}")
+
     with cp3:
         cnee_name = st.text_input("Consignee Name*", key=f"cnee_{k}")
         cnee_gst = st.text_input("Consignee GST", key=f"cngst_{k}")
@@ -293,52 +275,40 @@ elif menu == "2. LR Entry":
         # --- YE FORM KA END HAI ---
         if st.form_submit_button("🚀 SAVE LR"):
             if bill_pty and bill_pty != "Select" and fr_amt > 0:
+                # 1. Branch Master se sara data fetch karna
+                br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
+                
                 prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
-                row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, sel_driver, "OWN", fl, tl, fr_amt, hc, dsl, drv, toll, 0, prof]
+                row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, sel_driver, br_name, fl, tl, fr_amt, (hc if v_cat == "Market Hired" else 0.0), dsl, drv, toll, 0, prof]
                 
                 if save("trips", row):
-                    # New Party Save
-                    if is_np: save("masters", ["Party", bill_pty])
-                    if is_nc: save("masters", ["Consignor", cnor_name])
+                    # 2. AGAR NEW PARTY/CONSIGNOR HAI TO MASTER MEIN SAVE KARO
+                    if is_np and bill_pty not in gl("Party"):
+                        save("masters", ["Party", bill_pty])
+                    if is_nc and cnor_name not in gl("Consignor"):
+                        save("masters", ["Consignor", cnor_name])
 
-                    # PDF DATA BUNDLE
+                    # 3. PDF ke liye Branch/Company ka sara data bundle karna
                     st.session_state.pdf_ready = {
-    "LR No": lr_no, 
-    "Date": str(d), 
-    "Vehicle": v_no,
-    "Cnor": cnor_name, 
-    "CnorGST": cnor_gst,
-    "Cnee": cnee_name, 
-    "CneeGST": cnee_gst,
-    "BillP": bill_pty, 
-    "From": fl, 
-    "To": tl,
-    "Material": mat, 
-    "Pkg": pkg, 
-    "NetWt": n_wt, 
-    "ChgWt": c_wt,
-    "Freight": fr_amt, 
-    "PaidBy": paid_by, 
-    "Risk": risk,
-    "InvNo": inv_no, 
-    "ShipTo": ship_to, 
-    "show_fr": show_fr,
-    "InsBy": ins_by,
-    "BranchName": sel_br,
-    # Ye keys aapki Sheet ke column names se match honi chahiye
-    "BranchGST": br_info.get('GST', 'N/A'),
-    "BranchAddr": br_info.get('Address', 'N/A'),
-    "BankName": br_info.get('Bank_Name', 'N/A'),
-    "BankAC": br_info.get('A_C_No', 'N/A'), # Check if it is 'A/C No' or 'A_C_No'
-    "BankIFSC": br_info.get('IFSC', 'N/A')
-}
-                    st.success("LR Saved!")
-                    return()
-    except UnicodeEncodeError:
-        # Agar ₹ symbol ya special character error de raha hai to use ignore karein
-        return pdf.output(dest='S').encode('utf-8', errors='replace')
-
-    # DOWNLOAD BUTTON (Form ke bahar)
+                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
+                        "Cnor": cnor_name, "CnorGST": cnor_gst, 
+                        "Cnee": cnee_name, "CneeGST": cnee_gst, 
+                        "BillP": bill_pty, "From": fl, "To": tl, 
+                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, 
+                        "Freight": fr_amt, "PaidBy": paid_by, "Risk": risk, 
+                        "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr, "InsBy": ins_by,
+                        "BranchName": sel_br,
+                        "BranchGST": br_info.get('GST', 'N/A'),
+                        "BranchAddr": br_info.get('Address', 'N/A'),
+                        "BankName": br_info.get('Name', 'N/A'),
+                        "BankAC": br_info.get('A_C_No', 'N/A'),
+                        "BankIFSC": br_info.get('IFSC', 'N/A')
+                    }
+                    st.success("LR Saved and Masters Updated!")
+                    st.rerun()
+            else:
+                st.error("Please fill Party Name and Freight!")
+    # --- YE LINE FORM KE BAHAR (LEFT MARGIN SE MATCH KAREIN) ---
     if st.session_state.pdf_ready:
         st.divider()
         st.download_button("📥 DOWNLOAD LR PDF", generate_lr_pdf(st.session_state.pdf_ready, st.session_state.pdf_ready.get('show_fr', True)), f"LR_{st.session_state.pdf_ready['LR No']}.pdf")    
@@ -598,26 +568,6 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
