@@ -108,16 +108,25 @@ def generate_lr_pdf(lr_data, show_fr=True):
     pdf.ln(2)
     pdf.cell(190, 6, f" DELIVERY ADDRESS: {lr_data.get('ShipTo', 'N/A')}", 1, 1, 'L')
 
-    # Bottom Bank & T&C
-    pdf.set_y(-55)
+    # --- BANK DETAILS SECTION (Right after Delivery Address) ---
+    pdf.ln(2)
     pdf.set_font("Arial", 'B', 9)
-    pdf.cell(100, 5, "PAYMENT BANK DETAILS:", 0, 0, 'L')
-    pdf.cell(90, 5, f"FOR {lr_data.get('BranchName', 'VIRAT LOGISTICS')}", 0, 1, 'R')
+    pdf.set_fill_color(240, 240, 240)
+    # Header for Bank Section
+    pdf.cell(100, 7, " PAYMENT BANK DETAILS", 1, 0, 'L', True)
+    pdf.cell(90, 7, f" FOR {lr_data.get('BranchName', 'VIRAT LOGISTICS')}", 1, 1, 'C', True)
     
+    # Actual Bank Data
     pdf.set_font("Arial", '', 8)
-    pdf.cell(100, 4, f"Bank: {lr_data.get('BankName', 'N/A')}", ln=1)
-    pdf.cell(100, 4, f"A/C No: {lr_data.get('BankAC', 'N/A')}", ln=1)
-    pdf.cell(100, 4, f"IFSC Code: {lr_data.get('BankIFSC', 'N/A')}", ln=1)
+    # Bank detail variables
+    b_name = lr_data.get('BankName', 'N/A')
+    b_acc = lr_data.get('BankAC', 'N/A')
+    b_ifsc = lr_data.get('BankIFSC', 'N/A')
+    
+    # Ek hi box mein bank details (Aapki requirement ke mutabik)
+    pdf.cell(100, 10, f" Bank: {b_name} | A/C No: {b_acc} | IFSC: {b_ifsc}", 1, 0, 'L')
+    pdf.set_font("Arial", 'B', 8)
+    pdf.cell(90, 10, " (Computer Generated - No Sign Required)", 1, 1, 'C')
     
     pdf.ln(4)
     pdf.set_font("Arial", 'I', 7)
@@ -293,13 +302,16 @@ elif menu == "2. LR Entry":
                         "LR No": lr_no, "Date": str(d), "Vehicle": v_no, "Cnor": cnor_name,
                         "Cnee": cnee_name, "BillP": bill_pty, "Material": mat, "Pkg": pkg,
                         "NetWt": n_wt, "ChgWt": c_wt, "Freight": fr_amt, "PaidBy": paid_by,
-                        "BranchName": sel_br, 
+                        "BranchName": sel_br,
                         "BranchGST": br_info.get('GST', 'N/A'),
                         "BranchAddr": br_info.get('Address', 'N/A'),
-                        # Yahan column names master se exactly match kiye hain: A_C_No
+                        # Master sheet ke column 'Name' se Bank Name fetch karein
                         "BankName": br_info.get('Name', 'N/A'), 
+                        # Master sheet ke column 'A_C_No' se Account fetch karein
                         "BankAC": br_info.get('A_C_No', 'N/A'), 
-                        "BankIFSC": br_info.get('IFSC', 'N/A'),
+                        # Master sheet ke column 'IFSC' se IFSC fetch karein
+                        "BankIFSC": br_info.get('IFSC', 'N/A')
+                    }
                         "Risk": risk, "From": fl, "To": tl, "ShipTo": ship_to, "InsBy": ins_by,
                         "InvNo": inv_no, "CnorGST": cnor_gst, "CneeGST": cnee_gst
                     }
@@ -575,6 +587,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
