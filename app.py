@@ -41,27 +41,23 @@ def delete_master_row(name_val):
         return True
     except: return False
 
-# --- 2. PROFESSIONAL PDF ENGINE (YOUR ORIGINAL CODE) ---
+# --- 2. PDF ENGINE ---
 def generate_lr_pdf(lr_data, show_fr=True):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 18); pdf.cell(100, 8, "Virat Logistics", ln=1)
     pdf.set_font("Arial", 'I', 8); pdf.cell(190, 5, "Your Goods Are In Good hand..", ln=True)
     pdf.line(10, 30, 200, 30); pdf.ln(8)
-    
     pdf.set_font("Arial", 'B', 9)
     pdf.cell(45, 8, f"LR No: {lr_data.get('LR No', '')}", 1); pdf.cell(45, 8, f"Date: {lr_data.get('Date', '')}", 1)
     pdf.cell(50, 8, f"Vehicle: {lr_data.get('Vehicle', '')}", 1); pdf.cell(50, 8, f"Risk: {lr_data.get('Risk', 'Owner Risk')}", 1, ln=True)
-
     pdf.ln(2); pdf.set_fill_color(240, 240, 240)
     pdf.cell(63, 6, "CONSIGNOR", 1, 0, 'C', True); pdf.cell(63, 6, "CONSIGNEE", 1, 0, 'C', True); pdf.cell(64, 6, "BILLING PARTY", 1, 1, 'C', True)
-    
     pdf.set_font("Arial", '', 8); y_s = pdf.get_y()
     pdf.multi_cell(63, 5, f"{lr_data.get('Cnor', '')}\nGST: {lr_data.get('CnorGST', '')}", 1, 'L'); y_e1 = pdf.get_y()
     pdf.set_y(y_s); pdf.set_x(73); pdf.multi_cell(63, 5, f"{lr_data.get('Cnee', '')}\nGST: {lr_data.get('CneeGST', '')}", 1, 'L'); y_e2 = pdf.get_y()
     pdf.set_y(y_s); pdf.set_x(136); pdf.multi_cell(64, 5, f"{lr_data.get('BillP', '')}\nInv: {lr_data.get('InvNo', '')}", 1, 'L'); y_e3 = pdf.get_y()
     pdf.set_y(max(y_e1, y_e2, y_e3))
-    
     pdf.ln(2); pdf.set_font("Arial", 'B', 8); pdf.cell(190, 6, f"SHIP TO: {lr_data.get('ShipTo', 'N/A')}", 1, ln=True)
     pdf.ln(4); pdf.cell(70, 7, "Material", 1); pdf.cell(30, 7, "Pkg", 1); pdf.cell(30, 7, "Weight", 1); pdf.cell(30, 7, "Route", 1); pdf.cell(30, 7, "Freight", 1, ln=True)
     pdf.set_font("Arial", '', 8); pdf.cell(70, 10, lr_data.get('Material', ''), 1); pdf.cell(30, 10, lr_data.get('Pkg', ''), 1); pdf.cell(30, 10, f"{lr_data.get('NetWt', 0)}/{lr_data.get('ChgWt', 0)}", 1); pdf.cell(30, 10, f"{lr_data.get('From', '')}-{lr_data.get('To', '')}", 1)
@@ -79,7 +75,9 @@ df_t = load("trips")
 if 'reset_trigger' not in st.session_state: st.session_state.reset_trigger = 0
 if 'pdf_ready' not in st.session_state: st.session_state.pdf_ready = None
 
-menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry", "3. LR Register","4. Financials"])
+menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry", "3. LR Register", "4. Financials"])
+
+def gl(t): return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
 
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
@@ -104,8 +102,6 @@ elif menu == "2. LR Entry":
         st.session_state.reset_trigger += 1; st.session_state.pdf_ready = None; st.rerun()
 
     k = st.session_state.reset_trigger
-    def gl(t): return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
-    
     cp1, cp2, cp3 = st.columns(3)
     with cp1:
         sel_br = st.selectbox("Select Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
@@ -143,13 +139,10 @@ elif menu == "2. LR Entry":
             n_wt, c_wt = st.number_input("Net Wt", min_value=0.0), st.number_input("Chg Wt", min_value=0.0)
             fr_amt = st.number_input("Total Freight*", min_value=0.0)
             show_fr = st.checkbox("Show Freight in PDF?", value=True)
-            # --- OWN/HIRE LOGIC RE-INSTATED ---
             if v_cat == "Own Fleet": 
-                dsl, toll, drv = st.number_input("Diesel"), st.number_input("Toll"), st.number_input("Driver Adv")
-                hc = 0.0
+                dsl, toll, drv = st.number_input("Diesel"), st.number_input("Toll"), st.number_input("Driver Adv"); hc = 0.0
             else: 
-                hc = st.number_input("Hired Charges")
-                dsl = toll = drv = 0.0
+                hc = st.number_input("Hired Charges"); dsl = toll = drv = 0.0
 
         if st.form_submit_button("🚀 SAVE LR"):
             if bill_pty != "Select" and fr_amt > 0:
@@ -167,69 +160,49 @@ elif menu == "3. LR Register":
     if not df_t.empty:
         for i, row in df_t.iterrows():
             with st.expander(f"LR: {row.get('LR No', 'N/A')} | {row.get('Consignee', 'N/A')}"):
-                
-elif menu == "4. Financials":
-    st.header("💰 Financial Accounting")
-    tab1, tab2 = st.tabs(["Payment Entry", "Party Ledger"])
-
-    with tab1:
-        st.subheader("Add Transaction")
-        with st.form("pay_form", clear_on_submit=True):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                p_date = st.date_input("Transaction Date", date.today())
-                # Party aur Broker dono ki list merge karke di hai
-                all_accs = gl("Party") + gl("Broker")
-                acc_name = st.selectbox("Select Account", ["Select"] + all_accs)
-            with col2:
-                p_type = st.selectbox("Payment Type", ["Receipt (In)", "Payment (Out)"])
-                amt = st.number_input("Amount", min_value=0.0)
-            with col3:
-                p_mode = st.selectbox("Mode", ["Cash", "NEFT", "Cheque", "UPI"])
-                ref = st.text_input("Ref/Cheque No")
-            
-            if st.form_submit_button("Save Transaction"):
-                if acc_name != "Select" and amt > 0:
-                    pay_row = [str(p_date), acc_name, p_type, amt, p_mode, ref]
-                    if save("payments", pay_row):
-                        st.success("Payment Recorded!")
-                        st.rerun()
-
-    with tab2:
-        st.subheader("Statement of Account")
-        sel_acc = st.selectbox("Select Party/Broker for Ledger", ["Select"] + gl("Party") + gl("Broker"))
-        
-        if sel_acc != "Select":
-            # 1. Trips (Bills) nikalna
-            bills = df_t[df_t['Billing Party'] == sel_acc]
-            total_billed = bills['Total Freight'].sum() if not bills.empty else 0
-            
-            # 2. Payments nikalna
-            df_p = load("payments")
-            if not df_p.empty:
-                # Receipt (+) aur Payment (-) ka logic
-                acc_pays = df_p[df_p['Account_Name'] == sel_acc]
-                rec = acc_pays[acc_pays['Type'] == "Receipt (In)"]['Amount'].sum()
-                paid = acc_pays[acc_pays['Type'] == "Payment (Out)"]['Amount'].sum()
-            else:
-                rec = paid = 0
-            
-            # 3. Calculation
-            balance = total_billed - rec + paid # Simple formula
-            
-            # Display Dashboard
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Total Billed", f"₹{total_billed:,}")
-            c2.metric("Total Received/Paid", f"₹{rec + paid:,}")
-            c3.metric("Outstanding Balance", f"₹{balance:,}", delta_color="inverse")
-            
-            st.divider()
-            st.write(f"Recent Transactions for {sel_acc}")
-            st.dataframe(acc_pays if not df_p.empty else "No payments found")
-
-
-                
                 st.download_button("📥 PDF", generate_lr_pdf(row.to_dict(), True), f"LR_{row.get('LR No','VL')}.pdf", key=f"p_{i}")
         st.dataframe(df_t)
 
+elif menu == "4. Financials":
+    st.header("⚖️ Master Ledger & Financials")
+    df_p = load("payments")
+    all_accs = sorted(gl("Party") + gl("Broker"))
+    
+    t1, t2 = st.tabs(["💸 New Payment/Receipt", "📖 Account Ledger"])
+    
+    with t1:
+        with st.form("p_form", clear_on_submit=True):
+            f1, f2, f3 = st.columns(3)
+            with f1: p_d = st.date_input("Date", date.today()); acc = st.selectbox("Account*", ["Select"]+all_accs)
+            with f2: p_t = st.selectbox("Type*", ["Receipt (Paisa Aaya)", "Payment (Diya)"]); p_a = st.number_input("Amount*", min_value=0.0)
+            with f3: p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque"]); p_r = st.text_input("Ref/Remarks")
+            if st.form_submit_button("Save Transaction"):
+                if acc != "Select" and p_a > 0:
+                    c_t = "Receipt (In)" if "Receipt" in p_t else "Payment (Out)"
+                    if save("payments", [str(p_d), acc, c_t, p_a, p_m, p_r]): st.success("Saved!"); st.rerun()
 
+    with t2:
+        sel_a = st.selectbox("Select Account", ["Select"]+all_accs)
+        if sel_a != "Select":
+            # Bills calculation
+            t_bill = df_t[df_t['Billing Party'] == sel_a]['Total Freight'].sum() if not df_t.empty else 0
+            # Broker dues calculation
+            b_c = 'Broker*' if 'Broker*' in df_t.columns else 'Broker'
+            t_hire = df_t[df_t[b_c] == sel_a]['Hired Charges'].sum() if (not df_t.empty and b_c in df_t.columns) else 0
+            # Cash history
+            r_c = p_c = 0; a_h = pd.DataFrame()
+            if not df_p.empty:
+                a_h = df_p[df_p['Account_Name'] == sel_a]
+                r_c = a_h[a_h['Type'] == "Receipt (In)"]['Amount'].sum()
+                p_c = a_h[a_h['Type'] == "Payment (Out)"]['Amount'].sum()
+            
+            bal = (t_bill + p_c) - (t_hire + r_c)
+            st.divider()
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Billed Freight", f"Rs {t_bill:,.0f}"); m2.metric("Broker Hired", f"Rs {t_hire:,.0f}")
+            m3.metric("Recd Cash", f"Rs {r_c:,.0f}"); m4.metric("Paid Cash", f"Rs {p_c:,.0f}")
+            
+            if bal > 0: st.error(f"🔴 YOU RECEIVE: Rs {abs(bal):,.2f}")
+            elif bal < 0: st.success(f"🟢 YOU PAY: Rs {abs(bal):,.2f}")
+            else: st.info("⚪ SETTLED")
+            st.dataframe(a_h)
