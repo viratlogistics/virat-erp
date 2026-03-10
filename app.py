@@ -225,18 +225,18 @@ elif menu == "2. LR Entry":
             fr_amt = st.number_input("Total Freight*", min_value=0.0)
             show_fr = st.checkbox("Show Freight in PDF?", value=True)
             if v_cat == "Own Fleet": 
-                dsl, toll, drv = st.number_input("Diesel"), st.number_input("Toll"), st.number_input("Driver Adv")
-                hc = 0.0
+    dsl, toll, drv_adv = st.number_input("Diesel"), st.number_input("Toll"), st.number_input("Driver Adv")
+    hc = 0.0
             else: 
                 hc = st.number_input("Hired Charges")
                 dsl = toll = drv = 0.0
 
         if st.form_submit_button("🚀 SAVE LR"):
-            if bill_pty != "Select" and fr_amt > 0:
-                # 1. Calculation Logic
+            if bill_pty and bill_pty != "Select" and fr_amt > 0:
+                # 1. Calculation (Sahi variables: dsl, toll, drv_adv)
                 prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl + toll + drv_adv)))
                 
-                # 2. PDF Ready Data (Master se auto-fetch details ke saath)
+                # 2. PDF Ready Data (Master se details ke saath)
                 st.session_state.pdf_ready = {
                     "LR No": lr_no, "Date": str(d), "Vehicle": v_no,
                     "BranchName": sel_br,
@@ -250,15 +250,15 @@ elif menu == "2. LR Entry":
                     "InvNo": inv_no, "ShipTo": tl, "Risk": risk
                 }
                 
-                # 3. Trips Sheet Row (Sahi variables ke saath)
-                # Note: 'ins_by' ki jagah 'risk' aur 'sel_driver' ki jagah 'sel_drv' use kiya hai
+                # 3. Trips Sheet Row (Sahi sequence aur variable names)
+                # Note: sel_drv aur sel_br upar wale dropdown se aa rahe hain
                 row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, n_wt, pkg, risk, mat, "N/A", v_no, sel_drv, sel_br, fl, tl, fr_amt, hc, dsl, drv_adv, toll, 0, prof]
                 
                 if save("trips", row):
                     st.success("LR Saved Successfully!")
                     st.rerun()
             else:
-                st.error("Please fill Billing Party and Freight!")
+                st.error("Please fill Billing Party and Freight!")`
 
     if st.session_state.pdf_ready:
         st.download_button("📥 DOWNLOAD PDF", generate_lr_pdf(st.session_state.pdf_ready, st.session_state.pdf_ready.get('show_fr', True)), f"LR_{st.session_state.pdf_ready['LR No']}.pdf")
@@ -473,6 +473,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
