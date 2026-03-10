@@ -303,17 +303,35 @@ elif menu == "2. LR Entry":
 
                     # PDF DATA BUNDLE
                     st.session_state.pdf_ready = {
-                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, "Cnor": cnor_name, "CnorGST": cnor_gst, 
-                        "Cnee": cnee_name, "CneeGST": cnee_gst, "BillP": bill_pty, "From": fl, "To": tl, 
-                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, "Freight": fr_amt, 
-                        "PaidBy": paid_by, "Risk": risk, "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr,
-                        "InsBy": ins_by, "BranchName": sel_br,
-                        "BranchGST": br_info.get('GST', 'N/A'),
-                        "BranchAddr": br_info.get('Address', 'N/A'),
-                        "BankName": br_info.get('Name', 'N/A'),
-                        "BankAC": br_info.get('A_C_No', 'N/A'),
-                        "BankIFSC": br_info.get('IFSC', 'N/A')
-                    }
+    "LR No": lr_no, 
+    "Date": str(d), 
+    "Vehicle": v_no,
+    "Cnor": cnor_name, 
+    "CnorGST": cnor_gst,
+    "Cnee": cnee_name, 
+    "CneeGST": cnee_gst,
+    "BillP": bill_pty, 
+    "From": fl, 
+    "To": tl,
+    "Material": mat, 
+    "Pkg": pkg, 
+    "NetWt": n_wt, 
+    "ChgWt": c_wt,
+    "Freight": fr_amt, 
+    "PaidBy": paid_by, 
+    "Risk": risk,
+    "InvNo": inv_no, 
+    "ShipTo": ship_to, 
+    "show_fr": show_fr,
+    "InsBy": ins_by,
+    "BranchName": sel_br,
+    # Ye keys aapki Sheet ke column names se match honi chahiye
+    "BranchGST": br_info.get('GST', 'N/A'),
+    "BranchAddr": br_info.get('Address', 'N/A'),
+    "BankName": br_info.get('Name', 'N/A'),
+    "BankAC": br_info.get('A_C_No', 'N/A'), # Check if it is 'A/C No' or 'A_C_No'
+    "BankIFSC": br_info.get('IFSC', 'N/A')
+}
                     st.success("LR Saved!")
                     st.rerun()
 
@@ -577,6 +595,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
