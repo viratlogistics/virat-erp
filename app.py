@@ -166,11 +166,11 @@ elif menu == "3. LR Register":
 elif menu == "4. Financials":
     st.header("⚖️ Master Ledger & Financials")
     
-    # 1. Sync Data
+    # 1. Sync Data from Sheets
     df_p = load("payments")
     df_t = load("trips")
     
-    # Cleaning columns to remove any hidden spaces
+    # Cleaning columns (Extra spaces ya hidden characters hatane ke liye)
     if not df_t.empty: df_t.columns = [str(c).strip() for c in df_t.columns]
     if not df_p.empty: df_p.columns = [str(c).strip() for c in df_p.columns]
         
@@ -179,6 +179,7 @@ elif menu == "4. Financials":
     tab_p1, tab_p2 = st.tabs(["💸 New Payment/Receipt", "📖 Account Statement"])
     
     with tab_p1:
+        st.subheader("Add New Transaction")
         with st.form("p_form", clear_on_submit=True):
             f1, f2, f3 = st.columns(3)
             with f1: 
@@ -194,52 +195,58 @@ elif menu == "4. Financials":
             if st.form_submit_button("Save Transaction"):
                 if acc != "Select" and p_a > 0:
                     c_t = "Receipt (In)" if "Receipt" in p_t else "Payment (Out)"
-                    # Matching your sheet: Date, Account_Name, Type, Amount, Mode, Ref_No
+                    # Headers: Date, Account_Name, Type, Amount, Mode, Ref_No
                     if save("payments", [str(p_d), acc, c_t, p_a, p_m, p_r]): 
                         st.success(f"Entry Saved for {acc}"); st.rerun()
+                else:
+                    st.error("Account aur Amount check karein!")
 
     with tab_p2:
-        sel_a = st.selectbox("Choose Party/Broker for Ledger", ["Select"] + all_accs)
+        st.subheader("Ledger Report")
+        sel_a = st.selectbox("Choose Party/Broker", ["Select"] + all_accs)
+        
         if sel_a != "Select":
-            # --- CALCULATIONS BASED ON YOUR EXACT HEADERS ---
+            # --- TRIPS CALCULATION (Income/Expense) ---
+            # Receivable: From 'Freight' where 'Party' matches
+            t_bill = df_t[df_t['Party'] == sel_a]['Freight'].sum() if ('Party' in df_t.columns and 'Freight' in df_t.columns) else 0
             
-            # 1. Receivable: From 'Freight' column where 'Party' matches
-            # Headers used: Party, Freight
-            t_bill = df_t[df_t['Party'] == sel_a]['Freight'].sum() if not df_t.empty else 0
-
-            # 2. Payable: From 'HiredCharges' column where 'Broker' matches
-            # Headers used: Broker, HiredCharges
-            t_hire = df_t[df_t['Broker'] == sel_a]['HiredCharges'].sum() if not df_t.empty else 0
+            # Payable: From 'HiredCharges' where 'Broker' matches
+            t_hire = df_t[df_t['Broker'] == sel_a]['HiredCharges'].sum() if ('Broker' in df_t.columns and 'HiredCharges' in df_t.columns) else 0
             
-            # 3. Cash Flow from 'payments' sheet
-            # Headers used: Account_Name, Type, Amount
+            # --- PAYMENTS CALCULATION (Cash Flow) ---
             r_c = p_c = 0
             a_h = pd.DataFrame()
-            if not df_p.empty:
-                a_h = df_p[df_p['Account_Name'] == sel_acc if 'sel_acc' in locals() else sel_a]
+            
+            # Checking for 'Account_Name' in payments sheet
+            if not df_p.empty and 'Account_Name' in df_p.columns:
+                a_h = df_p[df_p['Account_Name'] == sel_a]
                 if not a_h.empty:
+                    # 'Type' aur 'Amount' columns check karein
                     r_c = a_h[a_h['Type'] == "Receipt (In)"]['Amount'].sum()
                     p_c = a_h[a_h['Type'] == "Payment (Out)"]['Amount'].sum()
-            
-            # Net Balance: (Billed + Paid) - (Hired + Received)
+            elif not df_p.empty and 'Account_Name' not in df_p.columns:
+                st.error("Payments sheet mein 'Account_Name' header nahi mila!")
+
+            # Net Balance Calculation
+            # Balance = (Billed Freight + Humne Jo Paisa Diya) - (Broker ka Bhada + Humne Jo Paisa Liya)
             bal = (t_bill + p_c) - (t_hire + r_c)
             
             st.divider()
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Billed Freight (Aaya)", f"₹{t_bill:,.0f}")
-            m2.metric("Broker Hired (Gaya)", f"₹{t_hire:,.0f}")
-            m3.metric("Cash Received", f"₹{r_c:,.0f}")
-            m4.metric("Cash Paid", f"₹{p_c:,.0f}")
+            m1.metric("Billed (Freight)", f"₹{t_bill:,.0f}")
+            m2.metric("Hired (Broker)", f"₹{t_hire:,.0f}")
+            m3.metric("Recd (Cash)", f"₹{r_c:,.0f}")
+            m4.metric("Paid (Cash)", f"₹{p_c:,.0f}")
             
             st.divider()
             if bal > 0: 
                 st.error(f"### 🔴 PAISA LENA HAI: ₹{abs(bal):,.2f}")
-                st.caption(f"Party owes you ₹{abs(bal):,.2f}")
+                st.caption(f"Net Receivable from {sel_a}")
             elif bal < 0: 
                 st.success(f"### 🟢 PAISA DENA HAI: ₹{abs(bal):,.2f}")
-                st.caption(f"You owe Broker ₹{abs(bal):,.2f}")
+                st.caption(f"Net Payable to {sel_a}")
             else: 
                 st.info("### ⚪ ACCOUNT SETTLED (NIL)")
             
-            st.write("#### Transaction History")
+            st.write("#### Transaction Details")
             st.dataframe(a_h, use_container_width=True)
