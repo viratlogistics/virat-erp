@@ -266,50 +266,9 @@ if st.session_state.pdf_ready:
 elif menu == "3. LR Register":
     st.title("📋 LR REGISTER")
     if not df_t.empty:
-        df_t.columns = [str(c).strip() for c in df_t.columns]
         for i, row in df_t.iterrows():
-            # Masters se branch details uthana
-            br_name = row.get('Branch', 'Select')
-            br_row = df_m[df_m['Name'] == br_name]
-            br_info = br_row.iloc[0] if not br_row.empty else {}
-
-            # Dictionary mapping (Clean)
-            lr_data = {
-                "LR No": row.get('LR No', 'N/A'),
-                "Date": row.get('Date', ''),
-                "Vehicle": row.get('Vehicle', ''),
-                "Risk": row.get('Risk', 'At Owner Risk'),
-                "Cnor": row.get('Consignor', 'N/A'),
-                "Cnee": row.get('Consignee', 'N/A'),
-                "BillP": row.get('Party', 'N/A'),
-                "Material": row.get('Material', 'N/A'),
-                "Pkg": row.get('Pkg', 'N/A'),
-                "NetWt": row.get('NetWt', 0),
-                "ChgWt": row.get('ChgWt', 0),
-                "Freight": row.get('Freight', 0),
-                "PaidBy": row.get('PaidBy', 'N/A'),
-                "From": row.get('From', ''),
-                "To": row.get('To', ''),
-                "ShipTo": row.get('ShipTo', 'N/A'),
-                "BranchName": br_name,
-                "BranchAddr": br_info.get('Address', 'N/A'),
-                "BranchGST": br_info.get('GST', 'N/A'),
-                "BankName": br_info.get('Name', 'N/A'),
-                "BankAC": br_info.get('A_C_No', 'N/A'),
-                "BankIFSC": br_info.get('IFSC', 'N/A')
-            }
-
-            with st.expander(f"LR: {lr_data['LR No']} | {lr_data['Cnee']}"):
-                try:
-                    pdf_out = generate_lr_pdf(lr_data, True)
-                    st.download_button(
-                        label="📥 DOWNLOAD PDF",
-                        data=pdf_out,
-                        file_name=f"LR_{lr_data['LR No']}.pdf",
-                        key=f"dl_btn_{i}"
-                    )
-                except Exception as e:
-                    st.error(f"Error: {e}")
+            with st.expander(f"LR: {row.get('LR No', 'N/A')} | {row.get('Consignee', 'N/A')}"):
+                st.download_button("📥 PDF", generate_lr_pdf(row.to_dict(), True), f"LR_{row.get('LR No','VL')}.pdf", key=f"p_{i}")
         st.dataframe(df_t)
         
 elif menu == "4. Financials":
@@ -514,6 +473,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
