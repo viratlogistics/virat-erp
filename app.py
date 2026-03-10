@@ -422,54 +422,7 @@ elif menu == "7. Driver Khata":
                         st.success(f"Saved for {d_name}"); st.rerun()
 
     with tab_settle:
-        sel_d = st.selectbox("Choose Driver for Final Settlement", ["Select"] + drivers)
-        if sel_d != "Select":
-            st.divider()
-            
-            # --- 1. AUTO-FETCH FROM TRIPS (The Magic Part) ---
-            st.write(f"### 🔍 Trip Summary for {sel_d} (From LR Entries)")
-            if not df_t.empty:
-                df_t.columns = [str(c).strip() for c in df_t.columns]
-                # Filter trips for this driver
-                d_trips = df_t[df_t['Driver'] == sel_d].copy()
-                
-                if not d_trips.empty:
-                    # Convert to numeric
-                    for col in ['Diesel', 'DriverExp', 'Toll', 'Other']:
-                        d_trips[col] = pd.to_numeric(d_trips[col], errors='coerce').fillna(0)
-                    
-                    t_diesel = d_trips['Diesel'].sum()
-                    t_adv = d_trips['DriverExp'].sum()
-                    t_toll = d_trips['Toll'].sum()
-                    trip_count = len(d_trips)
-                    
-                    c1, c2, c3, c4 = st.columns(4)
-                    c1.metric("Total Trips", trip_count)
-                    c2.metric("Total Diesel (Trips)", f"₹{t_diesel:,.0f}")
-                    c3.metric("Total Advance (Trips)", f"₹{t_adv:,.0f}")
-                    c4.metric("Total Toll/Other", f"₹{t_toll:,.0f}")
-                    
-                    st.write("---")
-                else:
-                    st.info("Is driver ki koi trip entry nahi mili.")
-
-            # --- 2. PERSONAL KHATA (Salary/Extra) ---
-            st.write(f"### 📜 Personal Ledger (Salary/Extra Advance)")
-            r_salary = 0
-            if not df_dk.empty:
-                df_dk.columns = [str(c).strip() for c in df_dk.columns]
-                d_hist = df_dk[df_dk['Driver_Name'] == sel_d]
-                st.dataframe(d_hist, use_container_width=True)
-                r_salary = pd.to_numeric(d_hist['Amount'], errors='coerce').sum()
-            
-            # Final Calculation
-            # Total Due = Trips Advance + Salary/Extra Advance
-            final_due = (t_adv if 't_adv' in locals() else 0) + r_salary
-            
-            st.error(f"## 🚩 Total Payable/Due by Driver: ₹{final_due:,.2f}")
-            st.caption("Yeh amount Driver ko di gayi total cash (Trips + Salary + Extra) hai.")
-            with tab_settle:
-        # Dhyaan dein: Ye line 'with' ke muqable 4 spaces aage hai
+        # Dhyaan dein: Ye line 'with' se exactly 4 spaces aage hai
         sel_d = st.selectbox("Choose Driver for Final Settlement", ["Select"] + drivers)
         
         if sel_d != "Select":
@@ -477,35 +430,45 @@ elif menu == "7. Driver Khata":
             
             # --- 1. AUTO-FETCH FROM TRIPS ---
             st.write(f"### 🔍 Trip Summary for {sel_d}")
-            # Ensure df_t column cleaning
             if not df_t.empty:
+                # Column cleaning
                 df_t.columns = [str(c).strip() for c in df_t.columns]
+                # Filter trips for selected driver
                 d_trips = df_t[df_t['Driver'] == sel_d].copy()
                 
                 if not d_trips.empty:
+                    # Number conversion for math
                     for c in ['Diesel', 'DriverExp', 'Toll']:
-                        d_trips[c] = pd.to_numeric(d_trips[c], errors='coerce').fillna(0)
+                        if c in d_trips.columns:
+                            d_trips[c] = pd.to_numeric(d_trips[c], errors='coerce').fillna(0)
                     
-                    t_adv = d_trips['DriverExp'].sum()
-                    t_dsl = d_trips['Diesel'].sum()
+                    t_adv = d_trips['DriverExp'].sum() if 'DriverExp' in d_trips.columns else 0
+                    t_dsl = d_trips['Diesel'].sum() if 'Diesel' in d_trips.columns else 0
                     
                     c1, c2 = st.columns(2)
-                    c1.metric("Current Trip Advance", f"₹{t_adv:,.0f}")
-                    c2.metric("Current Trip Diesel", f"₹{t_dsl:,.0f}")
+                    c1.metric("Trip Advance (Pending)", f"₹{t_adv:,.0f}")
+                    c2.metric("Trip Diesel (Total)", f"₹{t_dsl:,.0f}")
 
                     # --- IMPORT BUTTON ---
                     if st.button(f"📥 Import ₹{t_adv} to Personal Ledger"):
+                        # Save entry to driver_khata sheet
                         if save("driver_khata", [str(date.today()), sel_d, "Trips", "Debit", t_adv, "Auto-Import from Trips"]):
-                            st.success("Import Successful!"); st.rerun()
+                            st.success("Trip Advance Imported Successfully!"); st.rerun()
                 else:
                     st.info("Is driver ki koi trip history nahi mili.")
 
-            # --- 2. PERSONAL LEDGER ---
+            # --- 2. PERSONAL LEDGER (SALARY/EXTRA) ---
             st.write(f"### 📜 Personal Ledger (Salary/Extra)")
             if not df_dk.empty:
                 df_dk.columns = [str(c).strip() for c in df_dk.columns]
                 d_hist = df_dk[df_dk['Driver_Name'] == sel_d]
-                st.dataframe(d_hist, use_container_width=True)
+                
+                # Metrics for Personal Khata
+                total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
+                st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
+                
+                st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
