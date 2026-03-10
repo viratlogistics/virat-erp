@@ -6,44 +6,61 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json, io
 
-# --- 1. CONFIG & CONNECTION ---
-st.set_page_config(page_title="Virat Logistics ERP", layout="wide")
+elif menu == "1. Masters Setup":
+    st.header("🏗️ Master Management")
+    
+    # 1. Category Selection
+    m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver"])
+    
+    with st.form("m_form", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        
+        # Default empty values
+        name, gst, addr, cont, ac, ifsc, d_name, d_no = "", "", "", "", "", "", "", ""
 
-@st.cache_resource
-def get_sh():
-    try:
-        info = json.loads(st.secrets["gcp_service_account"]["json_key"])
-        creds = Credentials.from_service_account_info(info, scopes=["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"])
-        return gspread.authorize(creds).open("Virat_Logistics_Data")
-    except:
-        return None
+        if m_type == "Branch (Company)":
+            with col1:
+                name = st.text_input("Branch Name (e.g. Virat Kim)")
+                gst = st.text_input("Branch GST")
+                addr = st.text_area("Branch Address")
+            with col2:
+                ac = st.text_input("Bank A/C No")
+                ifsc = st.text_input("Bank IFSC")
+                cont = st.text_input("Branch Contact No")
 
-sh = get_sh()
+        elif m_type in ["Party", "Broker"]:
+            with col1:
+                name = st.text_input(f"{m_type} Name")
+                gst = st.text_input("GST Number")
+            with col2:
+                addr = st.text_area("Full Address")
+                cont = st.text_input("Contact Number")
 
-def load(name):
-    try:
-        ws = sh.worksheet(name)
-        df = pd.DataFrame(ws.get_all_records())
-        df.columns = [str(c).strip() for c in df.columns]
-        return df
-    except:
-        return pd.DataFrame()
+        elif m_type == "Driver":
+            with col1:
+                d_name = st.text_input("Driver Full Name")
+            with col2:
+                d_no = st.text_input("License Number / Mobile")
 
-def save(name, row):
-    try:
-        sh.worksheet(name).append_row(row, value_input_option='USER_ENTERED')
-        return True
-    except:
-        return False
+        elif m_type == "Vehicle":
+            name = st.text_input("Vehicle Number (e.g. GJ05BX1234)")
 
-def delete_master_row(name_val):
-    try:
-        ws = sh.worksheet("masters")
-        cell = ws.find(name_val)
-        ws.delete_rows(cell.row)
-        return True
-    except:
-        return False
+        # Save Button
+        if st.form_submit_button(f"Save {m_type}"):
+            if name or d_name:
+                # Order: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name, Driver_No
+                new_row = [m_type, name, gst, addr, cont, ac, ifsc, d_name, d_no]
+                if save("masters", new_row):
+                    st.success(f"{m_type} Saved!"); st.rerun()
+            else:
+                st.error("Please enter Name!")
+
+    st.divider()
+    # Display existing masters
+    if not df_m.empty:
+        st.write(f"### Current {m_type} List")
+        curr_m = df_m[df_m['Type'] == m_type]
+        st.dataframe(curr_m.dropna(axis=1, how='all'), use_container_width=True)
 
 # --- 2. PDF ENGINE ---
 def generate_lr_pdf(lr_data, show_fr=True):
@@ -410,3 +427,4 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
