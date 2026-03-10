@@ -333,10 +333,31 @@ elif menu == "3. LR Register":
     st.title("📋 LR REGISTER")
     if not df_t.empty:
         for i, row in df_t.iterrows():
-            with st.expander(f"LR: {row.get('LR No', 'N/A')} | {row.get('Consignee', 'N/A')}"):
-                st.download_button("📥 PDF", generate_lr_pdf(row.to_dict(), True), f"LR_{row.get('LR No','VL')}.pdf", key=f"p_{i}")
-        st.dataframe(df_t)
+            # Dictionary taiyar karein jo generate_lr_pdf ko chahiye
+            lr_dict = row.to_dict()
+            
+            # Agar trips sheet mein branch details nahi hain, toh masters se fetch karein
+            br_name = row.get('Branch', 'Virat Logistics')
+            br_row = df_m[df_m['Name'] == br_name]
+            br_info = br_row.iloc[0] if not br_row.empty else {}
 
+            # Dictionary mein Branch/Bank keys add karein jo PDF mang raha hai
+            lr_dict.update({
+                "BranchName": br_name,
+                "BranchAddr": br_info.get('Address', 'N/A'),
+                "BranchGST": br_info.get('GST', 'N/A'),
+                "BankName": br_info.get('Name', 'N/A'),
+                "BankAC": br_info.get('A_C_No', 'N/A'),
+                "BankIFSC": br_info.get('IFSC', 'N/A'),
+                "Cnor": row.get('Consignor', ''),
+                "Cnee": row.get('Consignee', '') # Ensure names match your generate_lr_pdf logic
+            })
+
+            with st.expander(f"LR: {row.get('LR No', 'N/A')} | {row.get('Consignee', 'N/A')}"):
+                # Ab lr_dict pass karein row.to_dict() ki jagah
+                st.download_button("📥 DOWNLOAD PDF", generate_lr_pdf(lr_dict, True), f"LR_{row.get('LR No','VL')}.pdf", key=f"p_{i}")
+        
+        st.dataframe(df_t)
 elif menu == "4. Financials":
     st.header("⚖️ Party & Broker Full Statement")
     df_p = load("payments")
@@ -539,6 +560,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
