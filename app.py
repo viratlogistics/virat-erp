@@ -311,7 +311,6 @@ elif menu == "2. LR Entry":
                         "BankAC": br_info.get('A_C_No', 'N/A'), 
                         # Master sheet ke column 'IFSC' se IFSC fetch karein
                         "BankIFSC": br_info.get('IFSC', 'N/A')
-                    }
                         "Risk": risk, "From": fl, "To": tl, "ShipTo": ship_to, "InsBy": ins_by,
                         "InvNo": inv_no, "CnorGST": cnor_gst, "CneeGST": cnee_gst
                     }
@@ -587,6 +586,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
