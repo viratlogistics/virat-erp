@@ -75,10 +75,9 @@ df_t = load("trips")
 if 'reset_trigger' not in st.session_state: st.session_state.reset_trigger = 0
 if 'pdf_ready' not in st.session_state: st.session_state.pdf_ready = None
 
-menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry", "3. LR Register", "4. Financials"])
+menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry", "3. LR Register", "4. Financials", "5. Business Insights"])
 
 def gl(t): return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
-
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     m_type = st.selectbox("Category", ["Party", "Broker", "Vehicle", "Driver", "Bank", "Branch"])
@@ -256,3 +255,4 @@ elif menu == "4. Financials":
             
             st.write("#### Detailed History")
             st.dataframe(history, use_container_width=True)
+
