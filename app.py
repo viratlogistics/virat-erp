@@ -257,129 +257,92 @@ elif menu == "4. Financials":
 elif menu == "5. Business Insights":
     st.header("📊 Business Dashboard & Own Fleet Analytics")
     
-    # Fresh Data Load
+    # 1. Fresh Data Load
     df_t = load("trips")
-    df_oe = load("office_expenses") # Office expenses load karne ke liye
+    df_oe = load("office_expenses")
     
     if not df_t.empty:
-        # Data Cleaning
+        # Data Cleaning: Headers aur Numbers fix karna
         df_t.columns = [str(c).strip() for c in df_t.columns]
-        num_cols = ['Freight', 'HiredCharges', 'Diesel', 'DriverExp', 'Toll', 'Other', 'Profit']
+        num_cols = ['Freight', 'HiredCharges', 'Diesel', 'DriverExp', 'Toll', 'Other']
         for col in num_cols:
             if col in df_t.columns:
                 df_t[col] = pd.to_numeric(df_t[col], errors='coerce').fillna(0)
 
-        # Filter for OWN FLEET ONLY
-        df_own = df_t[df_t['Type'] == "Own Fleet"].copy()
-        
-        tab_sum, tab_own = st.tabs(["📈 Business Overview", "🚛 Own Vehicle Profitability"])
+        # Office Expense Total Calculation
+        off_total = 0
+        if not df_oe.empty:
+            df_oe.columns = [str(c).strip() for c in df_oe.columns]
+            off_total = pd.to_numeric(df_oe['Amount'], errors='coerce').fillna(0).sum()
 
-        with tab_sum:
-            st.subheader("Total Company Performance")
-            total_rev = df_t['Freight'].sum()
-            total_cost = df_t[['HiredCharges', 'Diesel', 'DriverExp', 'Toll', 'Other']].sum().sum()
-            net_profit = total_rev - total_cost
-            
-           m1, m2, m3 = st.columns(3)
-        m1.metric("Total Revenue", f"₹{total_rev:,.0f}")
-        m2.metric("Total Expenses", f"₹{(trip_costs + office_total):,.0f}")
-        m3.metric("Final Net Profit", f"₹{net_profit:,.0f}", delta=f"Office Exp: ₹{office_total:,.0f}", delta_color="inverse")
+        # Business KPI Calculations
+        t_rev = df_t['Freight'].sum()
+        # Trip specific costs (Diesel + Toll + Driver + Broker Dues)
+        trip_costs = df_t[['HiredCharges', 'Diesel', 'DriverExp', 'Toll', 'Other']].sum().sum()
+        # Final Profit = Total Freight - (Trip Costs + Office Costs)
+        f_profit = t_rev - (trip_costs + off_total)
         
-        st.divider() # <--- Ensure this is exactly under 'm1, m2, m3'
+        # --- UI LAYOUT ---
+        t_sum, t_own = st.tabs(["📈 Overview", "🚛 Own Vehicle Profit"])
 
-        c_left, c_right = st.columns(2)
-        with c_left:
-            st.write("#### 🏆 Top 5 Parties (Revenue)")
-        
-        st.divider() # Yeh line m1, m2, m3 waali line ki seedh mein honi chahiye
-
-        # --- Baaki ka code iske niche ---
-        c_left, c_right = st.columns(2)
+        with t_sum:
+            st.subheader("Total Performance Summary")
+            # Metrics Row
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total Revenue", f"₹{t_rev:,.0f}")
+            m2.metric("Total Expenses (Trip+Off)", f"₹{(trip_costs + off_total):,.0f}")
+            m3.metric("Final Net Profit", f"₹{f_profit:,.0f}", delta=f"Office: ₹{off_total:,.0f}", delta_color="inverse")
             
             st.divider()
             
-            c_left, c_right = st.columns(2)
-            with c_left:
-                st.write("#### 🏆 Top 5 Parties (Revenue)")
-                party_data = df_t.groupby('Party')['Freight'].sum().sort_values(ascending=False).head(5)
-                st.bar_chart(party_data)
-            
-            with c_right:
+            cl, cr = st.columns(2)
+            with cl:
+                st.write("#### 🏆 Top Parties (By Revenue)")
+                p_data = df_t.groupby('Party')['Freight'].sum().sort_values(ascending=False).head(5)
+                st.bar_chart(p_data)
+            with cr:
                 st.write("#### 📊 Trip Distribution & Revenue")
-                # Type ke hisab se Count aur Amount dono nikalna
-                dist_data = df_t.groupby('Type').agg({
-                    'Type': 'count',
-                    'Freight': 'sum'
-                }).rename(columns={'Type': 'Total Trips', 'Freight': 'Total Freight'})
-                
-                # Table format mein display karna
-                st.dataframe(dist_data.style.format({'Total Freight': '₹{:,.0f}'}), use_container_width=True)
-                
-                # Chota comparison text
-                own_f = dist_data.loc['Own Fleet', 'Total Freight'] if 'Own Fleet' in dist_data.index else 0
-                mkt_f = dist_data.loc['Market Hired', 'Total Freight'] if 'Market Hired' in dist_data.index else 0
-                st.info(f"Own Revenue: ₹{own_f:,.0f} | Market Revenue: ₹{mkt_f:,.0f}")
-        with tab_own:
+                dist = df_t.groupby('Type').agg({'Type': 'count', 'Freight': 'sum'}).rename(columns={'Type': 'Trips', 'Freight': 'Revenue'})
+                st.dataframe(dist.style.format({'Revenue': '₹{:,.0f}'}), use_container_width=True)
+
+        with t_own:
+            # Filter for Own Fleet only
+            df_own = df_t[df_t['Type'] == "Own Fleet"].copy()
             if not df_own.empty:
-                st.subheader("🚛 Own Vehicle Profitability Analysis")
-                
-                # Grouping for Vehicle Analytics
-                v_analysis = df_own.groupby('Vehicle').agg({
-                    'Freight': 'sum',
-                    'Diesel': 'sum',
-                    'DriverExp': 'sum',
-                    'Toll': 'sum',
+                st.subheader("🚛 Individual Own Vehicle Performance")
+                # Grouping by Vehicle
+                v_an = df_own.groupby('Vehicle').agg({
+                    'Freight': 'sum', 
+                    'Diesel': 'sum', 
+                    'DriverExp': 'sum', 
+                    'Toll': 'sum', 
                     'Other': 'sum'
                 }).reset_index()
-
-                # 1. KEY PERFORMANCE INDICATORS (KPI)
-        total_rev = df_t['Freight'].sum()
-        
-        # Trip waale saare kharche (Diesel, Toll, etc.)
-        trip_costs = df_t[['HiredCharges', 'Diesel', 'DriverExp', 'Toll', 'Other']].sum().sum()
-        
-        # Office Expenses ka total (Agar data hai toh)
-        office_total = 0
-        if not df_oe.empty:
-            df_oe.columns = [str(c).strip() for c in df_oe.columns]
-            office_total = pd.to_numeric(df_oe['Amount'], errors='coerce').fillna(0).sum()
-        
-        # Final Net Profit (Trips + Office dono minus karke)
-        net_profit = total_rev - (trip_costs + office_total)
-                # Total Profit Highlight
-                st.success(f"💰 **Total Profit from Own Fleet:** ₹{v_analysis['Net_Profit'].sum():,.2f}")
+                
+                v_an['Total_Exp'] = v_an[['Diesel', 'DriverExp', 'Toll', 'Other']].sum(axis=1)
+                v_an['Net_Profit'] = v_an['Freight'] - v_an['Total_Exp']
+                v_an = v_an.sort_values(by='Net_Profit', ascending=False)
+                
+                st.success(f"💰 Own Fleet Net Profit: ₹{v_an['Net_Profit'].sum():,.2f}")
                 
                 # Visual Chart
-                st.write("#### Vehicle-wise Profit Comparison")
-                st.bar_chart(v_analysis.set_index('Vehicle')['Net_Profit'])
-
-                st.divider()
+                st.bar_chart(v_an.set_index('Vehicle')['Net_Profit'])
                 
-                # Simple and Clean Data Table (No matplotlib required)
-                st.write("#### Detailed Own Vehicle Report")
-                
-                # Displaying a clean table with formatted numbers
-                display_df = v_analysis.copy()
-                # Adding some manual styling for the dashboard look
+                # Formatted Table
                 st.dataframe(
-                    display_df,
+                    v_an, 
                     column_config={
-                        "Vehicle": "Vehicle No",
-                        "Freight": st.column_config.NumberColumn("Total Freight", format="₹%d"),
-                        "Total_Exp": st.column_config.NumberColumn("Total Expense", format="₹%d"),
-                        "Net_Profit": st.column_config.ProgressColumn("Net Profit Profitability", format="₹%d", min_value=0, max_value=int(v_analysis['Net_Profit'].max())),
-                        "Diesel": st.column_config.NumberColumn("Diesel", format="₹%d"),
-                        "Toll": st.column_config.NumberColumn("Toll", format="₹%d"),
+                        "Freight": st.column_config.NumberColumn("Revenue", format="₹%d"),
+                        "Total_Exp": st.column_config.NumberColumn("Expenses", format="₹%d"),
+                        "Net_Profit": st.column_config.NumberColumn("Net Profit", format="₹%d"),
                     },
-                    use_container_width=True,
+                    use_container_width=True, 
                     hide_index=True
                 )
-                
             else:
-                st.warning("⚠️ Own Fleet ka data nahi mila. LR Entry mein 'Own Fleet' select karein.")
-
+                st.warning("Own Fleet data not found. Please check LR Entry.")
     else:
-        st.error("❌ Business data missing!")
+        st.error("No trip data found. Please add LR entries first.")
 elif menu == "6. Expense Manager":
     st.header("🏢 Office & General Expense Manager")
     
@@ -416,6 +379,7 @@ elif menu == "6. Expense Manager":
             st.info(f"Total Office Expenses: ₹{pd.to_numeric(df_oe['Amount'], errors='coerce').sum():,.2f}")
         else:
             st.warning("કોઈ ઓફિસ ખર્ચ મળ્યો નથી.")
+
 
 
 
