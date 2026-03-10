@@ -53,10 +53,9 @@ def generate_lr_pdf(lr_data, show_fr=True):
     # Header
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(0, 10, lr_data.get('BranchName', 'VIRAT LOGISTICS').upper(), ln=1, align='C')
-    pdf.set_font("Arial", 'I', 9)
-    pdf.cell(0, 5, "Your Goods Are In Good Hands..", ln=1, align='C')
     pdf.set_font("Arial", '', 8)
-    pdf.cell(0, 4, f"{lr_data.get('BranchAddr', 'N/A')} | GST: {lr_data.get('BranchGST', 'N/A')}", ln=1, align='C')
+    pdf.cell(0, 4, lr_data.get('BranchAddr', 'N/A'), ln=1, align='C')
+    pdf.cell(0, 4, f"GSTIN: {lr_data.get('BranchGST', 'N/A')}", ln=1, align='C')
     pdf.ln(5)
 
     # Info Bar
@@ -535,6 +534,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
