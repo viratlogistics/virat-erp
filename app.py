@@ -332,16 +332,15 @@ if st.session_state.pdf_ready:
 elif menu == "3. LR Register":
     st.title("📋 LR REGISTER")
     if not df_t.empty:
-        # Columns clean karein taaki spaces ki wajah se data miss na ho
         df_t.columns = [str(c).strip() for c in df_t.columns]
         
         for i, row in df_t.iterrows():
-            # 1. Pehle Branch/Bank details fetch karein
+            # Branch/Bank details masters se fetch karein
             br_name = row.get('Branch', 'Select')
             br_row = df_m[df_m['Name'] == br_name]
             br_info = br_row.iloc[0] if not br_row.empty else {}
 
-            # 2. PDF Function ke liye Dictionary taiyar karein
+            # PDF Dictionary mapping
             lr_data_for_pdf = {
                 "LR No": row.get('LR No', 'N/A'),
                 "Date": row.get('Date', ''),
@@ -368,16 +367,14 @@ elif menu == "3. LR Register":
                 "BankIFSC": br_info.get('IFSC', 'N/A')
             }
 
-            # 3. Expander ke andar Download Button
             with st.expander(f"LR: {lr_data_for_pdf['LR No']} | {lr_data_for_pdf['Cnee']}"):
                 try:
-                    # Yahan lr_data_for_pdf pass karein
                     pdf_output = generate_lr_pdf(lr_data_for_pdf, True)
                     st.download_button(
                         label="📥 DOWNLOAD PDF",
                         data=pdf_output,
                         file_name=f"LR_{lr_data_for_pdf['LR No']}.pdf",
-                        key=f"dl_btn_{i}"
+                        key=f"dl_reg_{i}"
                     )
                 except Exception as e:
                     st.error(f"PDF Error: {e}")
@@ -586,6 +583,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
