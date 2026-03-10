@@ -175,98 +175,101 @@ elif menu == "3. LR Register":
         st.dataframe(df_t)
 
 elif menu == "4. Financials":
-    st.header("⚖️ Master Ledger & Financials")
+    st.header("⚖️ Party & Broker Combined Ledger")
     
-    # 1. FORCE REFRESH DATA (No Cache)
-    # We reload directly to ensure the 'impact' is visible immediately
+    # Fresh Data Load
     df_p = load("payments")
     df_t = load("trips")
     
-    # --- DATA TYPE CLEANING (The "Impact" Fix) ---
-    if not df_t.empty:
-        df_t.columns = [str(c).strip() for c in df_t.columns]
-        # Force names to strings and strip spaces
-        df_t['Party'] = df_t['Party'].astype(str).str.strip()
-        df_t['Broker'] = df_t['Broker'].astype(str).str.strip()
-        # Force amounts to numbers (errors='coerce' turns text into 0)
-        df_t['Freight'] = pd.to_numeric(df_t['Freight'], errors='coerce').fillna(0)
-        df_t['HiredCharges'] = pd.to_numeric(df_t['HiredCharges'], errors='coerce').fillna(0)
-
-    if not df_p.empty:
-        df_p.columns = [str(c).strip() for c in df_p.columns]
-        df_p['Account_Name'] = df_p['Account_Name'].astype(str).str.strip()
-        df_p['Amount'] = pd.to_numeric(df_p['Amount'], errors='coerce').fillna(0)
-        # Ensure Type column is clean for matching
-        df_p['Type'] = df_p['Type'].astype(str).str.strip()
-
+    # Cleaning
+    if not df_t.empty: df_t.columns = [str(c).strip() for c in df_t.columns]
+    if not df_p.empty: df_p.columns = [str(c).strip() for c in df_p.columns]
+        
     all_accs = sorted(gl("Party") + gl("Broker"))
     
-    t_pay, t_led = st.tabs(["💸 Add Payment/Receipt", "📖 View Ledger"])
+    t1, t2 = st.tabs(["💸 Add Transaction", "📖 Full Statement"])
     
-    with t_pay:
-        with st.form("p_form_new", clear_on_submit=True):
+    with t1:
+        with st.form("p_form", clear_on_submit=True):
             f1, f2, f3 = st.columns(3)
-            with f1: 
-                p_d = st.date_input("Transaction Date", date.today())
-                acc = st.selectbox("Select Account Name*", ["Select"] + all_accs)
-            with f2: 
-                p_t = st.selectbox("Entry Type*", ["Receipt (In)", "Payment (Out)"])
-                p_a = st.number_input("Amount (Value)*", min_value=0.0)
-            with f3: 
-                p_m = st.selectbox("Payment Mode", ["NEFT", "Cash", "UPI", "Cheque"])
-                p_r = st.text_input("Reference/Note")
-            
-            if st.form_submit_button("💾 Save to Sheet"):
+            with f1: p_d = st.date_input("Date", date.today()); acc = st.selectbox("Account*", ["Select"]+all_accs)
+            with f2: p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)"]); p_a = st.number_input("Amount*", min_value=0.0)
+            with f3: p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque"]); p_r = st.text_input("Ref/Remarks")
+            if st.form_submit_button("Save Entry"):
                 if acc != "Select" and p_a > 0:
-                    # Save with clean strings
-                    if save("payments", [str(p_d), acc.strip(), p_t.strip(), p_a, p_m, p_r]): 
-                        st.success(f"Saved! Now checking Ledger for {acc}...")
-                        st.rerun()
+                    if save("payments", [str(p_d), acc, p_t, p_a, p_m, p_r]): st.success("Saved!"); st.rerun()
 
-    with t_led:
-        sel_a = st.selectbox("Select Party/Broker to see Balance", ["Select"] + all_accs)
+    with t2:
+        sel_a = st.selectbox("Select Account for Full Ledger", ["Select"] + all_accs)
         if sel_a != "Select":
-            target = str(sel_a).strip()
+            # --- 1. PREPARE COMBINED DATA ---
+            ledger_entries = []
             
-            # --- LEDGER IMPACT ENGINE ---
-            # 1. Calculate Bills from Trips
-            party_trips = df_t[df_t['Party'] == target]
-            broker_trips = df_t[df_t['Broker'] == target]
-            
-            t_bill = party_trips['Freight'].sum()
-            t_hire = broker_trips['HiredCharges'].sum()
-            
-            # 2. Calculate Cash Flow from Payments
-            r_c = p_c = 0
-            history = pd.DataFrame()
-            if not df_p.empty:
-                history = df_p[df_p['Account_Name'] == target]
-                # Using 'str.contains' to be safe with naming
-                r_c = history[history['Type'].str.contains("Receipt", na=False)]['Amount'].sum()
-                p_c = history[history['Type'].str.contains("Payment", na=False)]['Amount'].sum()
+            # Add Trips to Ledger
+            if not df_t.empty:
+                # Party entries (Freight is Debit for you)
+                p_trips = df_t[df_t['Party'] == sel_a]
+                for _, r in p_trips.iterrows():
+                    ledger_entries.append({'Date': r['Date'], 'Particulars': f"LR: {r['LR No']} ({r['From']}-{r['To']})", 'Debit': float(r['Freight']), 'Credit': 0})
+                
+                # Broker entries (HiredCharges is Credit for Broker)
+                b_trips = df_t[df_t['Broker'] == sel_a]
+                for _, r in b_trips.iterrows():
+                    ledger_entries.append({'Date': r['Date'], 'Particulars': f"LR: {r['LR No']} (Hired)", 'Debit': 0, 'Credit': float(r['HiredCharges'])})
 
-            # Final Calculation
-            # Balance = (What they owe you + What you paid them) - (What you owe them + What they paid you)
-            net_bal = (t_bill + p_c) - (t_hire + r_c)
-            
-            st.divider()
-            # Visual Dashboard
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Billed Freight (+)", f"₹{t_bill:,.0f}")
-            m2.metric("Broker Hired (-)", f"₹{t_hire:,.0f}")
-            m3.metric("Total Received (-)", f"₹{r_c:,.0f}")
-            m4.metric("Total Paid (+)", f"₹{p_c:,.0f}")
-            
-            st.divider()
-            if net_bal > 0: 
-                st.error(f"### 🔴 NET RECEIVABLE (Lene Hai): ₹{abs(net_bal):,.2f}")
-            elif net_bal < 0: 
-                st.success(f"### 🟢 NET PAYABLE (Dene Hai): ₹{abs(net_bal):,.2f}")
-            else: 
-                st.info("### ⚪ ACCOUNT SETTLED (Balance 0)")
-            
-            st.write("#### Detailed History")
-            st.dataframe(history, use_container_width=True)
+            # Add Payments to Ledger
+            if not df_p.empty:
+                p_entries = df_p[df_p['Account_Name'] == sel_a]
+                for _, r in p_entries.iterrows():
+                    amt = float(r['Amount'])
+                    if r['Type'] == "Receipt (In)": # Party pays us
+                        ledger_entries.append({'Date': r['Date'], 'Particulars': f"Cash/Bank: {r['Mode']} ({r['Ref_No']})", 'Debit': 0, 'Credit': amt})
+                    else: # We pay Broker
+                        ledger_entries.append({'Date': r['Date'], 'Particulars': f"Cash/Bank: {r['Mode']} ({r['Ref_No']})", 'Debit': amt, 'Credit': 0})
+
+            # Create Final DataFrame
+            full_df = pd.DataFrame(ledger_entries)
+            if not full_df.empty:
+                full_df['Date'] = pd.to_datetime(full_df['Date']).dt.date
+                full_df = full_df.sort_values(by='Date')
+                
+                # Calculate Running Balance
+                full_df['Balance'] = (full_df['Debit'] - full_df['Credit']).cumsum()
+                
+                # Display Metrics
+                c1, c2, c3 = st.columns(3)
+                total_dr = full_df['Debit'].sum()
+                total_cr = full_df['Credit'].sum()
+                final_bal = total_dr - total_cr
+                c1.metric("Total Debit (+)", f"₹{total_dr:,.0f}")
+                c2.metric("Total Credit (-)", f"₹{total_cr:,.0f}")
+                c3.metric("Net Balance", f"₹{abs(final_bal):,.0f}", delta="Receivable" if final_bal > 0 else "Payable")
+
+                st.dataframe(full_df, use_container_width=True, hide_index=True)
+
+                # --- 2. PDF GENERATION ---
+                def download_ledger_pdf(data, name):
+                    pdf = FPDF()
+                    pdf.add_page()
+                    pdf.set_font("Arial", 'B', 16); pdf.cell(190, 10, "Virat Logistics Statement", ln=True, align='C')
+                    pdf.set_font("Arial", 'B', 12); pdf.cell(190, 10, f"Account: {name}", ln=True)
+                    pdf.ln(5)
+                    # Table Headers
+                    pdf.set_font("Arial", 'B', 10); pdf.set_fill_color(200, 200, 200)
+                    pdf.cell(30, 8, "Date", 1, 0, 'C', True); pdf.cell(80, 8, "Particulars", 1, 0, 'C', True)
+                    pdf.cell(25, 8, "Debit", 1, 0, 'C', True); pdf.cell(25, 8, "Credit", 1, 0, 'C', True)
+                    pdf.cell(30, 8, "Balance", 1, 1, 'C', True)
+                    # Table Body
+                    pdf.set_font("Arial", '', 9)
+                    for _, r in data.iterrows():
+                        pdf.cell(30, 7, str(r['Date']), 1); pdf.cell(80, 7, str(r['Particulars'])[:45], 1)
+                        pdf.cell(25, 7, f"{r['Debit']}", 1); pdf.cell(25, 7, f"{r['Credit']}", 1)
+                        pdf.cell(30, 7, f"{r['Balance']}", 1, ln=True)
+                    return pdf.output(dest='S').encode('latin-1')
+
+                st.download_button("📥 Download PDF Statement", download_ledger_pdf(full_df, sel_a), f"Statement_{sel_a}.pdf")
+            else:
+                st.info("No transactions found for this account.")
 elif menu == "5. Business Insights":
     st.header("📊 Business Dashboard & Own Fleet Analytics")
     
@@ -468,6 +471,7 @@ elif menu == "7. Driver Khata":
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
