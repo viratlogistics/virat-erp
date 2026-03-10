@@ -253,12 +253,22 @@ elif menu == "4. Financials":
                 # Dynamic Balance Calculation
                 full_df['Balance'] = (full_df['Debit'] - full_df['Credit']).cumsum()
                 
-                # Summary View
-                st.divider()
-                m1, m2, m3 = st.columns(3)
-                dr_total, cr_total = full_df['Debit'].sum(), full_df['Credit'].sum()
-                bal = dr_total - cr_total
-                m1.metric("Total B
+                # Summary Metrics
+            st.divider()
+            m1, m2, m3 = st.columns(3)
+            dr_total = full_df['Debit'].sum()
+            cr_total = full_df['Credit'].sum()
+            bal = dr_total - cr_total
+            
+            # --- Ye rahi wo line jaha error tha, ab bilkul sahi hai ---
+            m1.metric("Total Billed (DR)", f"₹{dr_total:,.0f}")
+            m2.metric("Total Paid (CR)", f"₹{cr_total:,.0f}")
+            
+            status_text = "Receivable" if bal > 0 else "Payable"
+            m3.metric(f"Net {status_text}", f"₹{abs(bal):,.0f}")
+            
+            st.write(f"#### Ledger History: {sel_a}")
+            st.dataframe(full_df, use_container_width=True, hide_index=True)
 elif menu == "5. Business Insights":
     st.header("📊 Business Dashboard & Own Fleet Analytics")
     
@@ -460,6 +470,7 @@ elif menu == "7. Driver Khata":
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
