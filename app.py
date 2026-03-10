@@ -226,14 +226,20 @@ elif menu == "2. LR Entry":
         # --- FORM SUBMIT BUTTON ---
         if st.form_submit_button("🚀 SAVE LR"):
             if bill_pty and bill_pty != "Select" and fr_amt > 0:
-                # Branch Master se sara data fetch karna
+                # 1. Branch Master se sara data fetch karna
                 br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
                 
                 prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
                 row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, sel_driver, br_name, fl, tl, fr_amt, (hc if v_cat == "Market Hired" else 0.0), dsl, drv, toll, 0, prof]
                 
                 if save("trips", row):
-                    # PDF ke liye Branch/Company ka sara data yahan bundle ho raha hai
+                    # 2. AGAR NEW PARTY/CONSIGNOR HAI TO MASTER MEIN SAVE KARO
+                    if is_np and bill_pty not in gl("Party"):
+                        save("masters", ["Party", bill_pty])
+                    if is_nc and cnor_name not in gl("Consignor"):
+                        save("masters", ["Consignor", cnor_name])
+
+                    # 3. PDF ke liye Branch/Company ka sara data bundle karna
                     st.session_state.pdf_ready = {
                         "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
                         "Cnor": cnor_name, "CnorGST": cnor_gst, 
@@ -245,11 +251,11 @@ elif menu == "2. LR Entry":
                         "BranchName": sel_br,
                         "BranchGST": br_info.get('GST', 'N/A'),
                         "BranchAddr": br_info.get('Address', 'N/A'),
-                        "BankName": br_info.get('Name', 'N/A'), # Branch Master se Bank Name
-                        "BankAC": br_info.get('A_C_No', 'N/A'), # Branch Master se A/C
-                        "BankIFSC": br_info.get('IFSC', 'N/A')  # Branch Master se IFSC
+                        "BankName": br_info.get('Name', 'N/A'),
+                        "BankAC": br_info.get('A_C_No', 'N/A'),
+                        "BankIFSC": br_info.get('IFSC', 'N/A')
                     }
-                    st.success("LR Saved Successfully!")
+                    st.success("LR Saved and Masters Updated!")
                     st.rerun()
             else:
                 st.error("Please fill Party Name and Freight!")
@@ -508,6 +514,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
