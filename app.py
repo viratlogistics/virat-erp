@@ -134,12 +134,40 @@ if menu == "1. Masters Setup":
                 st.error("Please enter Name!")
 
     st.divider()
-    # Display existing masters
+    # --- Display & Manage Masters ---
     if not df_m.empty:
-        st.write(f"### Current {m_type} List")
+        st.write(f"### Manage {m_type}")
         curr_m = df_m[df_m['Type'] == m_type]
-        st.dataframe(curr_m.dropna(axis=1, how='all'), use_container_width=True)
+        
+        # Displaying records one by one with action buttons
+        for i, r in curr_m.iterrows():
+            # Har record ke liye ek alag box
+            with st.container(border=True):
+                c1, c2, c3 = st.columns([4, 1, 1])
+                
+                # Display Name or Driver Name
+                display_name = r['Name'] if r['Name'] else r['Driver_Name']
+                c1.write(f"**{display_name}**")
+                if r['GST']: c1.caption(f"GST: {r['GST']} | {r['Address']}")
+                if r['Driver_No']: c1.caption(f"License/Mob: {r['Driver_No']}")
 
+                # DELETE BUTTON
+                if c3.button("🗑️", key=f"del_{i}", help="Delete this record"):
+                    try:
+                        ws = sh.worksheet("masters")
+                        # Sheet mein exact row dhoond kar delete karna
+                        cell = ws.find(str(display_name))
+                        ws.delete_rows(cell.row)
+                        st.success("Deleted!")
+                        st.rerun()
+                    except:
+                        st.error("Could not delete. Check if name is unique.")
+
+                # EDIT BUTTON (Note: Streamlit doesn't auto-fill forms easily, 
+                # so we show the data in an info box for manual update or use session_state)
+                if c2.button("📝", key=f"ed_{i}", help="Edit details"):
+                    st.info(f"Editing feature: Please update the form above with these details and save again. Name: {display_name}")
+                    
 elif menu == "2. LR Entry":
     st.header("📝 Professional LR Entry")
     if st.button("🆕 RESET FORM"):
@@ -445,4 +473,5 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
