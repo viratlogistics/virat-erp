@@ -336,7 +336,7 @@ elif menu == "2. LR Entry":
     # Ye keys aapki Sheet ke column names se match honi chahiye
     "BranchGST": br_info.get('GST', 'N/A'),
     "BranchAddr": br_info.get('Address', 'N/A'),
-    "BankName": br_info.get('Name', 'N/A'),
+    "BankName": br_info.get('Bank_Name', 'N/A'),
     "BankAC": br_info.get('A_C_No', 'N/A'), # Check if it is 'A/C No' or 'A_C_No'
     "BankIFSC": br_info.get('IFSC', 'N/A')
 }
@@ -603,6 +603,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
