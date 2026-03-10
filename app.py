@@ -275,38 +275,30 @@ elif menu == "2. LR Entry":
         # --- YE FORM KA END HAI ---
         if st.form_submit_button("🚀 SAVE LR"):
             if bill_pty and bill_pty != "Select" and fr_amt > 0:
-                # 1. Branch ki details fetch karna
-                br_row = df_m[(df_m['Type'].str.contains('Branch', na=False)) & (df_m['Name'] == sel_br)]
-                br_info = br_row.iloc[0] if not br_row.empty else {}
+                # Sabhi expenses ka total (Ensure variables match input fields)
+                # Yahan 'drv_adv' hi use karein
+                trip_cost = hired_charges if v_cat == "Market Hired" else (dsl + toll + drv_adv)
+                prof = fr_amt - trip_cost
                 
-                prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv_adv)))
+                # Sheet mein row save karna (Order: dsl, drv_adv, toll)
                 row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, sel_driver, br_name, fl, tl, fr_amt, hired_charges, dsl, drv_adv, toll, 0, prof]
                 
                 if save("trips", row):
-                    # 2. Naya Party/Consignor save karne ka logic
-                    if is_np: save("masters", ["Party", bill_pty])
-                    if is_nc: save("masters", ["Consignor", cnor_name])
-
-                    # 3. PDF ke liye data bundle (Correct Keys)
+                    # PDF Data Bundle (Asli Bank Name ke saath)
                     st.session_state.pdf_ready = {
-                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
-                        "Cnor": cnor_name, "CnorGST": cnor_gst, 
-                        "Cnee": cnee_name, "CneeGST": cnee_gst, 
-                        "BillP": bill_pty, "From": fl, "To": tl, 
-                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, 
-                        "Freight": fr_amt, "PaidBy": paid_by, "Risk": risk, 
-                        "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr, "InsBy": ins_by,
-                        "BranchName": sel_br,
+                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, "Cnor": cnor_name, "CnorGST": cnor_gst, 
+                        "Cnee": cnee_name, "CneeGST": cnee_gst, "BillP": bill_pty, "From": fl, "To": tl, 
+                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, "Freight": fr_amt, 
+                        "PaidBy": paid_by, "Risk": risk, "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr,
+                        "InsBy": ins_by, "BranchName": sel_br,
                         "BranchGST": br_info.get('GST', 'N/A'),
                         "BranchAddr": br_info.get('Address', 'N/A'),
-                        "BankName": br_info.get('Bank_Name', 'N/A'), # Asli Bank Name yahan se aayega
+                        "BankName": br_info.get('Bank_Name', 'N/A'), # Sheet column: Bank_Name
                         "BankAC": br_info.get('A_C_No', 'N/A'), 
                         "BankIFSC": br_info.get('IFSC', 'N/A')
                     }
-                    st.success("LR Saved and Masters Updated!")
-                    st.rerun() # Yeh line ab sahi alignment mein hai
-            else:
-                st.error("Please fill required fields (Party & Freight)!")
+                    st.success("LR Saved Successfully!")
+                    st.rerun()
     # --- YE LINE FORM KE BAHAR (LEFT MARGIN SE MATCH KAREIN) ---
     if st.session_state.pdf_ready:
         st.divider()
@@ -567,6 +559,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
