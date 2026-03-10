@@ -215,22 +215,24 @@ elif menu == "2. LR Entry":
 
     k = st.session_state.reset_trigger
     
-    # 1. Branch selection aur data fetching form se pehle
-    # 'key' mein 'entry' word add karne se ye unique ho jayega
-sel_br = st.selectbox("Select Branch*", ["Select"] + gl("Branch"), key=f"br_entry_{k}")
+    # 1. Branch selection (Key unique rakhi hai taaki Duplicate Key error na aaye)
+    sel_br = st.selectbox("Select Branch*", ["Select"] + gl("Branch"), key=f"br_entry_unique_{k}")
     
-    # Branch ki details nikalna (Data Fetching Fix)
+    # 2. Branch details fetching logic (Properly Aligned)
     br_info = {}
     if sel_br != "Select":
-        # Type aur Name dono match karenge
-        temp_df = df_m[(df_m['Type'].str.contains('Branch', na=False)) & (df_m['Name'] == sel_br)]
+        # Type aur Name dono check karke sahi branch uthana
+        mask = (df_m['Type'].str.contains('Branch', case=False, na=False)) & (df_m['Name'] == sel_br)
+        temp_df = df_m[mask]
         if not temp_df.empty:
             br_info = temp_df.iloc[0].to_dict()
+
+    # Form Columns
     cp1, cp2, cp3 = st.columns(3)
     with cp1:
         v_cat = st.radio("Trip Type*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"vcat_{k}")
         lr_mode = st.radio("LR No Mode", ["Auto", "Manual"], horizontal=True, key=f"lrmode_{k}")
-        lr_no_auto = f"VIL/25-26/{br_code}/{len(df_t)+1:03d}"
+        lr_no_auto = f"VIL/25-26/{len(df_t)+1:03d}"
         lr_no = st.text_input("LR Number*", value=lr_no_auto if lr_mode == "Auto" else "", key=f"lrno_{k}")
         risk = st.radio("Risk*", ["At Owner Risk", "Insured"], horizontal=True, key=f"risk_{k}")
     with cp2:
@@ -575,6 +577,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
