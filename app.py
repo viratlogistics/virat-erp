@@ -259,6 +259,7 @@ elif menu == "5. Business Insights":
     
     # Fresh Data Load
     df_t = load("trips")
+    df_oe = load("office_expenses") # Office expenses load karne ke liye
     
     if not df_t.empty:
         # Data Cleaning
@@ -280,9 +281,9 @@ elif menu == "5. Business Insights":
             net_profit = total_rev - total_cost
             
             m1, m2, m3 = st.columns(3)
-            m1.metric("Total Revenue", f"₹{total_rev:,.0f}")
-            m2.metric("Operational Cost", f"₹{total_cost:,.0f}")
-            m3.metric("Net Profit", f"₹{net_profit:,.0f}", delta=f"{(net_profit/total_rev*100 if total_rev>0 else 0):.1f}% Margin")
+        m1.metric("Total Revenue", f"₹{total_rev:,.0f}")
+        m2.metric("Total Expenses (Trip+Office)", f"₹{(trip_costs + office_total):,.0f}")
+        m3.metric("Final Net Profit", f"₹{net_profit:,.0f}", delta=f"Office Exp: ₹{office_total:,.0f}", delta_color="inverse")
             
             st.divider()
             
@@ -320,11 +321,20 @@ elif menu == "5. Business Insights":
                     'Other': 'sum'
                 }).reset_index()
 
-                # Net Profit Calculation
-                v_analysis['Total_Exp'] = v_analysis[['Diesel', 'DriverExp', 'Toll', 'Other']].sum(axis=1)
-                v_analysis['Net_Profit'] = v_analysis['Freight'] - v_analysis['Total_Exp']
-                v_analysis = v_analysis.sort_values(by='Net_Profit', ascending=False)
-
+                # 1. KEY PERFORMANCE INDICATORS (KPI)
+        total_rev = df_t['Freight'].sum()
+        
+        # Trip waale saare kharche (Diesel, Toll, etc.)
+        trip_costs = df_t[['HiredCharges', 'Diesel', 'DriverExp', 'Toll', 'Other']].sum().sum()
+        
+        # Office Expenses ka total (Agar data hai toh)
+        office_total = 0
+        if not df_oe.empty:
+            df_oe.columns = [str(c).strip() for c in df_oe.columns]
+            office_total = pd.to_numeric(df_oe['Amount'], errors='coerce').fillna(0).sum()
+        
+        # Final Net Profit (Trips + Office dono minus karke)
+        net_profit = total_rev - (trip_costs + office_total)
                 # Total Profit Highlight
                 st.success(f"💰 **Total Profit from Own Fleet:** ₹{v_analysis['Net_Profit'].sum():,.2f}")
                 
@@ -395,6 +405,7 @@ elif menu == "6. Expense Manager":
             st.info(f"Total Office Expenses: ₹{pd.to_numeric(df_oe['Amount'], errors='coerce').sum():,.2f}")
         else:
             st.warning("કોઈ ઓફિસ ખર્ચ મળ્યો નથી.")
+
 
 
 
