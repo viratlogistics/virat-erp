@@ -45,7 +45,7 @@ def delete_master_row(name_val):
     except:
         return False
 
-    def generate_lr_pdf(lr_data, show_fr=True):
+def generate_lr_pdf(lr_data, show_fr=True):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 18); pdf.cell(100, 8, "Virat Logistics", ln=1)
@@ -510,6 +510,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
