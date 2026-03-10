@@ -468,6 +468,34 @@ elif menu == "7. Driver Khata":
             
             st.error(f"## 🚩 Total Payable/Due by Driver: ₹{final_due:,.2f}")
             st.caption("Yeh amount Driver ko di gayi total cash (Trips + Salary + Extra) hai.")
+            with tab_settle:
+        sel_d = st.selectbox("Choose Driver for Final Settlement", ["Select"] + drivers)
+        if sel_d != "Select":
+            st.divider()
+            
+            # Trips calculation logic
+            d_trips = df_t[df_t['Driver'] == sel_d].copy() if not df_t.empty else pd.DataFrame()
+            
+            if not d_trips.empty:
+                # Numbers fix
+                for c in ['Diesel', 'DriverExp', 'Toll']:
+                    d_trips[c] = pd.to_numeric(d_trips[c], errors='coerce').fillna(0)
+                
+                sum_adv = d_trips['DriverExp'].sum()
+                sum_dsl = d_trips['Diesel'].sum()
+                
+                st.write(f"📊 **Current Trip Dues for {sel_d}:**")
+                c1, c2 = st.columns(2)
+                c1.metric("Trip Advance", f"₹{sum_adv}")
+                c2.metric("Trip Diesel", f"₹{sum_dsl}")
+
+                # --- THE IMPORT BUTTON ---
+                if st.button(f"📥 Import ₹{sum_adv} Advance to Khata"):
+                    # Personal Ledger mein entry save karna
+                    if save("driver_khata", [str(date.today()), sel_d, "Trips-Import", "Debit", sum_adv, "Auto-Import from LR Entries"]):
+                        st.success("Advance successfully imported to Driver Ledger!")
+                        st.rerun()
+
 
 
 
