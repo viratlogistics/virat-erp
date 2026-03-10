@@ -116,17 +116,23 @@ def generate_lr_pdf(lr_data, show_fr=True):
     pdf.cell(100, 7, " PAYMENT BANK DETAILS", 1, 0, 'L', True)
     pdf.cell(90, 7, f" FOR {lr_data.get('BranchName', 'VIRAT LOGISTICS')}", 1, 1, 'C', True)
     
-    # Actual Bank Data
-    pdf.set_font("Arial", '', 8)
-    # Bank detail variables
-    b_name = lr_data.get('BankName', 'N/A')
-    b_acc = lr_data.get('BankAC', 'N/A')
-    b_ifsc = lr_data.get('BankIFSC', 'N/A')
-    
-    # Ek hi box mein bank details (Aapki requirement ke mutabik)
-    pdf.cell(100, 10, f" Bank: {b_name} | A/C No: {b_acc} | IFSC: {b_ifsc}", 1, 0, 'L')
+    # --- BANK DETAILS SECTION (Multi-line) ---
     pdf.set_font("Arial", 'B', 8)
-    pdf.cell(90, 10, " (Computer Generated - No Sign Required)", 1, 1, 'C')
+    # Box ki shuruat
+    y_bank = pdf.get_y()
+    
+    # Left side: Bank Details in 3 lines
+    pdf.set_xy(10, y_bank)
+    bank_box_text = f"Bank Name: {b_name}\nA/C No: {b_acc}\nIFSC Code: {b_ifsc}"
+    pdf.multi_cell(100, 5, bank_box_text, 1, 'L') 
+    y_bank_end = pdf.get_y()
+
+    # Right side: Authorized Signatory Box (Matches height of bank box)
+    pdf.set_xy(110, y_bank)
+    pdf.set_font("Arial", 'B', 8)
+    # Height calculation: Bank box ki height ke barabar height dena
+    box_height = y_bank_end - y_bank
+    pdf.cell(90, box_height, " (Computer Generated - No Sign Required)", 1, 1, 'C')
     
     pdf.ln(4)
     pdf.set_font("Arial", 'I', 7)
@@ -595,6 +601,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
