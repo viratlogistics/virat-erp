@@ -284,9 +284,9 @@ elif menu == "2. LR Entry":
         # --- YE FORM KA END HAI ---
         if st.form_submit_button("🚀 SAVE LR"):
             if bill_pty and bill_pty != "Select" and fr_amt > 0:
-                # 1. Branch/Company details fetch logic (Fixed for specific Branch)
-                # Hum 'Type' aur 'Name' dono se filter karenge taaki Kim/Kosamba sahi uthe
-                br_row = df_m[(df_m['Type'] == "Branch (Company)") & (df_m['Name'] == sel_br)]
+                # 1. Branch/Company ki details Masters sheet se uthana
+                # Ensure karein ki aapki sheet mein 'Type' column mein 'Branch (Company)' likha ho
+                br_row = df_m[(df_m['Type'] == 'Branch (Company)') & (df_m['Name'] == sel_br)]
                 br_info = br_row.iloc[0] if not br_row.empty else {}
                 
                 prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
@@ -298,21 +298,23 @@ elif menu == "2. LR Entry":
                     if is_nc and cnor_name not in gl("Consignor"): save("masters", ["Consignor", cnor_name])
 
                     # 2. PDF Dictionary (Keys matched to your Master columns exactly)
+                    if save("trips", row):
+                    # 2. PDF ke liye data bundle banana
                     st.session_state.pdf_ready = {
-                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, "Cnor": cnor_name,
-                        "Cnee": cnee_name, "BillP": bill_pty, "Material": mat, "Pkg": pkg,
-                        "NetWt": n_wt, "ChgWt": c_wt, "Freight": fr_amt, "PaidBy": paid_by,
+                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
+                        "Cnor": cnor_name, "CnorGST": cnor_gst, 
+                        "Cnee": cnee_name, "CneeGST": cnee_gst, 
+                        "BillP": bill_pty, "From": fl, "To": tl, 
+                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, 
+                        "Freight": fr_amt, "PaidBy": paid_by, "Risk": risk, 
+                        "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr, "InsBy": ins_by,
                         "BranchName": sel_br,
+                        # Yahan column names ko apni Google Sheet se match karein
                         "BranchGST": br_info.get('GST', 'N/A'),
                         "BranchAddr": br_info.get('Address', 'N/A'),
-                        # Master sheet ke column 'Name' se Bank Name fetch karein
-                        "BankName": br_info.get('Name', 'N/A'), 
-                        # Master sheet ke column 'A_C_No' se Account fetch karein
+                        "BankName": br_info.get('Name', 'N/A'), # Branch ka naam hi Bank Name hai
                         "BankAC": br_info.get('A_C_No', 'N/A'), 
-                        # Master sheet ke column 'IFSC' se IFSC fetch karein
-                        "BankIFSC": br_info.get('IFSC', 'N/A'),
-                        "Risk": risk, "From": fl, "To": tl, "ShipTo": ship_to, "InsBy": ins_by,
-                        "InvNo": inv_no, "CnorGST": cnor_gst, "CneeGST": cnee_gst
+                        "BankIFSC": br_info.get('IFSC', 'N/A')
                     }
                         
                 if save("trips", row):
@@ -586,6 +588,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
