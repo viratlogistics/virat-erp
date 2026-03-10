@@ -224,7 +224,7 @@ elif menu == "2. LR Entry":
                 dsl = toll = drv = 0.0
 
         # --- FORM SUBMIT BUTTON ---
-if st.form_submit_button("🚀 SAVE LR"):
+    if st.form_submit_button("🚀 SAVE LR"):
             if bill_pty and bill_pty != "Select" and fr_amt > 0:
                 # 1. Branch Master se sara data fetch karna
                 br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
@@ -514,6 +514,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
