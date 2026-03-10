@@ -180,7 +180,15 @@ elif menu == "2. LR Entry":
     
     with cp1:
         sel_br = st.selectbox("Select Branch (Company)*", ["Select"] + gl("Branch (Company)"), key=f"br_{k}")
-        br_code = df_m[df_m['Name'] == sel_br].iloc[0].get('GST', '01') if sel_br != "Select" else "01"
+# Branch select hote hi uska saara data master se nikaal lo
+br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
+
+# cp3 mein se bank ka dropdown hata kar sirf info dikhao
+with cp3:
+    cnee_name = st.text_input("Consignee Name*", key=f"cnee_{k}")
+    paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pby_{k}")
+    # Bank dropdown ki jagah sirf ye info line dikhegi
+    st.info(f"🏦 Bank: {br_info.get('A_C_No', 'Select Branch')}")
         v_cat = st.radio("Trip Type*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"vcat_{k}")
         lr_mode = st.radio("LR No Mode", ["Auto", "Manual"], horizontal=True, key=f"lrmode_{k}")
         lr_no_auto = f"VIL/25-26/{br_code}/{len(df_t)+1:03d}"
@@ -473,5 +481,6 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
