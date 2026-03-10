@@ -258,26 +258,41 @@ elif menu == "2. LR Entry":
                 hc = st.number_input("Hired Charges")
                 dsl = toll = drv = 0.0
 
+        # --- YE FORM KA END HAI ---
         if st.form_submit_button("🚀 SAVE LR"):
             if bill_pty and bill_pty != "Select" and fr_amt > 0:
+                # Branch ki details fetch karo
+                br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
+                
                 prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
                 row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, sel_driver, br_name, fl, tl, fr_amt, (hc if v_cat == "Market Hired" else 0.0), dsl, drv, toll, 0, prof]
                 
                 if save("trips", row):
-                    if is_np and bill_pty not in gl("Party"):
-                        save("masters", ["Party", bill_pty])
-                    if is_nc and cnor_name not in gl("Consignor"):
-                        save("masters", ["Consignor", cnor_name])
-
-                    st.session_state.pdf_ready = {"LR No": lr_no, "Date": str(d), "Vehicle": v_no, "Cnor": cnor_name, "CnorGST": cnor_gst, "Cnee": cnee_name, "CneeGST": cnee_gst, "BillP": bill_pty, "From": fl, "To": tl, "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, "Freight": fr_amt, "PaidBy": paid_by, "Bank": sel_bank, "Risk": risk, "InsBy": ins_by, "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr}
-                    st.success("LR Saved and Masters Updated!")
+                    # PDF ke liye details bundle karo
+                    st.session_state.pdf_ready = {
+                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
+                        "Cnor": cnor_name, "CnorGST": cnor_gst, 
+                        "Cnee": cnee_name, "CneeGST": cnee_gst, 
+                        "BillP": bill_pty, "From": fl, "To": tl, 
+                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, 
+                        "Freight": fr_amt, "PaidBy": paid_by, "Risk": risk, 
+                        "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr,
+                        "BranchName": sel_br,
+                        "BranchGST": br_info.get('GST', 'N/A'),
+                        "BranchAddr": br_info.get('Address', 'N/A'),
+                        "BankName": br_info.get('Name', 'N/A'),
+                        "BankAC": br_info.get('A_C_No', 'N/A'),
+                        "BankIFSC": br_info.get('IFSC', 'N/A')
+                    }
+                    st.success("LR Saved!")
                     st.rerun()
             else:
                 st.error("Please fill Party Name and Freight!")
 
+    # --- YE LINE FORM KE BAHAR (LEFT MARGIN SE MATCH KAREIN) ---
     if st.session_state.pdf_ready:
-        st.download_button("📥 DOWNLOAD PDF", generate_lr_pdf(st.session_state.pdf_ready, st.session_state.pdf_ready.get('show_fr', True)), f"LR_{st.session_state.pdf_ready['LR No']}.pdf")
-    
+        st.divider()
+        st.download_button("📥 DOWNLOAD LR PDF", generate_lr_pdf(st.session_state.pdf_ready, st.session_state.pdf_ready.get('show_fr', True)), f"LR_{st.session_state.pdf_ready['LR No']}.pdf")    
 elif menu == "3. LR Register":
     st.title("📋 LR REGISTER")
     if not df_t.empty:
@@ -534,6 +549,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
