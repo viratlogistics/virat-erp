@@ -108,12 +108,20 @@ def generate_lr_pdf(lr_data, show_fr=True):
     pdf.ln(2)
     pdf.cell(190, 6, f" DELIVERY ADDRESS: {lr_data.get('ShipTo', 'N/A')}", 1, 1, 'L')
 
-    # --- BANK DETAILS SECTION (Multi-line) ---
-    pdf.set_font("Arial", 'B', 8)
-    # Box ki shuruat
+    # --- BANK DETAILS SECTION (Corrected Logic) ---
+    pdf.ln(2)
+    pdf.set_font("Arial", 'B', 9)
+    pdf.set_fill_color(240, 240, 240)
+    
+    # 1. PEHLE VARIABLES DEFINE KAREIN (Taki NameError na aaye)
+    b_name = lr_data.get('BankName', 'N/A')
+    b_acc = lr_data.get('BankAC', 'N/A')
+    b_ifsc = lr_data.get('BankIFSC', 'N/A')
+    
+    # 2. Box ki shuruat
     y_bank = pdf.get_y()
     
-    # Left side: Bank Details in 3 lines
+    # Left side: Bank Details in 3 separate lines
     pdf.set_xy(10, y_bank)
     bank_box_text = f"Bank Name: {b_name}\nA/C No: {b_acc}\nIFSC Code: {b_ifsc}"
     pdf.multi_cell(100, 5, bank_box_text, 1, 'L') 
@@ -122,8 +130,7 @@ def generate_lr_pdf(lr_data, show_fr=True):
     # Right side: Authorized Signatory Box (Matches height of bank box)
     pdf.set_xy(110, y_bank)
     pdf.set_font("Arial", 'B', 8)
-    # Height calculation: Bank box ki height ke barabar height dena
-    box_height = y_bank_end - y_bank
+    box_height = y_bank_end - y_bank # Auto-adjust height
     pdf.cell(90, box_height, " (Computer Generated - No Sign Required)", 1, 1, 'C')
     
     pdf.ln(4)
@@ -593,6 +600,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
