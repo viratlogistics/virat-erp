@@ -214,6 +214,17 @@ elif menu == "2. LR Entry":
         st.rerun()
 
     k = st.session_state.reset_trigger
+    
+    # 1. Branch selection aur data fetching form se pehle
+    sel_br = st.selectbox("Select Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
+    
+    # Branch ki details nikalna (Data Fetching Fix)
+    br_info = {}
+    if sel_br != "Select":
+        # Type aur Name dono match karenge
+        temp_df = df_m[(df_m['Type'].str.contains('Branch', na=False)) & (df_m['Name'] == sel_br)]
+        if not temp_df.empty:
+            br_info = temp_df.iloc[0].to_dict()
     cp1, cp2, cp3 = st.columns(3)
     
     with cp1:
@@ -284,50 +295,31 @@ elif menu == "2. LR Entry":
         # --- YE FORM KA END HAI ---
         if st.form_submit_button("🚀 SAVE LR"):
             if bill_pty and bill_pty != "Select" and fr_amt > 0:
-                # 1. Branch/Company ki details Masters sheet se uthana
-                # Ensure karein ki aapki sheet mein 'Type' column mein 'Branch (Company)' likha ho
-                br_row = df_m[(df_m['Type'] == 'Branch (Company)') & (df_m['Name'] == sel_br)]
-                br_info = br_row.iloc[0] if not br_row.empty else {}
-                
                 prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
-                row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, sel_driver, sel_br, fl, tl, fr_amt, (hc if v_cat == "Market Hired" else 0.0), dsl, drv, toll, 0, prof]
+                row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, sel_driver, "OWN", fl, tl, fr_amt, hc, dsl, drv, toll, 0, prof]
                 
                 if save("trips", row):
-                    # Masters update for new parties
-                    if is_np and bill_pty not in gl("Party"): save("masters", ["Party", bill_pty])
-                    if is_nc and cnor_name not in gl("Consignor"): save("masters", ["Consignor", cnor_name])
+                    # New Party Save
+                    if is_np: save("masters", ["Party", bill_pty])
+                    if is_nc: save("masters", ["Consignor", cnor_name])
 
-                if save("trips", row):
-                    # 2. PDF ke liye data bundle banana
+                    # PDF DATA BUNDLE
                     st.session_state.pdf_ready = {
-                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
-                        "Cnor": cnor_name, "CnorGST": cnor_gst, 
-                        "Cnee": cnee_name, "CneeGST": cnee_gst, 
-                        "BillP": bill_pty, "From": fl, "To": tl, 
-                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, 
-                        "Freight": fr_amt, "PaidBy": paid_by, "Risk": risk, 
-                        "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr, "InsBy": ins_by,
-                        "BranchName": sel_br,
-                        # Yahan column names ko apni Google Sheet se match karein
+                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, "Cnor": cnor_name, "CnorGST": cnor_gst, 
+                        "Cnee": cnee_name, "CneeGST": cnee_gst, "BillP": bill_pty, "From": fl, "To": tl, 
+                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, "Freight": fr_amt, 
+                        "PaidBy": paid_by, "Risk": risk, "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr,
+                        "InsBy": ins_by, "BranchName": sel_br,
                         "BranchGST": br_info.get('GST', 'N/A'),
                         "BranchAddr": br_info.get('Address', 'N/A'),
-                        "BankName": br_info.get('Name', 'N/A'), # Branch ka naam hi Bank Name hai
-                        "BankAC": br_info.get('A_C_No', 'N/A'), 
+                        "BankName": br_info.get('Name', 'N/A'),
+                        "BankAC": br_info.get('A_C_No', 'N/A'),
                         "BankIFSC": br_info.get('IFSC', 'N/A')
                     }
-                        
-                if save("trips", row):
-                    # 2. AGAR NEW PARTY/CONSIGNOR HAI TO MASTER MEIN SAVE KARO
-                    if is_np and bill_pty not in gl("Party"):
-                        save("masters", ["Party", bill_pty])
-                    if is_nc and cnor_name not in gl("Consignor"):
-                        save("masters", ["Consignor", cnor_name])
-
-                    st.success("LR Saved and Masters Updated!")
+                    st.success("LR Saved!")
                     st.rerun()
-            else:
-                st.error("Please fill Party Name and Freight!")
-    # --- YE LINE FORM KE BAHAR (LEFT MARGIN SE MATCH KAREIN) ---
+
+    # DOWNLOAD BUTTON (Form ke bahar)
     if st.session_state.pdf_ready:
         st.divider()
         st.download_button("📥 DOWNLOAD LR PDF", generate_lr_pdf(st.session_state.pdf_ready, st.session_state.pdf_ready.get('show_fr', True)), f"LR_{st.session_state.pdf_ready['LR No']}.pdf")    
@@ -587,6 +579,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
+
 
 
 
