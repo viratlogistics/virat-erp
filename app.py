@@ -129,6 +129,74 @@ def generate_lr_pdf(lr_data, show_fr=True):
     pdf.cell(0, 5, "--- COMPUTER GENERATED DOCUMENT, NO SIGNATURE REQUIRED ---", 0, 1, 'C')
 
     return pdf.output(dest='S').encode('latin-1')
+
+def generate_invoice_pdf(inv_data):
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # --- HEADER: Branch Details (Dynamic) ---
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(0, 10, inv_data.get('BranchName', 'VIRAT LOGISTICS').upper(), ln=1, align='C')
+    pdf.set_font("Arial", '', 9)
+    pdf.cell(0, 5, f"Address: {inv_data.get('BranchAddr', 'N/A')}", ln=1, align='C')
+    pdf.cell(0, 5, f"GSTIN: {inv_data.get('BranchGST', 'N/A')}", ln=1, align='C')
+    pdf.ln(5)
+    
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, "TAX INVOICE / BILL", 1, 1, 'C')
+    pdf.ln(5)
+    
+    # --- PARTY & INVOICE INFO ---
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(100, 6, f"Bill To: {inv_data['Party']}", 0, 0)
+    pdf.cell(90, 6, f"Invoice No: {inv_data['InvNo']}", 0, 1, 'R')
+    pdf.cell(100, 6, "", 0, 0)
+    pdf.cell(90, 6, f"Date: {inv_data['InvDate']}", 0, 1, 'R')
+    pdf.ln(5)
+
+    # --- TABLE HEADER ---
+    pdf.set_fill_color(230, 230, 230)
+    pdf.set_font("Arial", 'B', 9)
+    pdf.cell(30, 8, " LR No", 1, 0, 'C', True)
+    pdf.cell(35, 8, " Date", 1, 0, 'C', True)
+    pdf.cell(85, 8, " Vehicle / Particulars", 1, 0, 'C', True)
+    pdf.cell(40, 8, " Amount", 1, 1, 'C', True)
+    
+    # --- TABLE ROWS (LRs) ---
+    pdf.set_font("Arial", '', 9)
+    for lr in inv_data['LRs']:
+        pdf.cell(30, 8, f" {lr['LR No']}", 1)
+        pdf.cell(35, 8, f" {lr['Date']}", 1)
+        pdf.cell(85, 8, f" Truck: {lr['Vehicle No']}", 1)
+        pdf.cell(40, 8, f" {lr['Freight']}", 1, 1, 'R')
+    
+    # --- TOTAL ---
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(150, 10, "GRAND TOTAL ", 1, 0, 'R')
+    pdf.cell(40, 10, f"Rs. {inv_data['Total']}", 1, 1, 'R')
+    pdf.ln(10)
+
+    # --- BANK DETAILS SECTION (Multi-line Logic) ---
+    b_name = inv_data.get('BankName', 'N/A')
+    b_acc = inv_data.get('BankAC', 'N/A')
+    b_ifsc = inv_data.get('BankIFSC', 'N/A')
+    
+    y_bank = pdf.get_y()
+    pdf.set_font("Arial", 'B', 9)
+    pdf.set_xy(10, y_bank)
+    bank_text = f"Bank Name: {b_name}\nA/C No: {b_acc}\nIFSC Code: {b_ifsc}"
+    pdf.multi_cell(100, 5, bank_text, 1, 'L') 
+    y_end = pdf.get_y()
+
+    # Right Box: Signatory
+    pdf.set_xy(110, y_bank)
+    pdf.cell(90, (y_end - y_bank), "For Virat Logistics (Auth. Signatory)", 1, 1, 'C')
+
+    # Final Return (Encoding Fix)
+    try:
+        return pdf.output(dest='S').encode('latin-1')
+    except:
+        return pdf.output(dest='S').encode('utf-8', errors='ignore')
     
 # --- 3. MAIN LOGIC ---
 df_m = load("masters")
@@ -649,6 +717,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
