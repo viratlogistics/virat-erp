@@ -227,78 +227,67 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 if menu == "0. Dashboard":
-    st.title("📊 Virat Logistics Dashboard")
-    
-    # 1. Column Names check (Aapki sheet ke mutabik)
-    # Agar aapki sheet mein 'Freight' ki jagah 'Amount' hai to yahan badle
-    rev_col = 'Freight' if 'Freight' in df_t.columns else 'Amount'
-    prof_col = 'Profit' if 'Profit' in df_t.columns else 'Net Profit'
-    
-    # Expense columns list (Jo trips sheet mein hote hain)
-    # Yahan 'DRIVER ADV' aur 'Hired Charges' check karein
-    exp_cols = [c for c in ['Hired Charges', 'Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV'] if c in df_t.columns]
+    st.title("📊 Financial Intelligence Dashboard")
 
-    # 2. Calculation (Safe Mode)
-    total_revenue = df_t[rev_col].sum() if rev_col in df_t.columns else 0
-    total_expenses = df_t[exp_cols].sum().sum() if exp_cols else 0
-    net_profit = df_t[prof_col].sum() if prof_col in df_t.columns else (total_revenue - total_expenses)
+    # --- 1. ACTUAL CASH FLOW (Based on Receipts & Payments) ---
+    # Receipt: Paisa aaya | Payment/Expense: Paisa gaya
+    total_received = df_receipts['Amount'].sum() if not df_receipts.empty else 0
+    total_paid = df_payments['Amount'].sum() if not df_payments.empty else 0
+    office_exp = df_expenses['Amount'].sum() if not df_expenses.empty else 0
     
-    # KPI Metrics
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Total Revenue", f"₹{total_revenue:,.0f}")
-    m2.metric("Total Expenses", f"₹{total_expenses:,.0f}")
-    m3.metric("Net Profit", f"₹{net_profit:,.0f}")
+    actual_cash_balance = total_received - (total_paid + office_exp)
+
+    # --- 2. FUND FLOW (Based on LR Entry - Accrual Basis) ---
+    # Kitna aayega (Total Freight) | Kitna dena hai (Hired Charges + Pending Adv)
+    total_receivable = df_t['Freight'].sum()
+    total_payable = df_t['Hired Charges'].sum() + df_t['Diesel'].sum() + df_t['Toll'].sum() + df_t['Driver Adv'].sum()
+    
+    projected_surplus = total_receivable - total_payable
+
+    # KPI Row
+    k1, k2, k3 = st.columns(3)
+    k1.metric("Cash in Hand (Actual)", f"₹{actual_cash_balance:,.0f}", "Receipts - Payments")
+    k2.metric("Fund Flow (LR Base)", f"₹{projected_surplus:,.0f}", "Freight - Liabilities")
+    k3.metric("Net Office Exp", f"₹{office_exp:,.0f}", delta_color="inverse")
 
     st.divider()
 
-    # --- ROW 1: Charts ---
+    # --- CHARTS ---
     c1, c2 = st.columns(2)
-    
+
     with c1:
-        st.subheader("📈 P&L Analysis")
-        # Profit vs Revenue Chart
-        fig_pl = px.bar(df_t, x='Date', y=[rev_col, prof_col] if prof_col in df_t.columns else rev_col,
-                        title="Revenue vs Profit Trend", barmode='group',
-                        color_discrete_sequence=['#3498db', '#2ecc71'])
-        st.plotly_chart(fig_pl, use_container_width=True)
+        st.subheader("💰 Actual Cash Flow (Monthly)")
+        # Receipt vs Payment Comparison
+        # Hum Receipts aur Payments ko month-wise group karenge
+        df_receipts['Month'] = pd.to_datetime(df_receipts['Date']).dt.strftime('%b %Y')
+        df_payments['Month'] = pd.to_datetime(df_payments['Date']).dt.strftime('%b %Y')
+        
+        monthly_rec = df_receipts.groupby('Month')['Amount'].sum()
+        monthly_pay = df_payments.groupby('Month')['Amount'].sum()
+        
+        fig_cash = go.Figure()
+        fig_cash.add_trace(go.Bar(name='Cash In (Receipts)', x=monthly_rec.index, y=monthly_rec, marker_color='#2ecc71'))
+        fig_cash.add_trace(go.Bar(name='Cash Out (Payments/Exp)', x=monthly_pay.index, y=monthly_pay, marker_color='#e74c3c'))
+        fig_cash.update_layout(barmode='group', title="Money In vs Money Out")
+        st.plotly_chart(fig_cash, use_container_width=True)
 
     with c2:
-        st.subheader("⛽ Expense Breakdown")
-        if exp_cols:
-            exp_sums = df_t[exp_cols].sum().reset_index()
-            exp_sums.columns = ['Category', 'Amount']
-            fig_pie = px.pie(exp_sums, values='Amount', names='Category', hole=0.4,
-                             color_discrete_sequence=px.colors.qualitative.Set3)
-            st.plotly_chart(fig_pie, use_container_width=True)
-        else:
-            st.warning("Expense columns not found in sheet!")
-
-        # --- ROW 2: CASH FLOW & FUND FLOW ---
-    c3, c4 = st.columns(2)
-
-    with c3:
-        st.subheader("💰 Cash Flow Trend (Revenue Over Time)")
-        # Date ke hisab se sorting taaki flow sahi dikhe
-        df_t['Date'] = pd.to_datetime(df_t['Date'])
-        cf_data = df_t.sort_values('Date')
+        st.subheader("🌊 Fund Flow Projection (LR Based)")
+        # LR ke hisab se kitna paisa "In-Pipe" hai
+        labels = ['Total Freight (Receivable)', 'Market Liabilities (Payable)', 'Estimated Margin']
+        values = [total_receivable, total_payable, projected_surplus]
         
-        # Line chart jo income ki raftar dikhayega
-        fig_cf = px.line(cf_data, x='Date', y=rev_col, 
-                         markers=True, line_shape='spline',
-                         title="Daily Cash Inflow",
-                         color_discrete_sequence=['#e67e22'])
-        fig_cf.update_traces(fill='tozeroy') # Area fill for better look
-        st.plotly_chart(fig_cf, use_container_width=True)
+        fig_fund = px.funnel_area(names=labels, values=values, color_discrete_sequence=['#3498db', '#f1c40f', '#27ae60'])
+        st.plotly_chart(fig_fund, use_container_width=True)
 
-    with c4:
-        st.subheader("🌊 Fund Flow (Cumulative Revenue)")
-        # Cumulative Sum: Yaani paisa kaise jama hota gaya
-        cf_data['Cumulative_Revenue'] = cf_data[rev_col].cumsum()
-        
-        fig_ff = px.area(cf_data, x='Date', y='Cumulative_Revenue',
-                         title="Total Funds Growth",
-                         color_discrete_sequence=['#9b59b6'])
-        st.plotly_chart(fig_ff, use_container_width=True)
+    # --- OFFICE & OTHER EXPENSES BREAKDOWN ---
+    st.subheader("🏢 Expense Analytics")
+    if not df_expenses.empty:
+        # Office expenses ka pie chart
+        fig_exp = px.pie(df_expenses, values='Amount', names='Category', hole=0.4,
+                         title="Office & Other Expenses Breakdown",
+                         color_discrete_sequence=px.colors.qualitative.Bold)
+        st.plotly_chart(fig_exp, use_container_width=True)
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
@@ -806,6 +795,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
