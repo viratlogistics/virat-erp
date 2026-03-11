@@ -33,7 +33,7 @@ def load(name):
     except Exception:
         return pd.DataFrame()
 
-# Saari sheets ko load karna (Indentation: 0 spaces)
+# Yeh lines bina kisi space ke shuru honi chahiye (Margin se chipki hui)
 df_t = load("trips")
 df_m = load("masters")
 df_p = load("payments")
@@ -801,6 +801,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
