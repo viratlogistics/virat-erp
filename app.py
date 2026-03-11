@@ -272,6 +272,33 @@ if menu == "0. Dashboard":
             st.plotly_chart(fig_pie, use_container_width=True)
         else:
             st.warning("Expense columns not found in sheet!")
+
+        # --- ROW 2: CASH FLOW & FUND FLOW ---
+    c3, c4 = st.columns(2)
+
+    with c3:
+        st.subheader("💰 Cash Flow Trend (Revenue Over Time)")
+        # Date ke hisab se sorting taaki flow sahi dikhe
+        df_t['Date'] = pd.to_datetime(df_t['Date'])
+        cf_data = df_t.sort_values('Date')
+        
+        # Line chart jo income ki raftar dikhayega
+        fig_cf = px.line(cf_data, x='Date', y=rev_col, 
+                         markers=True, line_shape='spline',
+                         title="Daily Cash Inflow",
+                         color_discrete_sequence=['#e67e22'])
+        fig_cf.update_traces(fill='tozeroy') # Area fill for better look
+        st.plotly_chart(fig_cf, use_container_width=True)
+
+    with c4:
+        st.subheader("🌊 Fund Flow (Cumulative Revenue)")
+        # Cumulative Sum: Yaani paisa kaise jama hota gaya
+        cf_data['Cumulative_Revenue'] = cf_data[rev_col].cumsum()
+        
+        fig_ff = px.area(cf_data, x='Date', y='Cumulative_Revenue',
+                         title="Total Funds Growth",
+                         color_discrete_sequence=['#9b59b6'])
+        st.plotly_chart(fig_ff, use_container_width=True)
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
@@ -779,6 +806,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
