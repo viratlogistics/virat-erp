@@ -227,65 +227,51 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 if menu == "0. Dashboard":
-    st.title("📊 Business Performance Dashboard")
+    st.title("📊 Virat Logistics Dashboard")
     
-    # --- TOP METRICS (KPIs) ---
-    total_revenue = df_t['Freight'].sum()
-    total_expenses = df_t[['Hired Charges', 'Diesel', 'Toll', 'Driver Adv']].sum().sum()
-    net_profit = df_t['Profit'].sum()
+    # 1. Column Names check (Aapki sheet ke mutabik)
+    # Agar aapki sheet mein 'Freight' ki jagah 'Amount' hai to yahan badle
+    rev_col = 'Freight' if 'Freight' in df_t.columns else 'Amount'
+    prof_col = 'Profit' if 'Profit' in df_t.columns else 'Net Profit'
     
+    # Expense columns list (Jo trips sheet mein hote hain)
+    # Yahan 'DRIVER ADV' aur 'Hired Charges' check karein
+    exp_cols = [c for c in ['Hired Charges', 'Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV'] if c in df_t.columns]
+
+    # 2. Calculation (Safe Mode)
+    total_revenue = df_t[rev_col].sum() if rev_col in df_t.columns else 0
+    total_expenses = df_t[exp_cols].sum().sum() if exp_cols else 0
+    net_profit = df_t[prof_col].sum() if prof_col in df_t.columns else (total_revenue - total_expenses)
+    
+    # KPI Metrics
     m1, m2, m3 = st.columns(3)
-    m1.metric("Total Revenue", f"₹{total_revenue:,.0f}", delta="Income")
-    m2.metric("Total Expenses", f"₹{total_expenses:,.0f}", delta="-Expense", delta_color="inverse")
-    m3.metric("Net Profit", f"₹{net_profit:,.0f}", delta=f"{(net_profit/total_revenue*100):.1f}% Margin")
+    m1.metric("Total Revenue", f"₹{total_revenue:,.0f}")
+    m2.metric("Total Expenses", f"₹{total_expenses:,.0f}")
+    m3.metric("Net Profit", f"₹{net_profit:,.0f}")
 
     st.divider()
 
-    # --- ROW 1: P&L and Cash Flow ---
+    # --- ROW 1: Charts ---
     c1, c2 = st.columns(2)
-
+    
     with c1:
-        st.subheader("📈 Profit & Loss (Monthly)")
-        # Monthly grouping
-        df_t['Month'] = pd.to_datetime(df_t['Date']).dt.strftime('%b %Y')
-        monthly_pl = df_t.groupby('Month')[['Freight', 'Profit']].sum().reset_index()
-        
-        fig_pl = px.bar(monthly_pl, x='Month', y=['Freight', 'Profit'], 
-                        barmode='group', color_discrete_sequence=['#3498db', '#2ecc71'],
-                        labels={'value': 'Amount (₹)', 'variable': 'Type'})
+        st.subheader("📈 P&L Analysis")
+        # Profit vs Revenue Chart
+        fig_pl = px.bar(df_t, x='Date', y=[rev_col, prof_col] if prof_col in df_t.columns else rev_col,
+                        title="Revenue vs Profit Trend", barmode='group',
+                        color_discrete_sequence=['#3498db', '#2ecc71'])
         st.plotly_chart(fig_pl, use_container_width=True)
 
     with c2:
-        st.subheader("💰 Cash Flow (Revenue vs Paid)")
-        # Cash Flow logic: Freight vs Advance/Balance
-        fig_cf = px.line(monthly_pl, x='Month', y='Freight', markers=True,
-                         line_shape='spline', render_mode='svg')
-        fig_cf.update_traces(line_color='#e67e22', fill='tozeroy')
-        st.plotly_chart(fig_cf, use_container_width=True)
-
-    # --- ROW 2: Fund Flow & Expense Distribution ---
-    c3, c4 = st.columns(2)
-
-    with c3:
-        st.subheader("🌊 Fund Flow Analysis")
-        # Fund Flow: Cumulative Revenue over time
-        df_t = df_t.sort_values('Date')
-        df_t['Cumulative_Fund'] = df_t['Freight'].cumsum()
-        fig_ff = px.area(df_t, x='Date', y='Cumulative_Fund', 
-                         color_discrete_sequence=['#9b59b6'], title="Cumulative Funds Over Time")
-        st.plotly_chart(fig_ff, use_container_width=True)
-
-    with c4:
-        st.subheader("📊 Expense Distribution")
-        # Expense Breakdown
-        exp_data = {
-            'Category': ['Hired Charges', 'Diesel', 'Toll', 'Driver Adv'],
-            'Amount': [df_t['Hired Charges'].sum(), df_t['Diesel'].sum(), 
-                       df_t['Toll'].sum(), df_t['Driver Adv'].sum()]
-        }
-        fig_pie = px.pie(exp_data, values='Amount', names='Category', 
-                         hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.subheader("⛽ Expense Breakdown")
+        if exp_cols:
+            exp_sums = df_t[exp_cols].sum().reset_index()
+            exp_sums.columns = ['Category', 'Amount']
+            fig_pie = px.pie(exp_sums, values='Amount', names='Category', hole=0.4,
+                             color_discrete_sequence=px.colors.qualitative.Set3)
+            st.plotly_chart(fig_pie, use_container_width=True)
+        else:
+            st.warning("Expense columns not found in sheet!")
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
@@ -793,6 +779,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
