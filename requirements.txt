@@ -5,4 +5,6 @@ google-auth
 fpdf
 reportlab
 openpyxl
+plotly
+
 
