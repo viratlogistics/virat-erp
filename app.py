@@ -569,11 +569,11 @@ elif menu == "7. Driver Khata":
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
                 
-elif menu == "8. Monthly Billing":
+elif menu == "8. Monthly Bill":
     st.header("🧾 Monthly Billing & Invoice Generation")
     
-    # 1. Branch Selection (Invoice Header aur Bank details ke liye)
-    sel_br = st.selectbox("Select Billing Branch*", ["Select"] + gl("Branch"), key="inv_br_sel")
+    # 1. Branch selection (Invoice header aur Bank details ke liye)
+    sel_br = st.selectbox("Select Billing Branch*", ["Select"] + gl("Branch"), key="bill_br_8")
     
     br_info = {}
     if sel_br != "Select":
@@ -583,47 +583,50 @@ elif menu == "8. Monthly Billing":
             br_info = temp_df.iloc[0].to_dict()
 
     # 2. Party Selection
-    sel_party = st.selectbox("Select Party to Bill*", ["Select"] + gl("Party"), key="inv_party_sel")
+    sel_party = st.selectbox("Select Party to Bill*", ["Select"] + gl("Party"), key="party_bill_8")
     
     if sel_party != "Select":
-        # Trips sheet se data filter karna
-        # Note: 'Party Name' wahi column hai jo aapki trips sheet mein hai
-        party_data = df_t[df_t['Party Name'] == sel_party]
+        # Trips sheet se is party ke LRs filter karna
+        # Check karein ki trips sheet mein column ka naam 'Party Name' hi hai
+        party_lrs = df_t[df_t['Party Name'] == sel_party]
         
-        if not party_data.empty:
-            st.subheader(f"Select LRs for {sel_party}")
+        if not party_lrs.empty:
+            st.subheader(f"Pending LRs for {sel_party}")
             
-            # Selectable Dataframe ya Checkboxes
+            # LR selection list
             selected_lrs = []
-            for i, row in party_data.iterrows():
-                # Sirf wahi dikhayen jo abhi bill nahi huye (Optional logic)
-                col_a, col_b, col_c = st.columns([1, 2, 1])
-                with col_a:
-                    is_selected = st.checkbox(f"LR: {row['LR No']}", key=f"chk_{i}")
-                with col_b:
-                    st.write(f"📅 {row['Date']} | 🚛 {row['Vehicle No']}")
-                with col_c:
-                    st.write(f"₹ {row['Freight']}")
+            for i, row in party_lrs.iterrows():
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col1:
+                    pick = st.checkbox(f"Select", key=f"sel_{i}")
+                with col2:
+                    st.write(f"LR: {row['LR No']} | Date: {row['Date']}")
+                with col3:
+                    st.write(f"Amt: {row['Freight']}")
                 
-                if is_selected:
+                if pick:
                     selected_lrs.append(row.to_dict())
-
+            
             if selected_lrs:
                 st.divider()
-                total_amt = sum(item['Freight'] for item in selected_lrs)
-                st.success(f"Total Selected Amount: ₹{total_amt}")
+                total_bill = sum(item['Freight'] for item in selected_lrs)
+                st.info(f"Total Bill Amount: ₹{total_bill}")
                 
-                inv_no = st.text_input("Invoice Number", value=f"VL/INV/{len(df_t):03d}")
-                inv_date = st.date_input("Invoice Date", date.today())
-
-                if st.button("📄 Prepare Invoice PDF"):
-                    # Invoice Data Bundle
+                # Invoice Details
+                c1, c2 = st.columns(2)
+                with c1:
+                    inv_no = st.text_input("Invoice Number", value=f"VL/INV/{len(df_t):03d}")
+                with c2:
+                    inv_date = st.date_input("Invoice Date", date.today())
+                
+                if st.button("📄 Generate Tax Invoice"):
+                    # Data bundle for Invoice PDF
                     st.session_state.inv_ready = {
                         "InvNo": inv_no,
                         "InvDate": str(inv_date),
                         "Party": sel_party,
-                        "Items": selected_lrs,
-                        "Total": total_amt,
+                        "LRs": selected_lrs,
+                        "Total": total_bill,
                         "BranchName": sel_br,
                         "BranchGST": br_info.get('GST', 'N/A'),
                         "BranchAddr": br_info.get('Address', 'N/A'),
@@ -631,19 +634,15 @@ elif menu == "8. Monthly Billing":
                         "BankAC": br_info.get('A_C_No', 'N/A'),
                         "BankIFSC": br_info.get('IFSC', 'N/A')
                     }
-                    st.success("Invoice Ready!")
-
+                    st.success("Invoice PDF is ready for download!")
         else:
-            st.warning("No LR records found for this party.")
+            st.warning("No records found for this party.")
 
-    # Download Button (Logic branch se linked hai)
+    # 3. Download Button (Logic from LR PDF)
     if st.session_state.get('inv_ready'):
-        st.download_button(
-            label="📥 DOWNLOAD INVOICE PDF",
-            data=generate_invoice_pdf(st.session_state.inv_ready),
-            file_name=f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf",
-            mime="application/pdf"
-        )
+        st.divider()
+        pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
+        st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
 
 
 
