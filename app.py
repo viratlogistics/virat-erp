@@ -137,7 +137,7 @@ df_t = load("trips")
 if 'reset_trigger' not in st.session_state: st.session_state.reset_trigger = 0
 if 'pdf_ready' not in st.session_state: st.session_state.pdf_ready = None
 
-menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry", "3. LR Register", "4. Financials", "5. Business Insights", "6. Expense Manager", "7. Driver Khata"])
+menu = st.sidebar.selectbox("🚀 MENU", ["1. Masters Setup", "2. LR Entry", "3. LR Register", "4. Financials", "5. Business Insights", "6. Expense Manager", "7. Driver Khata", "8. Monthly Bill"])
 
 def gl(t): 
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
