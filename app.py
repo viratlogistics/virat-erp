@@ -1,26 +1,9 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 from datetime import date
-from fpdf import FPDF
-import gspread
-from google.oauth2.service_account import Credentials
-import json, io
 
-# --- 1. CONFIG & CONNECTION ---
-st.set_page_config(page_title="Virat Logistics ERP", layout="wide")
-
-@st.cache_resource
-def get_sh():
-    try:
-        info = json.loads(st.secrets["gcp_service_account"]["json_key"])
-        creds = Credentials.from_service_account_info(info, scopes=["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"])
-        return gspread.authorize(creds).open("Virat_Logistics_Data")
-    except:
-        return None
-
-sh = get_sh()
-
-# 1. Sabse pehle Load Function ko sahi karte hain
+# 1. Load Function (Ekdam sahi spacing ke sath)
 def load(name):
     try:
         ws = sh.worksheet(name)
@@ -33,15 +16,11 @@ def load(name):
     except Exception:
         return pd.DataFrame()
 
-# Yeh lines bina kisi space ke shuru honi chahiye (Margin se chipki hui)
+# 2. Variables Load Karna (Inhe hamesha margin se chipka kar rakhein)
 df_t = load("trips")
 df_m = load("masters")
 df_p = load("payments")
 df_oe = load("office_expenses")
-        return df
-    except:
-        return pd.DataFrame()
-
 def save(name, row):
     try:
         sh.worksheet(name).append_row(row, value_input_option='USER_ENTERED')
@@ -240,60 +219,51 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 if menu == "0. Dashboard":
-    st.title("📊 Virat Logistics - Financial Dashboard")
+    st.title("📊 Virat Logistics Dashboard")
 
-    # --- 1. ACTUAL CASH FLOW (Receipts vs Payments) ---
+    # Metrics Calculations
     total_receipts = 0
-    total_broker_pay = 0
-    
-    # Check karein ki df_p (payments) load hui hai ya nahi
-    if 'df_p' in locals() and not df_p.empty:
+    total_payments_out = 0
+    if not df_p.empty:
         df_p['Amount'] = pd.to_numeric(df_p['Amount'], errors='coerce').fillna(0)
-        # Type column mein 'Receipt' aur 'Payment' check karein
         total_receipts = df_p[df_p['Type'].str.contains('Receipt', na=False)]['Amount'].sum()
-        total_broker_pay = df_p[df_p['Type'].str.contains('Payment', na=False)]['Amount'].sum()
+        total_payments_out = df_p[df_p['Type'].str.contains('Payment', na=False)]['Amount'].sum()
 
     total_office_exp = 0
-    if 'df_oe' in locals() and not df_oe.empty:
+    if not df_oe.empty:
         df_oe['Amount'] = pd.to_numeric(df_oe['Amount'], errors='coerce').fillna(0)
         total_office_exp = df_oe['Amount'].sum()
 
-    actual_cash_balance = total_receipts - (total_broker_pay + total_office_exp)
-
-    # --- 2. FUND FLOW (LR Entry Based) ---
-    total_receivable = df_t['Freight'].sum() if 'Freight' in df_t.columns else 0
-    # Liabilities: Market Hired Charges + Diesel + Toll + DRIVER ADV
-    liab_cols = [c for c in ['HiredCharges', 'Diesel', 'Toll', 'DRIVER ADV', 'Driver Adv'] if c in df_t.columns]
-    total_liabilities = df_t[liab_cols].sum().sum() if liab_cols else 0
+    actual_cash = total_receipts - (total_payments_out + total_office_exp)
     
-    projected_fund_flow = total_receivable - total_liabilities
+    # Fund Flow Calculation (LR Base)
+    total_rev = df_t['Freight'].sum() if 'Freight' in df_t.columns else 0
+    liab_cols = [c for c in ['HiredCharges', 'Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV'] if c in df_t.columns]
+    total_liab = df_t[liab_cols].sum().sum() if liab_cols else 0
+    fund_flow = total_rev - total_liab
 
-    # KPI Row
+    # KPI Metrics Bar
     k1, k2, k3 = st.columns(3)
-    k1.metric("Actual Cash Balance", f"₹{actual_cash_balance:,.0f}", "Receipts - All Payments")
-    k2.metric("Fund Flow (Projected)", f"₹{projected_fund_flow:,.0f}", "LR Net Profit")
+    k1.metric("Actual Cash Balance", f"₹{actual_cash:,.0f}", "Money in Hand")
+    k2.metric("Fund Flow (Projected)", f"₹{fund_flow:,.0f}", "LR Net Margin")
     k3.metric("Office Expenses", f"₹{total_office_exp:,.0f}", delta_color="inverse")
 
     st.divider()
 
-    # --- CHARTS ---
+    # Dashboard Charts
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("💰 Actual Cash Flow")
-        cash_map = {'Cat': ['Receipts', 'Payments', 'Office Exp'], 'Amt': [total_receipts, total_broker_pay, total_office_exp]}
-        fig_cash = px.bar(cash_map, x='Cat', y='Amt', color='Cat', color_discrete_sequence=px.colors.qualitative.Pastel)
+        fig_cash = px.bar(x=['Receipts', 'Paid Out'], y=[total_receipts, (total_payments_out + total_office_exp)], 
+                          color=['In', 'Out'], color_discrete_map={'In': '#2ecc71', 'Out': '#e74c3c'},
+                          labels={'x': 'Category', 'y': 'Amount'})
         st.plotly_chart(fig_cash, use_container_width=True)
 
     with c2:
         st.subheader("🌊 Fund Flow Analysis")
-        fig_fund = px.pie(values=[total_receivable, total_liabilities], names=['Receivable', 'Payable'], hole=0.5)
+        fig_fund = px.pie(values=[total_rev, total_liab], names=['Receivable', 'Payable'], hole=0.5,
+                          color_discrete_sequence=['#3498db', '#f1c40f'])
         st.plotly_chart(fig_fund, use_container_width=True)
-    # --- 5. OFFICE EXPENSE CATEGORIES ---
-    if not df_oe.empty:
-        st.subheader("🏢 Office Expense Breakdown")
-        fig_oe = px.pie(df_oe, values='Amount', names='Category', hole=0.4,
-                        color_discrete_sequence=px.colors.qualitative.Pastel)
-        st.plotly_chart(fig_oe, use_container_width=True)
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
@@ -801,6 +771,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
