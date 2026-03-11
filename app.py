@@ -25,6 +25,14 @@ def load(name):
         ws = sh.worksheet(name)
         df = pd.DataFrame(ws.get_all_records())
         df.columns = [str(c).strip() for c in df.columns]
+        # Yeh lines load_data wali jagah par add karein
+        df_t = load_data("trips")
+        df_m = load_data("masters")
+
+        # --- NAYI SHEETS LOAD KAREIN ---
+        df_receipts = load_data("receipts")  # Aapki sheet ka naam 'receipts' hona chahiye
+        df_payments = load_data("payments")  # Aapki sheet ka naam 'payments' hona chahiye
+        df_expenses = load_data("expenses")  # Aapki sheet ka naam 'expenses' hona chahiye
         return df
     except:
         return pd.DataFrame()
@@ -229,65 +237,57 @@ import plotly.graph_objects as go
 if menu == "0. Dashboard":
     st.title("📊 Financial Intelligence Dashboard")
 
-    # --- 1. ACTUAL CASH FLOW (Based on Receipts & Payments) ---
-    # Receipt: Paisa aaya | Payment/Expense: Paisa gaya
-    total_received = df_receipts['Amount'].sum() if not df_receipts.empty else 0
-    total_paid = df_payments['Amount'].sum() if not df_payments.empty else 0
-    office_exp = df_expenses['Amount'].sum() if not df_expenses.empty else 0
+    # --- 1. ACTUAL CASH FLOW (Receipts vs Payments) ---
+    # Column ka naam check karein: 'Amount' hai ya 'Amt'
+    rec_amt = 'Amount' if 'Amount' in df_receipts.columns else 'Amt'
+    pay_amt = 'Amount' if 'Amount' in df_payments.columns else 'Amt'
+    exp_amt = 'Amount' if 'Amount' in df_expenses.columns else 'Amt'
+
+    total_received = df_receipts[rec_amt].sum() if not df_receipts.empty and rec_amt in df_receipts.columns else 0
+    total_paid = df_payments[pay_amt].sum() if not df_payments.empty and pay_amt in df_payments.columns else 0
+    office_exp = df_expenses[exp_amt].sum() if not df_expenses.empty and exp_amt in df_expenses.columns else 0
     
     actual_cash_balance = total_received - (total_paid + office_exp)
 
-    # --- 2. FUND FLOW (Based on LR Entry - Accrual Basis) ---
-    # Kitna aayega (Total Freight) | Kitna dena hai (Hired Charges + Pending Adv)
-    total_receivable = df_t['Freight'].sum()
-    total_payable = df_t['Hired Charges'].sum() + df_t['Diesel'].sum() + df_t['Toll'].sum() + df_t['Driver Adv'].sum()
+    # --- 2. FUND FLOW (LR Entry Based) ---
+    total_receivable = df_t['Freight'].sum() if 'Freight' in df_t.columns else 0
+    
+    # Liabilities: Market Hired Charges + Expenses (Diesel, Toll, Adv)
+    # Aapne jo DRIVER ADV fix kiya tha wahi yahan use karein
+    exp_list = [c for c in ['Hired Charges', 'Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV'] if c in df_t.columns]
+    total_payable = df_t[exp_list].sum().sum() if exp_list else 0
     
     projected_surplus = total_receivable - total_payable
 
     # KPI Row
     k1, k2, k3 = st.columns(3)
     k1.metric("Cash in Hand (Actual)", f"₹{actual_cash_balance:,.0f}", "Receipts - Payments")
-    k2.metric("Fund Flow (LR Base)", f"₹{projected_surplus:,.0f}", "Freight - Liabilities")
-    k3.metric("Net Office Exp", f"₹{office_exp:,.0f}", delta_color="inverse")
+    k2.metric("Fund Flow (LR Projection)", f"₹{projected_surplus:,.0f}", "Freight - Liabilities")
+    k3.metric("Office Expenses", f"₹{office_exp:,.0f}", delta_color="inverse")
 
     st.divider()
 
-    # --- CHARTS ---
+    # --- CHARTS SECTION ---
     c1, c2 = st.columns(2)
 
     with c1:
-        st.subheader("💰 Actual Cash Flow (Monthly)")
-        # Receipt vs Payment Comparison
-        # Hum Receipts aur Payments ko month-wise group karenge
-        df_receipts['Month'] = pd.to_datetime(df_receipts['Date']).dt.strftime('%b %Y')
-        df_payments['Month'] = pd.to_datetime(df_payments['Date']).dt.strftime('%b %Y')
-        
-        monthly_rec = df_receipts.groupby('Month')['Amount'].sum()
-        monthly_pay = df_payments.groupby('Month')['Amount'].sum()
-        
-        fig_cash = go.Figure()
-        fig_cash.add_trace(go.Bar(name='Cash In (Receipts)', x=monthly_rec.index, y=monthly_rec, marker_color='#2ecc71'))
-        fig_cash.add_trace(go.Bar(name='Cash Out (Payments/Exp)', x=monthly_pay.index, y=monthly_pay, marker_color='#e74c3c'))
-        fig_cash.update_layout(barmode='group', title="Money In vs Money Out")
+        st.subheader("💰 Cash Flow (Money In vs Out)")
+        # Actual Transactions Chart
+        cash_data = {
+            'Category': ['Received (Receipts)', 'Paid (Payments)', 'Office Exp'],
+            'Amount': [total_received, total_paid, office_exp]
+        }
+        fig_cash = px.bar(cash_data, x='Category', y='Amount', color='Category',
+                          color_discrete_map={'Received (Receipts)': '#2ecc71', 'Paid (Payments)': '#e74c3c', 'Office Exp': '#f39c12'})
         st.plotly_chart(fig_cash, use_container_width=True)
 
     with c2:
-        st.subheader("🌊 Fund Flow Projection (LR Based)")
-        # LR ke hisab se kitna paisa "In-Pipe" hai
-        labels = ['Total Freight (Receivable)', 'Market Liabilities (Payable)', 'Estimated Margin']
+        st.subheader("🌊 Fund Flow Projection")
+        # LR Analysis Chart
+        labels = ['Total Freight', 'Total Liabilities', 'Potential Profit']
         values = [total_receivable, total_payable, projected_surplus]
-        
-        fig_fund = px.funnel_area(names=labels, values=values, color_discrete_sequence=['#3498db', '#f1c40f', '#27ae60'])
+        fig_fund = px.pie(values=values, names=labels, hole=0.5, color_discrete_sequence=px.colors.qualitative.Pastel)
         st.plotly_chart(fig_fund, use_container_width=True)
-
-    # --- OFFICE & OTHER EXPENSES BREAKDOWN ---
-    st.subheader("🏢 Expense Analytics")
-    if not df_expenses.empty:
-        # Office expenses ka pie chart
-        fig_exp = px.pie(df_expenses, values='Amount', names='Category', hole=0.4,
-                         title="Office & Other Expenses Breakdown",
-                         color_discrete_sequence=px.colors.qualitative.Bold)
-        st.plotly_chart(fig_exp, use_container_width=True)
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
@@ -795,6 +795,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
