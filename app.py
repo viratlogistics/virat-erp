@@ -568,7 +568,7 @@ elif menu == "7. Driver Khata":
                 total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
                 st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
                 st.dataframe(d_hist, use_container_width=True, hide_index=True)
-elif menu == "3. Monthly Billing":
+elif menu == "8. Monthly Billing":
     st.header("🧾 Monthly Billing & Invoice Generation")
     
     # 1. Branch Selection (Invoice Header aur Bank details ke liye)
@@ -643,6 +643,7 @@ elif menu == "3. Monthly Billing":
             file_name=f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf",
             mime="application/pdf"
         )
+
 
 
 
