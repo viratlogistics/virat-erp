@@ -20,25 +20,24 @@ def get_sh():
 
 sh = get_sh()
 
+# 1. Sabse pehle Load Function ko sahi karte hain
 def load(name):
     try:
         ws = sh.worksheet(name)
-        df = pd.DataFrame(ws.get_all_records())
+        data = ws.get_all_records()
+        if not data:
+            return pd.DataFrame()
+        df = pd.DataFrame(data)
         df.columns = [str(c).strip() for c in df.columns]
-        # Yeh lines load_data wali jagah par add karein
-        # --- Sabhi Sheets ka Data Load Karein ---
-        # --- Ye lines load_data wali jagah par add karein ---
-        df_t = load_data("trips")
-        df_m = load_data("masters")
+        return df
+    except Exception:
+        return pd.DataFrame()
 
-        # Dashboard ke liye ye 2 lines zaroori hain
-        df_p = load_data("payments")         # Aapki payments sheet ka data
-        df_oe = load_data("office_expenses") # Aapki office_expenses sheet ka data
-
-        # --- NAYI SHEETS LOAD KAREIN ---
-        df_receipts = load_data("receipts")  # Aapki sheet ka naam 'receipts' hona chahiye
-        df_payments = load_data("payments")  # Aapki sheet ka naam 'payments' hona chahiye
-        df_expenses = load_data("expenses")  # Aapki sheet ka naam 'expenses' hona chahiye
+# 2. Ab saari sheets ko variables mein load karein (Taki NameError na aaye)
+df_t = load("trips")
+df_m = load("masters")
+df_p = load("payments")         # Headers: Account_Name, Type, Amount
+df_oe = load("office_expenses") # Headers: Category, Amount
         return df
     except:
         return pd.DataFrame()
@@ -802,6 +801,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
