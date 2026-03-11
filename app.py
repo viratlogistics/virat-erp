@@ -1,26 +1,34 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 from datetime import date
+from fpdf import FPDF
+import gspread
+from google.oauth2.service_account import Credentials
+import json, io
 
-# 1. Load Function (Ekdam sahi spacing ke sath)
+# --- 1. CONFIG & CONNECTION ---
+st.set_page_config(page_title="Virat Logistics ERP", layout="wide")
+
+@st.cache_resource
+def get_sh():
+    try:
+        info = json.loads(st.secrets["gcp_service_account"]["json_key"])
+        creds = Credentials.from_service_account_info(info, scopes=["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"])
+        return gspread.authorize(creds).open("Virat_Logistics_Data")
+    except:
+        return None
+
+sh = get_sh()
+
 def load(name):
     try:
         ws = sh.worksheet(name)
-        data = ws.get_all_records()
-        if not data:
-            return pd.DataFrame()
-        df = pd.DataFrame(data)
+        df = pd.DataFrame(ws.get_all_records())
         df.columns = [str(c).strip() for c in df.columns]
         return df
-    except Exception:
+    except:
         return pd.DataFrame()
 
-# 2. Variables Load Karna (Inhe hamesha margin se chipka kar rakhein)
-df_t = load("trips")
-df_m = load("masters")
-df_p = load("payments")
-df_oe = load("office_expenses")
 def save(name, row):
     try:
         sh.worksheet(name).append_row(row, value_input_option='USER_ENTERED')
@@ -211,59 +219,56 @@ with st.sidebar:
         "7. Driver Khata", 
         "8. Monthly Bill"
     ], index=0) # Default selection Dashboard rahega
-    
+
 def gl(t): 
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
 
-import plotly.express as px
-import plotly.graph_objects as go
-
 if menu == "0. Dashboard":
     st.title("📊 Virat Logistics Dashboard")
-
-    # Metrics Calculations
-    total_receipts = 0
-    total_payments_out = 0
-    if not df_p.empty:
-        df_p['Amount'] = pd.to_numeric(df_p['Amount'], errors='coerce').fillna(0)
-        total_receipts = df_p[df_p['Type'].str.contains('Receipt', na=False)]['Amount'].sum()
-        total_payments_out = df_p[df_p['Type'].str.contains('Payment', na=False)]['Amount'].sum()
-
-    total_office_exp = 0
-    if not df_oe.empty:
-        df_oe['Amount'] = pd.to_numeric(df_oe['Amount'], errors='coerce').fillna(0)
-        total_office_exp = df_oe['Amount'].sum()
-
-    actual_cash = total_receipts - (total_payments_out + total_office_exp)
     
-    # Fund Flow Calculation (LR Base)
-    total_rev = df_t['Freight'].sum() if 'Freight' in df_t.columns else 0
-    liab_cols = [c for c in ['HiredCharges', 'Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV'] if c in df_t.columns]
-    total_liab = df_t[liab_cols].sum().sum() if liab_cols else 0
-    fund_flow = total_rev - total_liab
+    # 1. Column Names check (Aapki sheet ke mutabik)
+    # Agar aapki sheet mein 'Freight' ki jagah 'Amount' hai to yahan badle
+    rev_col = 'Freight' if 'Freight' in df_t.columns else 'Amount'
+    prof_col = 'Profit' if 'Profit' in df_t.columns else 'Net Profit'
+    
+    # Expense columns list (Jo trips sheet mein hote hain)
+    # Yahan 'DRIVER ADV' aur 'Hired Charges' check karein
+    exp_cols = [c for c in ['Hired Charges', 'Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV'] if c in df_t.columns]
 
-    # KPI Metrics Bar
-    k1, k2, k3 = st.columns(3)
-    k1.metric("Actual Cash Balance", f"₹{actual_cash:,.0f}", "Money in Hand")
-    k2.metric("Fund Flow (Projected)", f"₹{fund_flow:,.0f}", "LR Net Margin")
-    k3.metric("Office Expenses", f"₹{total_office_exp:,.0f}", delta_color="inverse")
+    # 2. Calculation (Safe Mode)
+    total_revenue = df_t[rev_col].sum() if rev_col in df_t.columns else 0
+    total_expenses = df_t[exp_cols].sum().sum() if exp_cols else 0
+    net_profit = df_t[prof_col].sum() if prof_col in df_t.columns else (total_revenue - total_expenses)
+    
+    # KPI Metrics
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total Revenue", f"₹{total_revenue:,.0f}")
+    m2.metric("Total Expenses", f"₹{total_expenses:,.0f}")
+    m3.metric("Net Profit", f"₹{net_profit:,.0f}")
 
     st.divider()
 
-    # Dashboard Charts
+    # --- ROW 1: Charts ---
     c1, c2 = st.columns(2)
+    
     with c1:
-        st.subheader("💰 Actual Cash Flow")
-        fig_cash = px.bar(x=['Receipts', 'Paid Out'], y=[total_receipts, (total_payments_out + total_office_exp)], 
-                          color=['In', 'Out'], color_discrete_map={'In': '#2ecc71', 'Out': '#e74c3c'},
-                          labels={'x': 'Category', 'y': 'Amount'})
-        st.plotly_chart(fig_cash, use_container_width=True)
+        st.subheader("📈 P&L Analysis")
+        # Profit vs Revenue Chart
+        fig_pl = px.bar(df_t, x='Date', y=[rev_col, prof_col] if prof_col in df_t.columns else rev_col,
+                        title="Revenue vs Profit Trend", barmode='group',
+                        color_discrete_sequence=['#3498db', '#2ecc71'])
+        st.plotly_chart(fig_pl, use_container_width=True)
 
     with c2:
-        st.subheader("🌊 Fund Flow Analysis")
-        fig_fund = px.pie(values=[total_rev, total_liab], names=['Receivable', 'Payable'], hole=0.5,
-                          color_discrete_sequence=['#3498db', '#f1c40f'])
-        st.plotly_chart(fig_fund, use_container_width=True)
+        st.subheader("⛽ Expense Breakdown")
+        if exp_cols:
+            exp_sums = df_t[exp_cols].sum().reset_index()
+            exp_sums.columns = ['Category', 'Amount']
+            fig_pie = px.pie(exp_sums, values='Amount', names='Category', hole=0.4,
+                             color_discrete_sequence=px.colors.qualitative.Set3)
+            st.plotly_chart(fig_pie, use_container_width=True)
+        else:
+            st.warning("Expense columns not found in sheet!")
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
@@ -771,19 +776,6 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
