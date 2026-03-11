@@ -33,11 +33,11 @@ def load(name):
     except Exception:
         return pd.DataFrame()
 
-# 2. Ab saari sheets ko variables mein load karein (Taki NameError na aaye)
+# Saari sheets ko load karna (Indentation: 0 spaces)
 df_t = load("trips")
 df_m = load("masters")
-df_p = load("payments")         # Headers: Account_Name, Type, Amount
-df_oe = load("office_expenses") # Headers: Category, Amount
+df_p = load("payments")
+df_oe = load("office_expenses")
         return df
     except:
         return pd.DataFrame()
@@ -801,6 +801,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
