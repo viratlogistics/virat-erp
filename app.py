@@ -27,10 +27,13 @@ def load(name):
         df.columns = [str(c).strip() for c in df.columns]
         # Yeh lines load_data wali jagah par add karein
         # --- Sabhi Sheets ka Data Load Karein ---
-        df_t = load_data("trips")            # LR Details
-        df_m = load_data("masters")          # Branch/Party Names
-        df_p = load_data("payments")         # Party/Broker Transactions (Receipts/Payments)
-        df_oe = load_data("office_expenses") # Office/General Expenses
+        # --- Ye lines load_data wali jagah par add karein ---
+        df_t = load_data("trips")
+        df_m = load_data("masters")
+
+        # Dashboard ke liye ye 2 lines zaroori hain
+        df_p = load_data("payments")         # Aapki payments sheet ka data
+        df_oe = load_data("office_expenses") # Aapki office_expenses sheet ka data
 
         # --- NAYI SHEETS LOAD KAREIN ---
         df_receipts = load_data("receipts")  # Aapki sheet ka naam 'receipts' hona chahiye
@@ -813,6 +816,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
