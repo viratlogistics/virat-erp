@@ -717,7 +717,7 @@ elif menu == "6. Expense Manager":
             col1, col2 = st.columns(2)
             with col1:
                 e_date = st.date_input("Date", date.today())
-                e_cat = st.selectbox("Category", ["Office Rent", "Electricity", "Staff Salary", "Stationery", "Tea/Coffee", "Repairs", "Others"])
+                exp_cats = ["Office Rent", "Electricity", "Tea/Snacks", "Stationery", "Staff Salary", "Personal Exp Indrajit", "Personal Exp Vishal", "Other"]
             with col2:
                 e_amt = st.number_input("Amount (₹)", min_value=0.0)
                 e_mode = st.selectbox("Payment Mode", ["Cash", "Online", "Cheque"])
@@ -915,6 +915,7 @@ elif menu == "9. Data Manager (Delete/Edit)":
                         ws_p.delete_rows(row_idx + 2)
                     st.success("Payment entry delete ho gayi hai!")
                     st.rerun()
+
 
 
 
