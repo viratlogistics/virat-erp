@@ -227,68 +227,67 @@ def gl(t):
 if menu == "0. Dashboard":
     st.title("📊 Virat Logistics Dashboard")
     
-    # --- 1. Data Loading for Calculations ---
-    df_oe = load("office_expenses") # Office expenses load karna zaroori hai
+    # --- 1. Data Loading ---
+    df_oe = load("office_expenses")
     
-    # Column Names check
+    # --- 2. Correct Column Mapping (Safe Check) ---
     rev_col = 'Freight' if 'Freight' in df_t.columns else 'Amount'
-    prof_col = 'Profit' if 'Profit' in df_t.columns else 'Net Profit'
     
-    # Expense columns list (Trip based)
-    exp_cols = [c for c in ['Hired Charges', 'Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV', 'DriverExp'] if c in df_t.columns]
+    # Sare possible expense columns (Bina space aur space wale dono check karein)
+    # Aapne 'HiredCharges' aur 'Hired Charges' dono use kiye ho sakte hain
+    exp_list = ['HiredCharges', 'Hired Charges', 'Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV', 'DriverExp', 'Other']
+    existing_exp_cols = [c for c in exp_list if c in df_t.columns]
 
-    # --- 2. Calculations (Including Office Expenses) ---
+    # --- 3. Calculations ---
     total_revenue = df_t[rev_col].sum() if rev_col in df_t.columns else 0
     
-    # Trip Expenses calculation
-    trip_expenses = df_t[exp_cols].sum().sum() if exp_cols else 0
+    # Actual Trip Expenses (Market Hired Cost + Own Fuel/Toll)
+    trip_expenses = df_t[existing_exp_cols].sum().sum() if existing_exp_cols else 0
     
-    # Office Expenses calculation
+    # Office Expenses
     total_office_exp = 0
     if not df_oe.empty:
         df_oe.columns = [str(c).strip() for c in df_oe.columns]
         total_office_exp = pd.to_numeric(df_oe['Amount'], errors='coerce').fillna(0).sum()
 
-    # Final Net Profit (Revenue - Trip Expenses - Office Expenses)
+    # Final Net Profit (Revenue - Sabhi Trip Kharche - Office Kharche)
     final_net_profit = total_revenue - (trip_expenses + total_office_exp)
     
-    # KPI Metrics
+    # --- 4. KPI Metrics ---
     m1, m2, m3 = st.columns(3)
     m1.metric("Total Revenue", f"₹{total_revenue:,.0f}")
-    m2.metric("Total Expenses", f"₹{(trip_expenses + total_office_exp):,.0f}", delta=f"Office: ₹{total_office_exp:,.0f}", delta_color="inverse")
+    # Isme ab Vehicle Hired Cost shamil hai
+    m2.metric("Total Expenses", f"₹{(trip_expenses + total_office_exp):,.0f}", 
+              delta=f"Office: ₹{total_office_exp:,.0f}", delta_color="inverse")
     m3.metric("Final Net Profit", f"₹{final_net_profit:,.0f}")
 
     st.divider()
 
-    # --- ROW 1: Charts ---
+    # --- 5. Charts ---
     c1, c2 = st.columns(2)
     
     with c1:
-        st.subheader("📈 P&L Analysis")
-        # Isme Profit vs Revenue trend dikhega
-        fig_pl = px.bar(df_t, x='Date', y=[rev_col, prof_col] if prof_col in df_t.columns else rev_col,
-                        title="Revenue vs Trip Profit Trend", barmode='group',
-                        color_discrete_sequence=['#3498db', '#2ecc71'])
-        st.plotly_chart(fig_pl, use_container_width=True)
+        st.subheader("📈 Revenue vs Total Cost")
+        # Bar chart for visual comparison
+        fig_comp = px.bar(x=['Revenue', 'Total Expenses', 'Net Profit'], 
+                          y=[total_revenue, (trip_expenses + total_office_exp), final_net_profit],
+                          color=['Revenue', 'Expenses', 'Profit'],
+                          color_discrete_map={'Revenue': '#3498db', 'Expenses': '#e74c3c', 'Profit': '#2ecc71'})
+        st.plotly_chart(fig_comp, use_container_width=True)
 
     with c2:
-        st.subheader("⛽ Expense Breakdown")
-        # Trip Expenses + Office Expenses ka comparison
-        exp_data = {
-            'Category': ['Trip Expenses', 'Office Expenses'],
-            'Amount': [trip_expenses, total_office_exp]
-        }
-        fig_pie = px.pie(exp_data, values='Amount', names='Category', hole=0.4,
-                         title="Trip vs Office Cost",
-                         color_discrete_sequence=['#e74c3c', '#f39c12'])
-        st.plotly_chart(fig_pie, use_container_width=True)
-
-    # --- ROW 2: Additional Insights ---
-    st.subheader("🏢 Office Expense Breakdown")
-    if not df_oe.empty:
-        fig_oe = px.pie(df_oe, values='Amount', names='Category', 
-                        color_discrete_sequence=px.colors.qualitative.Pastel)
-        st.plotly_chart(fig_oe, use_container_width=True)
+        st.subheader("⛽ Expense Distribution")
+        # Yahan hum dekh sakte hain ki Hired Charges kitna bada hissa hai
+        if existing_exp_cols:
+            detailed_exp = df_t[existing_exp_cols].sum().reset_index()
+            detailed_exp.columns = ['Category', 'Amount']
+            # Office exp bhi pie mein add kar dete hain complete picture ke liye
+            off_row = pd.DataFrame([{'Category': 'Office Expenses', 'Amount': total_office_exp}])
+            detailed_exp = pd.concat([detailed_exp, off_row], ignore_index=True)
+            
+            fig_pie = px.pie(detailed_exp, values='Amount', names='Category', hole=0.4,
+                             color_discrete_sequence=px.colors.qualitative.Pastel)
+            st.plotly_chart(fig_pie, use_container_width=True)
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
@@ -796,6 +795,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
