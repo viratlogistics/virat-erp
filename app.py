@@ -6,6 +6,7 @@ from fpdf import FPDF
 import gspread
 from google.oauth2.service_account import Credentials
 import json, io
+from streamlit_option_menu import option_menu  # <--- YEH RAHI WO LINE
 
 # --- 1. CONFIG & CONNECTION ---
 st.set_page_config(page_title="Virat Logistics ERP", layout="wide")
@@ -206,21 +207,36 @@ df_t = load("trips")
 if 'reset_trigger' not in st.session_state: st.session_state.reset_trigger = 0
 if 'pdf_ready' not in st.session_state: st.session_state.pdf_ready = None
 
-# Sidebar Navigation (Dashboard ko pehle rakha hai)
-with st.sidebar:
-    st.title("🚛 Virat Logistics")
-    menu = st.sidebar.selectbox("🚀 MENU", [
-        "0. Dashboard", 
-        "1. Masters Setup", 
-        "2. LR Entry", 
-        "3. LR Register", 
-        "4. Financials", 
-        "5. Business Insights", 
-        "6. Expense Manager", 
-        "7. Driver Khata", 
-        "8. Monthly Bill",
-        "9. Data Manager (Delete/Edit)"
-    ], index=0) # Default selection Dashboard rahega
+# --- PROFESSIONAL TOP NAVIGATION MENU ---
+selected = option_menu(
+    menu_title=None,  # No title needed for top menu
+    options=["Dashboard", "Masters", "LR Entry", "Register", "Financials", "Insights", "Expenses", "Driver", "Billing", "Manager"], 
+    icons=["speedometer2", "building", "pencil-square", "table", "bank", "graph-up", "wallet2", "person-badge", "receipt", "trash"], 
+    menu_icon="cast", 
+    default_index=0, 
+    orientation="horizontal",
+    styles={
+        "container": {"padding": "0!important", "background-color": "#fafafa"},
+        "icon": {"color": "orange", "font-size": "18px"}, 
+        "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px", "--hover-color": "#eee"},
+        "nav-link-selected": {"background-color": "#2ecc71"},
+    }
+)
+
+# Menu mapping (Taaki aapka purana logic kaam kare)
+menu_map = {
+    "Dashboard": "0. Dashboard",
+    "Masters": "1. Masters Setup",
+    "LR Entry": "2. LR Entry",
+    "Register": "3. LR Register",
+    "Financials": "4. Financials",
+    "Insights": "5. Business Insights",
+    "Expenses": "6. Expense Manager",
+    "Driver": "7. Driver Khata",
+    "Billing": "8. Monthly Bill",
+    "Manager": "9. Data Manager"
+}
+menu = menu_map[selected]
 
 def gl(t): 
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
@@ -899,6 +915,7 @@ elif menu == "9. Data Manager (Delete/Edit)":
                         ws_p.delete_rows(row_idx + 2)
                     st.success("Payment entry delete ho gayi hai!")
                     st.rerun()
+
 
 
 
