@@ -225,126 +225,121 @@ def gl(t):
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
 
 if menu == "0. Dashboard":
-    st.title("🚀 Virat Logistics - Business Analytics Dashboard")
+    st.title("🚀 Virat Logistics - Advanced Analytics")
     
-    # --- 1. DATA LOADING & CLEANING ---
+    # --- 1. DATA PREPARATION ---
     df_p = load("payments")
     df_oe = load("office_expenses")
     
-    # Sabhi numeric columns ko safe convert karna
-    for df in [df_t, df_p, df_oe]:
-        if not df.empty:
-            for col in df.columns:
-                if 'amt' in col.lower() or 'freight' in col.lower() or 'charges' in col.lower() or 'diesel' in col.lower() or 'toll' in col.lower() or 'adv' in col.lower():
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    # Numeric Conversion for All Sheets
+    for df_temp in [df_t, df_p, df_oe]:
+        if not df_temp.empty:
+            for col in df_temp.columns:
+                if any(x in col.lower() for x in ['amt', 'freight', 'charges', 'diesel', 'toll', 'adv', 'profit']):
+                    df_temp[col] = pd.to_numeric(df_temp[col], errors='coerce').fillna(0)
 
-    # --- 2. ADVANCED CALCULATIONS ---
+    # --- 2. CORE CALCULATIONS ---
     rev_col = 'Freight' if 'Freight' in df_t.columns else 'Amount'
     
-    # A. Business Performance (LR Based)
+    # A. Business P&L
     total_rev = df_t[rev_col].sum() if not df_t.empty else 0
-    trip_exp_cols = [c for c in ['HiredCharges', 'Hired Charges', 'Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV', 'DriverExp'] if c in df_t.columns]
-    total_trip_exp = df_t[trip_exp_cols].sum().sum() if not df_t.empty else 0
+    exp_list = ['HiredCharges', 'Hired Charges', 'Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV', 'DriverExp']
+    existing_exp = [c for c in exp_list if c in df_t.columns]
+    total_trip_exp = df_t[existing_exp].sum().sum() if not df_t.empty else 0
     total_off_exp = df_oe['Amount'].sum() if not df_oe.empty else 0
-    total_net_profit = total_rev - (total_trip_exp + total_off_exp)
+    net_profit = total_rev - (total_trip_exp + total_off_exp)
 
-    # B. Actual Cash Flow (Paisa In/Out)
+    # B. Cash Flow (Actual)
     cash_in = df_p[df_p['Type'].str.contains('Receipt', na=False)]['Amount'].sum() if not df_p.empty else 0
+    payments_out = df_p[df_p['Type'].str.contains('Payment', na=False)]['Amount'].sum() if not df_p.empty else 0
     
-    own_fleet_cash = 0
+    own_cash_out = 0
     if not df_t.empty:
         df_own = df_t[df_t['Type'] == "Own Fleet"]
         own_cols = [c for c in ['Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV', 'DriverExp'] if c in df_t.columns]
-        own_fleet_cash = df_own[own_cols].sum().sum()
+        own_cash_out = df_own[own_cols].sum().sum()
     
-    payments_out = df_p[df_p['Type'].str.contains('Payment', na=False)]['Amount'].sum() if not df_p.empty else 0
-    total_actual_out = own_fleet_cash + payments_out + total_off_exp
-    bank_balance = cash_in - total_actual_out
+    actual_cash_balance = cash_in - (own_cash_out + payments_out + total_off_exp)
 
-    # C. Receivables & Payables
-    unpaid_party = total_rev - cash_in
-    hired_cost_total = df_t['HiredCharges'].sum() if 'HiredCharges' in df_t.columns else 0
-    unpaid_brokers = hired_cost_total - payments_out
-
-    # --- 3. ATTRACTIVE KPI CARDS ---
-    st.write("### 🔑 Key Financial Indicators")
-    row1 = st.columns(4)
-    row1[0].metric("Cash Inflow", f"₹{cash_in:,.0f}", "Actual")
-    row1[1].metric("Cash Outflow", f"₹{total_actual_out:,.0f}", "Actual", delta_color="inverse")
-    row1[2].metric("Total Revenue", f"₹{total_rev:,.0f}", "Billed")
-    row1[3].metric("Total Expenses", f"₹{(total_trip_exp + total_off_exp):,.0f}", "Billed", delta_color="inverse")
-
-    row2 = st.columns(4)
-    row2[0].metric("Net Profit", f"₹{total_net_profit:,.0f}", f"{(total_net_profit/total_rev*100 if total_rev>0 else 0):.1f}%")
-    row2[1].metric("Unpaid (Party)", f"₹{unpaid_party:,.0f}", "Receivable", delta_color="inverse")
-    row2[2].metric("Unpaid (Broker)", f"₹{max(0, unpaid_brokers):,.0f}", "Payable", delta_color="inverse")
-    row2[3].metric("Bank Balance", f"₹{bank_balance:,.0f}", "Current")
+    # --- 3. KPI TILES ---
+    st.write("### 🔑 Business Snapshot")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total Revenue", f"₹{total_rev:,.0f}")
+    c2.metric("Net Profit", f"₹{net_profit:,.0f}", f"{(net_profit/total_rev*100 if total_rev>0 else 0):.1f}%")
+    c3.metric("Cash In-Hand", f"₹{actual_cash_balance:,.0f}", delta="Actual Liquidity")
+    c4.metric("Receivables", f"₹{(total_rev - cash_in):,.0f}", delta_color="inverse")
 
     st.divider()
 
-    # --- 4. GRAPHICAL PRESENTATION ---
-    col1, col2 = st.columns(2)
+    # --- 4. GRAPHICAL SECTION ---
+    col_a, col_b = st.columns(2)
 
-    with col1:
-        st.subheader("📈 Revenue vs Expenses vs Profit")
-        fig_pnl = px.bar(
-            x=['Revenue', 'Expenses', 'Profit'], 
-            y=[total_rev, (total_trip_exp + total_off_exp), total_net_profit],
-            color=['Revenue', 'Expenses', 'Profit'],
-            color_discrete_map={'Revenue': '#3498db', 'Expenses': '#e74c3c', 'Profit': '#2ecc71'},
-            text_auto='.2s'
-        )
+    with col_a:
+        st.subheader("📊 Business P&L Status")
+        pnl_df = pd.DataFrame({
+            'Category': ['Revenue', 'Expenses', 'Profit'],
+            'Amount': [total_rev, (total_trip_exp + total_off_exp), net_profit]
+        })
+        fig_pnl = px.bar(pnl_df, x='Category', y='Amount', color='Category',
+                         color_discrete_map={'Revenue': '#3498db', 'Expenses': '#e74c3c', 'Profit': '#2ecc71'},
+                         text_auto='.3s')
         st.plotly_chart(fig_pnl, use_container_width=True)
 
-    with col2:
-        st.subheader("💰 Actual Cash Flow (In vs Out)")
-        fig_cash = px.pie(
-            names=['Cash Received', 'Actual Spent'], 
-            values=[cash_in, total_actual_out],
-            hole=0.6,
-            color_discrete_sequence=['#2ecc71', '#f39c12']
-        )
-        fig_cash.update_layout(annotations=[dict(text='CASH', x=0.5, y=0.5, font_size=20, showarrow=False)])
+    with col_b:
+        st.subheader("💰 Actual Cash Flow")
+        cash_df = pd.DataFrame({
+            'Status': ['Received', 'Actual Spent'],
+            'Amount': [cash_in, (own_cash_out + payments_out + total_off_exp)]
+        })
+        fig_cash = px.pie(cash_df, names='Status', values='Amount', hole=0.5,
+                          color_discrete_sequence=['#2ecc71', '#f39c12'])
+        fig_cash.update_layout(showlegend=False, annotations=[dict(text='CASH', x=0.5, y=0.5, font_size=20, showarrow=False)])
         st.plotly_chart(fig_cash, use_container_width=True)
 
-    # --- 5. VEHICLE WISE PROFIT CHART ---
+    # --- 5. VEHICLE PERFORMANCE (OWN FLEET) ---
     st.divider()
-    st.subheader("🚛 Vehicle Performance (Own Fleet)")
+    st.subheader("🚛 Vehicle Wise Net Profit (Own Fleet)")
     if not df_t.empty:
-        df_own_v = df_t[df_t['Type'] == "Own Fleet"].copy()
-        if not df_own_v.empty:
-            v_col = 'Vehicle' if 'Vehicle' in df_own_v.columns else 'Vehicle No'
-            # Aggregate data
-            v_perf = df_own_v.groupby(v_col).agg({rev_col: 'sum'}).reset_index()
-            # Dynamic expense calculation
-            v_perf['Expenses'] = df_own_v.groupby(v_col)[own_cols].sum().sum(axis=1).values
-            v_perf['Profit'] = v_perf[rev_col] - v_perf['Expenses']
+        df_v = df_t[df_t['Type'] == "Own Fleet"].copy()
+        if not df_v.empty:
+            v_col = 'Vehicle' if 'Vehicle' in df_v.columns else 'Vehicle No'
+            # Summing up Revenue and Expenses
+            v_perf = df_v.groupby(v_col).agg({rev_col: 'sum'}).reset_index()
+            # Dynamic calculation of Own Fleet Expenses
+            v_perf['Expenses'] = df_v.groupby(v_col)[own_cols].sum().sum(axis=1).values
+            v_perf['Net Profit'] = v_perf[rev_col] - v_perf['Expenses']
             
-            fig_v = px.bar(v_perf, x=v_col, y='Profit', color='Profit',
-                           title="Net Profit per Vehicle",
-                           color_continuous_scale='Greens', text_auto='.2s')
+            fig_v = px.bar(v_perf, x=v_col, y='Net Profit', color='Net Profit',
+                           color_continuous_scale='Greens', text_auto='.3s',
+                           title="Profitability per Truck")
             st.plotly_chart(fig_v, use_container_width=True)
-        else:
-            st.info("Own Fleet data not available.")
 
-    # --- 6. PENDING PAYMENTS (HORIZONTAL BAR CHART) ---
+    # --- 6. UNPAID BILLS (PARTY WISE) ---
     st.divider()
-    st.subheader("⏳ Top 5 Pending Receivables (Parties)")
-    p_rev = df_t.groupby('Party')[rev_col].sum()
-    p_rec = df_p[df_p['Type'].str.contains('Receipt', na=False)].groupby('Account_Name')['Amount'].sum() if not df_p.empty else pd.Series()
-    unpaid_df = pd.DataFrame({'Billed': p_rev, 'Received': p_rec}).fillna(0)
-    unpaid_df['Due'] = unpaid_df['Billed'] - unpaid_df['Received']
-    top_pending = unpaid_df[unpaid_df['Due'] > 1].sort_values('Due', ascending=False).head(5).reset_index()
-    
-    if not top_pending.empty:
-        fig_pend = px.bar(top_pending, x='Due', y='Party', orientation='h',
-                          title="Parties with Maximum Dues",
-                          color='Due', color_continuous_scale='Reds', text_auto='.2s')
-        st.plotly_chart(fig_pend, use_container_width=True)
+    st.subheader("⏳ Top Pending Receivables")
+    if not df_t.empty:
+        p_rev = df_t.groupby('Party')[rev_col].sum()
+        p_rec = pd.Series(dtype=float)
+        if not df_p.empty:
+            p_rec = df_p[df_p['Type'].str.contains('Receipt', na=False)].groupby('Account_Name')['Amount'].sum()
+        
+        pending = pd.DataFrame({'Billed': p_rev, 'Received': p_rec}).fillna(0)
+        pending['Due'] = pending['Billed'] - pending['Received']
+        # Resetting index to make 'Party' a column for Plotly
+        top_5 = pending[pending['Due'] > 100].sort_values('Due', ascending=False).head(5).reset_index()
+        top_5.rename(columns={'index': 'Party', 'Party': 'Party'}, inplace=True) # Column name safety
 
-    # Footer style table
-    st.write("#### 📑 Detailed Outstanding List")
-    st.dataframe(unpaid_df[unpaid_df['Due'] > 1].style.format("₹{:,.0f}"), use_container_width=True)
+        if not top_5.empty:
+            fig_due = px.bar(top_5, x='Due', y='Party', orientation='h',
+                             color='Due', color_continuous_scale='Reds',
+                             text_auto='.3s', title="Highest Outstanding Parties")
+            fig_due.update_layout(yaxis={'categoryorder':'total ascending'})
+            st.plotly_chart(fig_due, use_container_width=True)
+            
+            st.write("#### 📑 Full Outstanding List")
+            st.dataframe(pending[pending['Due'] > 1].style.format("₹{:,.0f}"), use_container_width=True)
+        else:
+            st.success("✅ All Party accounts are clear!")
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
@@ -852,6 +847,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
