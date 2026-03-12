@@ -6,5 +6,6 @@ fpdf
 reportlab
 openpyxl
 plotly
+streamlit-option-menu
 
 
