@@ -225,76 +225,83 @@ def gl(t):
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
 
 if menu == "0. Dashboard":
-    st.title("📊 Actual Cash Flow & Financial Dashboard")
+    st.title("📊 Virat Logistics - Business & Cash Dashboard")
     
     # --- 1. DATA LOADING ---
     df_p = load("payments")
     df_oe = load("office_expenses")
     
-    # --- 2. CASH INFLOW (Paisa Kahan se Aaya) ---
-    # Sirf Financials/Payments module ki "Receipt (In)" wali entries
-    cash_in = 0
-    if not df_p.empty:
-        df_p['Amount'] = pd.to_numeric(df_p['Amount'], errors='coerce').fillna(0)
-        cash_in = df_p[df_p['Type'].str.contains('Receipt', na=False)]['Amount'].sum()
-
-    # --- 3. CASH OUTFLOW (Paisa Kahan Gaya) ---
-    # A. Own Vehicle Expenses (Diesel + Toll + Driver Adv) from Trips
-    own_cash_out = 0
-    if not df_t.empty:
-        df_own = df_t[df_t['Type'] == "Own Fleet"].copy()
-        if not df_own.empty:
-            # Sirf cash-based columns ka total
-            cols = [c for c in ['Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV', 'DriverExp'] if c in df_own.columns]
-            for c in cols:
-                df_own[c] = pd.to_numeric(df_own[c], errors='coerce').fillna(0)
-            own_cash_out = df_own[cols].sum().sum()
-
-    # B. Financials/Payments module ki "Payment (Out)" wali entries
-    broker_party_out = 0
-    if not df_p.empty:
-        broker_party_out = df_p[df_p['Type'].str.contains('Payment', na=False)]['Amount'].sum()
-
-    # C. Office Expenses from Expense Manager
-    office_out = 0
+    # --- 2. PROFIT & PERFORMANCE CALCULATION (LR Based) ---
+    rev_col = 'Freight' if 'Freight' in df_t.columns else 'Amount'
+    # Sare kharche (Hired + Own) P&L ke liye
+    all_exp_list = ['HiredCharges', 'Hired Charges', 'Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV', 'DriverExp', 'Other']
+    existing_all_exp = [c for c in all_exp_list if c in df_t.columns]
+    
+    total_rev = df_t[rev_col].sum() if not df_t.empty else 0
+    trip_costs = df_t[existing_all_exp].sum().sum() if not df_t.empty and existing_all_exp else 0
+    
+    total_office_exp = 0
     if not df_oe.empty:
         df_oe['Amount'] = pd.to_numeric(df_oe['Amount'], errors='coerce').fillna(0)
-        office_out = df_oe['Amount'].sum()
+        total_office_exp = df_oe['Amount'].sum()
 
-    total_cash_out = own_cash_out + broker_party_out + office_out
-    net_cash_balance = cash_in - total_cash_out
+    # Business Profit (Jo banna chahiye)
+    net_business_profit = total_rev - (trip_costs + total_office_exp)
 
-    # --- 4. DISPLAY METRICS ---
-    st.subheader("💰 Actual Cash Movement")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Cash Inflow (Receipts)", f"₹{cash_in:,.0f}")
-    c2.metric("Cash Outflow (Total)", f"₹{total_cash_out:,.0f}")
+    # --- 3. ACTUAL CASH FLOW CALCULATION (Paisa In/Out) ---
+    cash_in = df_p[df_p['Type'].str.contains('Receipt', na=False)]['Amount'].astype(float).sum() if not df_p.empty else 0
     
-    # Balance color logic
-    color = "normal" if net_cash_balance >= 0 else "inverse"
-    c3.metric("Net Cash Balance", f"₹{net_cash_balance:,.0f}", delta="In-Hand", delta_color=color)
+    # Cash Out (A): Own Vehicle Expenses only (As per your request)
+    own_cash_out = 0
+    if not df_t.empty:
+        df_own = df_t[df_t['Type'] == "Own Fleet"]
+        own_cols = [c for c in ['Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV', 'DriverExp'] if c in df_t.columns]
+        own_cash_out = df_own[own_cols].sum().sum()
+
+    # Cash Out (B): Payments made to Brokers/Parties + Office Expenses
+    payments_out = df_p[df_p['Type'].str.contains('Payment', na=False)]['Amount'].astype(float).sum() if not df_p.empty else 0
+    actual_cash_balance = cash_in - (own_cash_out + payments_out + total_office_exp)
+
+    # --- 4. TOP METRICS (KPIs) ---
+    st.subheader("📌 Business Summary")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total Business Profit", f"₹{net_business_profit:,.0f}", help="Total Freight - All Trip Costs - Office Exp")
+    m2.metric("Actual Cash in Hand", f"₹{actual_cash_balance:,.0f}", delta="Actual Liquidity", help="Receipts - Own Fleet Exp - Payments - Office Exp")
+    m3.metric("Pending Receivables", f"₹{(total_rev - cash_in):,.0f}", delta_color="inverse", help="Total Freight - Cash Received")
 
     st.divider()
 
-    # --- 5. CASH FLOW CHARTS ---
-    col_l, col_r = st.columns(2)
+    # --- 5. PERFORMANCE & CASH CHARTS ---
+    c1, c2 = st.columns(2)
     
-    with col_l:
-        st.subheader("📥 Cash In vs Out")
-        fig_io = px.bar(x=['Total Cash In', 'Total Cash Out'], y=[cash_in, total_cash_out],
-                        color=['In', 'Out'], color_discrete_map={'In': '#2ecc71', 'Out': '#e74c3c'},
-                        labels={'x': 'Type', 'y': 'Amount'})
-        st.plotly_chart(fig_io, use_container_width=True)
+    with c1:
+        st.subheader("📈 Profit & Loss Analysis")
+        fig_pl = px.bar(x=['Revenue', 'Expenses', 'Net Profit'], 
+                        y=[total_rev, (trip_costs + total_office_exp), net_business_profit],
+                        color=['Rev', 'Exp', 'Profit'],
+                        color_discrete_map={'Rev': '#3498db', 'Exp': '#e74c3c', 'Profit': '#2ecc71'})
+        st.plotly_chart(fig_pl, use_container_width=True)
 
-    with col_r:
-        st.subheader("💸 Outflow Distribution")
-        out_data = {
-            'Category': ['Own Fleet Exp', 'Broker/Party Paid', 'Office Expenses'],
-            'Amount': [own_cash_out, broker_party_out, office_out]
-        }
-        fig_dist = px.pie(out_data, values='Amount', names='Category', hole=0.4,
-                          color_discrete_sequence=px.colors.qualitative.Bold)
-        st.plotly_chart(fig_dist, use_container_width=True)
+    with c2:
+        st.subheader("💰 Actual Cash Movement")
+        fig_cash = px.pie(names=['Cash Received', 'Cash Spent'], 
+                          values=[cash_in, (own_cash_out + payments_out + total_office_exp)],
+                          hole=0.5, color_discrete_sequence=['#2ecc71', '#e67e22'])
+        st.plotly_chart(fig_fund, use_container_width=True)
+
+    # --- 6. UNPAID INVOICES / PENDING PARTIES ---
+    st.divider()
+    st.subheader("⏳ Pending Payments from Parties")
+    if not df_t.empty and not df_p.empty:
+        # Simple Logic: Party wise Freight vs Receipts
+        p_rev = df_t.groupby('Party')[rev_col].sum()
+        p_rec = df_p[df_p['Type'].str.contains('Receipt', na=False)].groupby('Account_Name')['Amount'].sum()
+        
+        pending_df = pd.DataFrame({'Total Billed': p_rev, 'Total Received': p_rec}).fillna(0)
+        pending_df['Balance Due'] = pending_df['Total Billed'] - pending_df['Total Received']
+        pending_df = pending_df[pending_df['Balance Due'] > 1].sort_values('Balance Due', ascending=False)
+        
+        st.dataframe(pending_df.style.format("₹{:,.0f}"), use_container_width=True)
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
@@ -802,6 +809,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
