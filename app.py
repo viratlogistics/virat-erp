@@ -851,6 +851,54 @@ elif menu == "8. Monthly Bill":
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
 
+elif menu == "9. Data Manager (Delete/Edit)":
+    st.header("🗑️ Data Management & Deletion")
+    st.warning("Savdhan! Yahan se delete kiya gaya data wapas nahi aayega.")
+    
+    tab_del_lr, tab_del_pay = st.tabs(["❌ Delete LR/Opening Balance", "❌ Delete Payment Entry"])
+    
+    with tab_del_lr:
+        if not df_t.empty:
+            st.write("### Sabhi Trips aur Opening Balances")
+            # Humne ek 'Select' column dikhana hai delete ke liye
+            df_t_display = df_t.copy()
+            df_t_display['Delete?'] = False
+            
+            # Interactive table for selection
+            edited_df_t = st.data_editor(df_t_display, use_container_width=True, hide_index=False)
+            
+            if st.button("Selected LR Delete Karein"):
+                # Jo rows check ki gayi hain unhe dhoondna
+                rows_to_delete = edited_df_t[edited_df_t['Delete?'] == True].index.tolist()
+                
+                if rows_to_delete:
+                    # Google Sheet se rows delete karna (ulta chalna padta hai taaki index na badle)
+                    ws_t = sh.worksheet("trips")
+                    for row_idx in sorted(rows_to_delete, reverse=True):
+                        ws_t.delete_rows(row_idx + 2) # +2 kyunki header aur 0-index offset hai
+                    st.success(f"{len(rows_to_delete)} Entries delete ho gayi hain!")
+                    st.rerun()
+                else:
+                    st.info("Kripya delete karne ke liye row select karein.")
+
+    with tab_del_pay:
+        df_p = load("payments")
+        if not df_p.empty:
+            st.write("### Sabhi Payment Transactions")
+            df_p_display = df_p.copy()
+            df_p_display['Delete?'] = False
+            
+            edited_df_p = st.data_editor(df_p_display, use_container_width=True)
+            
+            if st.button("Selected Payment Delete Karein"):
+                rows_to_delete_p = edited_df_p[edited_df_p['Delete?'] == True].index.tolist()
+                
+                if rows_to_delete_p:
+                    ws_p = sh.worksheet("payments")
+                    for row_idx in sorted(rows_to_delete_p, reverse=True):
+                        ws_p.delete_rows(row_idx + 2)
+                    st.success("Payment entry delete ho gayi hai!")
+                    st.rerun()
 
 
 
