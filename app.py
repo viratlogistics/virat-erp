@@ -709,29 +709,35 @@ elif menu == "5. Business Insights":
         st.error("No trip data found.")
 
 elif menu == "6. Expense Manager":
-    st.header("🏢 Office & General Expense Manager")
-    df_oe = load("office_expenses")
-    tab_add, tab_view = st.tabs(["➕ Add Expense", "📊 View Expenses"])
-    with tab_add:
-        with st.form("office_exp_form", clear_on_submit=True):
-            col1, col2 = st.columns(2)
-            with col1:
-                e_date = st.date_input("Date", date.today())
-                exp_cats = ["Office Rent", "Electricity", "Tea/Snacks", "Stationery", "Staff Salary", "Personal Exp Indrajit", "Personal Exp Vishal", "Other"]
-            with col2:
-                e_amt = st.number_input("Amount (₹)", min_value=0.0)
-                e_mode = st.selectbox("Payment Mode", ["Cash", "Online", "Cheque"])
-            e_desc = st.text_input("Description")
-            if st.form_submit_button("Save Office Expense"):
-                if e_amt > 0:
-                    if save("office_expenses", [str(e_date), e_cat, e_desc, e_amt, e_mode]):
-                        st.success("Office Expense Saved Successfully!"); st.rerun()
-    with tab_view:
-        if not df_oe.empty:
-            df_oe.columns = [str(c).strip() for c in df_oe.columns]
-            st.dataframe(df_oe, use_container_width=True)
-            st.info(f"Total: ₹{pd.to_numeric(df_oe['Amount'], errors='coerce').sum():,.2f}")
+    st.header("🏢 Office & Personal Expense Manager")
+    
+    # Categories list (Ensure Indrajit & Vishal are here)
+    cats = ["Office Rent", "Electricity", "Tea/Snacks", "Stationery", "Staff Salary", "Personal Exp Indrajit", "Personal Exp Vishal", "Other"]
+    
+    with st.form("exp_form", clear_on_submit=True):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            e_date = st.date_input("Date", date.today())
+            e_cat = st.selectbox("Category", cats)
+        with col2:
+            e_amt = st.number_input("Amount", min_value=0.0)
+            e_pay = st.selectbox("Payment Mode", ["Cash", "UPI", "Net Banking", "Cheque"])
+        with col3:
+            e_rem = st.text_input("Remarks (Paisa kis liye kharch hua?)")
+            
+        if st.form_submit_button("Save Expense"):
+            if e_amt > 0:
+                # 'office_expenses' sheet mein save karega
+                if save("office_expenses", [str(e_date), e_cat, e_amt, e_pay, e_rem]):
+                    st.success(f"Kharcha Save ho gaya: {e_cat} - ₹{e_amt}")
+                    st.rerun()
 
+    # Kharchon ki list dikhana
+    df_oe = load("office_expenses")
+    if not df_oe.empty:
+        st.divider()
+        st.subheader("📅 Recent Expenses")
+        st.dataframe(df_oe.sort_values(by=df_oe.columns[0], ascending=False), use_container_width=True)
 elif menu == "7. Driver Khata":
     st.header("🚛 Driver Khata & Trip Settlement")
     df_dk = load("driver_khata")
@@ -915,6 +921,7 @@ elif menu == "9. Data Manager (Delete/Edit)":
                         ws_p.delete_rows(row_idx + 2)
                     st.success("Payment entry delete ho gayi hai!")
                     st.rerun()
+
 
 
 
