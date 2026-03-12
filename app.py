@@ -233,7 +233,6 @@ if menu == "0. Dashboard":
     
     # --- 2. PROFIT & PERFORMANCE CALCULATION (LR Based) ---
     rev_col = 'Freight' if 'Freight' in df_t.columns else 'Amount'
-    # Sare kharche (Hired + Own) P&L ke liye
     all_exp_list = ['HiredCharges', 'Hired Charges', 'Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV', 'DriverExp', 'Other']
     existing_all_exp = [c for c in all_exp_list if c in df_t.columns]
     
@@ -245,28 +244,36 @@ if menu == "0. Dashboard":
         df_oe['Amount'] = pd.to_numeric(df_oe['Amount'], errors='coerce').fillna(0)
         total_office_exp = df_oe['Amount'].sum()
 
-    # Business Profit (Jo banna chahiye)
     net_business_profit = total_rev - (trip_costs + total_office_exp)
 
     # --- 3. ACTUAL CASH FLOW CALCULATION (Paisa In/Out) ---
-    cash_in = df_p[df_p['Type'].str.contains('Receipt', na=False)]['Amount'].astype(float).sum() if not df_p.empty else 0
+    # Cash In: Receipts from Payments Sheet
+    cash_in = 0
+    if not df_p.empty:
+        df_p['Amount'] = pd.to_numeric(df_p['Amount'], errors='coerce').fillna(0)
+        cash_in = df_p[df_p['Type'].str.contains('Receipt', na=False)]['Amount'].sum()
     
     # Cash Out (A): Own Vehicle Expenses only (As per your request)
     own_cash_out = 0
     if not df_t.empty:
         df_own = df_t[df_t['Type'] == "Own Fleet"]
         own_cols = [c for c in ['Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV', 'DriverExp'] if c in df_t.columns]
+        for c in own_cols:
+            df_own[c] = pd.to_numeric(df_own[c], errors='coerce').fillna(0)
         own_cash_out = df_own[own_cols].sum().sum()
 
-    # Cash Out (B): Payments made to Brokers/Parties + Office Expenses
-    payments_out = df_p[df_p['Type'].str.contains('Payment', na=False)]['Amount'].astype(float).sum() if not df_p.empty else 0
+    # Cash Out (B): Payments made to Brokers/Parties from Payments Sheet
+    payments_out = 0
+    if not df_p.empty:
+        payments_out = df_p[df_p['Type'].str.contains('Payment', na=False)]['Amount'].sum()
+
     actual_cash_balance = cash_in - (own_cash_out + payments_out + total_office_exp)
 
     # --- 4. TOP METRICS (KPIs) ---
     st.subheader("📌 Business Summary")
     m1, m2, m3 = st.columns(3)
     m1.metric("Total Business Profit", f"₹{net_business_profit:,.0f}", help="Total Freight - All Trip Costs - Office Exp")
-    m2.metric("Actual Cash in Hand", f"₹{actual_cash_balance:,.0f}", delta="Actual Liquidity", help="Receipts - Own Fleet Exp - Payments - Office Exp")
+    m2.metric("Actual Cash in Hand", f"₹{actual_cash_balance:,.0f}", delta="In-Hand", help="Receipts - Own Fleet Exp - Payments - Office Exp")
     m3.metric("Pending Receivables", f"₹{(total_rev - cash_in):,.0f}", delta_color="inverse", help="Total Freight - Cash Received")
 
     st.divider()
@@ -283,25 +290,33 @@ if menu == "0. Dashboard":
         st.plotly_chart(fig_pl, use_container_width=True)
 
     with c2:
-        st.subheader("💰 Actual Cash Movement")
-        fig_cash = px.pie(names=['Cash Received', 'Cash Spent'], 
+        st.subheader("💰 Actual Cash Flow")
+        # Fixed the NameError by using 'fig_cash' everywhere
+        fig_cash = px.pie(names=['Cash In (Receipts)', 'Cash Out (Actual Spent)'], 
                           values=[cash_in, (own_cash_out + payments_out + total_office_exp)],
                           hole=0.5, color_discrete_sequence=['#2ecc71', '#e67e22'])
-        st.plotly_chart(fig_fund, use_container_width=True)
+        st.plotly_chart(fig_cash, use_container_width=True)
 
     # --- 6. UNPAID INVOICES / PENDING PARTIES ---
     st.divider()
     st.subheader("⏳ Pending Payments from Parties")
-    if not df_t.empty and not df_p.empty:
-        # Simple Logic: Party wise Freight vs Receipts
+    if not df_t.empty:
+        # Party wise Freight
         p_rev = df_t.groupby('Party')[rev_col].sum()
-        p_rec = df_p[df_p['Type'].str.contains('Receipt', na=False)].groupby('Account_Name')['Amount'].sum()
+        
+        # Party wise Receipts from Payments sheet
+        p_rec = pd.Series(dtype=float)
+        if not df_p.empty:
+            p_rec = df_p[df_p['Type'].str.contains('Receipt', na=False)].groupby('Account_Name')['Amount'].sum()
         
         pending_df = pd.DataFrame({'Total Billed': p_rev, 'Total Received': p_rec}).fillna(0)
         pending_df['Balance Due'] = pending_df['Total Billed'] - pending_df['Total Received']
         pending_df = pending_df[pending_df['Balance Due'] > 1].sort_values('Balance Due', ascending=False)
         
-        st.dataframe(pending_df.style.format("₹{:,.0f}"), use_container_width=True)
+        if not pending_df.empty:
+            st.dataframe(pending_df.style.format("₹{:,.0f}"), use_container_width=True)
+        else:
+            st.success("All payments are cleared! No pending dues.")
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
@@ -809,6 +824,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
