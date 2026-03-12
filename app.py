@@ -1,4 +1,4 @@
-import streamlit as st from streamlit_option_menu import option_menu
+import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import date
@@ -899,6 +899,7 @@ elif menu == "9. Data Manager (Delete/Edit)":
                         ws_p.delete_rows(row_idx + 2)
                     st.success("Payment entry delete ho gayi hai!")
                     st.rerun()
+
 
 
 
