@@ -227,25 +227,36 @@ def gl(t):
 if menu == "0. Dashboard":
     st.title("📊 Virat Logistics Dashboard")
     
-    # 1. Column Names check (Aapki sheet ke mutabik)
-    # Agar aapki sheet mein 'Freight' ki jagah 'Amount' hai to yahan badle
+    # --- 1. Data Loading for Calculations ---
+    df_oe = load("office_expenses") # Office expenses load karna zaroori hai
+    
+    # Column Names check
     rev_col = 'Freight' if 'Freight' in df_t.columns else 'Amount'
     prof_col = 'Profit' if 'Profit' in df_t.columns else 'Net Profit'
     
-    # Expense columns list (Jo trips sheet mein hote hain)
-    # Yahan 'DRIVER ADV' aur 'Hired Charges' check karein
-    exp_cols = [c for c in ['Hired Charges', 'Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV'] if c in df_t.columns]
+    # Expense columns list (Trip based)
+    exp_cols = [c for c in ['Hired Charges', 'Diesel', 'Toll', 'Driver Adv', 'DRIVER ADV', 'DriverExp'] if c in df_t.columns]
 
-    # 2. Calculation (Safe Mode)
+    # --- 2. Calculations (Including Office Expenses) ---
     total_revenue = df_t[rev_col].sum() if rev_col in df_t.columns else 0
-    total_expenses = df_t[exp_cols].sum().sum() if exp_cols else 0
-    net_profit = df_t[prof_col].sum() if prof_col in df_t.columns else (total_revenue - total_expenses)
+    
+    # Trip Expenses calculation
+    trip_expenses = df_t[exp_cols].sum().sum() if exp_cols else 0
+    
+    # Office Expenses calculation
+    total_office_exp = 0
+    if not df_oe.empty:
+        df_oe.columns = [str(c).strip() for c in df_oe.columns]
+        total_office_exp = pd.to_numeric(df_oe['Amount'], errors='coerce').fillna(0).sum()
+
+    # Final Net Profit (Revenue - Trip Expenses - Office Expenses)
+    final_net_profit = total_revenue - (trip_expenses + total_office_exp)
     
     # KPI Metrics
     m1, m2, m3 = st.columns(3)
     m1.metric("Total Revenue", f"₹{total_revenue:,.0f}")
-    m2.metric("Total Expenses", f"₹{total_expenses:,.0f}")
-    m3.metric("Net Profit", f"₹{net_profit:,.0f}")
+    m2.metric("Total Expenses", f"₹{(trip_expenses + total_office_exp):,.0f}", delta=f"Office: ₹{total_office_exp:,.0f}", delta_color="inverse")
+    m3.metric("Final Net Profit", f"₹{final_net_profit:,.0f}")
 
     st.divider()
 
@@ -254,22 +265,30 @@ if menu == "0. Dashboard":
     
     with c1:
         st.subheader("📈 P&L Analysis")
-        # Profit vs Revenue Chart
+        # Isme Profit vs Revenue trend dikhega
         fig_pl = px.bar(df_t, x='Date', y=[rev_col, prof_col] if prof_col in df_t.columns else rev_col,
-                        title="Revenue vs Profit Trend", barmode='group',
+                        title="Revenue vs Trip Profit Trend", barmode='group',
                         color_discrete_sequence=['#3498db', '#2ecc71'])
         st.plotly_chart(fig_pl, use_container_width=True)
 
     with c2:
         st.subheader("⛽ Expense Breakdown")
-        if exp_cols:
-            exp_sums = df_t[exp_cols].sum().reset_index()
-            exp_sums.columns = ['Category', 'Amount']
-            fig_pie = px.pie(exp_sums, values='Amount', names='Category', hole=0.4,
-                             color_discrete_sequence=px.colors.qualitative.Set3)
-            st.plotly_chart(fig_pie, use_container_width=True)
-        else:
-            st.warning("Expense columns not found in sheet!")
+        # Trip Expenses + Office Expenses ka comparison
+        exp_data = {
+            'Category': ['Trip Expenses', 'Office Expenses'],
+            'Amount': [trip_expenses, total_office_exp]
+        }
+        fig_pie = px.pie(exp_data, values='Amount', names='Category', hole=0.4,
+                         title="Trip vs Office Cost",
+                         color_discrete_sequence=['#e74c3c', '#f39c12'])
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    # --- ROW 2: Additional Insights ---
+    st.subheader("🏢 Office Expense Breakdown")
+    if not df_oe.empty:
+        fig_oe = px.pie(df_oe, values='Amount', names='Category', 
+                        color_discrete_sequence=px.colors.qualitative.Pastel)
+        st.plotly_chart(fig_oe, use_container_width=True)
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
@@ -777,6 +796,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
