@@ -210,7 +210,7 @@ if 'pdf_ready' not in st.session_state: st.session_state.pdf_ready = None
 with st.sidebar:
     st.title("🚛 Virat Logistics")
     menu = st.sidebar.selectbox("🚀 MENU", [
-        "0. Dashboard", # Sabse upar
+        "0. Dashboard", 
         "1. Masters Setup", 
         "2. LR Entry", 
         "3. LR Register", 
@@ -218,7 +218,8 @@ with st.sidebar:
         "5. Business Insights", 
         "6. Expense Manager", 
         "7. Driver Khata", 
-        "8. Monthly Bill"
+        "8. Monthly Bill",
+        "9. Data Manager (Delete/Edit)"
     ], index=0) # Default selection Dashboard rahega
 
 def gl(t): 
@@ -849,6 +850,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
