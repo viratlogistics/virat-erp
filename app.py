@@ -558,15 +558,16 @@ elif menu == "3. LR Register":
         st.dataframe(df_t)
         
 elif menu == "4. Financials":
-    st.header("⚖️ Party & Broker Full Statement")
+    st.header("⚖️ Financial Management & Ledger")
     df_p = load("payments")
     df_t = load("trips")
     
+    # Cleaning
     if not df_t.empty: df_t.columns = [str(c).strip() for c in df_t.columns]
     if not df_p.empty: df_p.columns = [str(c).strip() for c in df_p.columns]
         
     all_accs = sorted(gl("Party") + gl("Broker"))
-    t1, t2 = st.tabs(["💸 Add Transaction", "📖 Full Statement"])
+    t1, t2, t3 = st.tabs(["💸 Add Transaction", "📖 Full Statement", "🚀 Opening Balance"])
     
     with t1:
         with st.form("p_form", clear_on_submit=True):
@@ -584,51 +585,59 @@ elif menu == "4. Financials":
             if st.form_submit_button("Save Entry"):
                 if acc != "Select" and p_a > 0:
                     if save("payments", [str(p_d), acc, p_t, p_a, p_m, p_r]): 
-                        st.success("Entry Saved Successfully!"); st.rerun()
+                        st.success("Entry Saved!"); st.rerun()
 
     with t2:
-        sel_a = st.selectbox("Select Account for Statement", ["Select"] + all_accs)
+        sel_a = st.selectbox("Select Account", ["Select"] + all_accs)
         if sel_a != "Select":
-            ledger_entries = []
+            ledger = []
+            # Trip entries
             if not df_t.empty:
+                # Party Side
                 p_trips = df_t[df_t['Party'] == sel_a]
                 for _, r in p_trips.iterrows():
-                    ledger_entries.append({'Date': r.get('Date', date.today()), 'Particulars': f"LR: {r.get('LR No','--')} ({r.get('From','')} to {r.get('To','')})", 'Debit': pd.to_numeric(r.get('Freight', 0), errors='coerce'), 'Credit': 0})
-                
+                    ledger.append({'Date': r['Date'], 'Particulars': f"LR: {r.get('LR No','--')}", 'Debit': r.get('Freight', 0), 'Credit': 0})
+                # Broker Side
                 b_trips = df_t[df_t['Broker'] == sel_a]
                 for _, r in b_trips.iterrows():
-                    ledger_entries.append({'Date': r.get('Date', date.today()), 'Particulars': f"LR: {r.get('LR No','--')} (Market Hired Charges)", 'Debit': 0, 'Credit': pd.to_numeric(r.get('HiredCharges', 0), errors='coerce')})
-
+                    ledger.append({'Date': r['Date'], 'Particulars': f"LR: {r.get('LR No','--')} (HC)", 'Debit': 0, 'Credit': r.get('HiredCharges', 0)})
+            
+            # Payment entries
             if not df_p.empty:
                 p_entries = df_p[df_p['Account_Name'] == sel_a]
                 for _, r in p_entries.iterrows():
-                    amt = pd.to_numeric(r.get('Amount', 0), errors='coerce')
-                    mode = r.get('Mode', 'N/A')
-                    ref = r.get('Ref_No', r.get('Ref No', 'N/A'))
+                    amt = r.get('Amount', 0)
                     if "Receipt" in str(r.get('Type','')):
-                        ledger_entries.append({'Date': r.get('Date', date.today()), 'Particulars': f"Payment Recd ({mode}) Ref:{ref}", 'Debit': 0, 'Credit': amt})
+                        ledger.append({'Date': r['Date'], 'Particulars': f"Payment Recd ({r.get('Mode','')})", 'Debit': 0, 'Credit': amt})
                     else:
-                        ledger_entries.append({'Date': r.get('Date', date.today()), 'Particulars': f"Payment Paid ({mode}) Ref:{ref}", 'Debit': amt, 'Credit': 0})
+                        ledger.append({'Date': r['Date'], 'Particulars': f"Payment Paid ({r.get('Mode','')})", 'Debit': amt, 'Credit': 0})
+            
+            if ledger:
+                f_df = pd.DataFrame(ledger).sort_values('Date')
+                f_df['Balance'] = (f_df['Debit'] - f_df['Credit']).cumsum()
+                st.dataframe(f_df.style.format({'Debit': '₹{:.0f}', 'Credit': '₹{:.0f}', 'Balance': '₹{:.0f}'}), use_container_width=True)
 
-            if ledger_entries:
-                full_df = pd.DataFrame(ledger_entries)
-                full_df['Date'] = pd.to_datetime(full_df['Date']).dt.date
-                full_df = full_df.sort_values(by=['Date'])
-                full_df['Balance'] = (full_df['Debit'] - full_df['Credit']).cumsum()
-                
-                st.divider()
-                m1, m2, m3 = st.columns(3)
-                dr_total = full_df['Debit'].sum()
-                cr_total = full_df['Credit'].sum()
-                bal = dr_total - cr_total
-                
-                m1.metric("Total Billed (DR)", f"₹{dr_total:,.0f}")
-                m2.metric("Total Paid (CR)", f"₹{cr_total:,.0f}")
-                status_text = "Receivable" if bal > 0 else "Payable"
-                m3.metric(f"Net {status_text}", f"₹{abs(bal):,.0f}")
-                st.write(f"#### Ledger History: {sel_a}")
-                st.dataframe(full_df, use_container_width=True, hide_index=True)
-
+    with t3:
+        st.subheader("🏁 Add Opening Balance (Old Dues)")
+        st.info("Agar kisi party ya broker ka purana baki paisa hai, toh yahan se ek baar daal dein.")
+        with st.form("ob_form", clear_on_submit=True):
+            o_acc = st.selectbox("Select Party/Broker", ["Select"] + all_accs)
+            o_type = st.radio("Type", ["Receivable (Party se lena hai)", "Payable (Broker ko dena hai)"])
+            o_amt = st.number_input("Opening Amount", min_value=0.0)
+            o_date = st.date_input("Balance as on Date", date.today())
+            
+            if st.form_submit_button("Add Opening Balance"):
+                if o_acc != "Select" and o_amt > 0:
+                    if o_type == "Receivable (Party se lena hai)":
+                        # Trips sheet mein dummy entry jayegi taaki Dashboard ka Profit aur Receivable dono sahi ho jayein
+                        res = save("trips", [str(o_date), "OPENING", "Own Fleet", o_acc, "N/A", "N/A", 0, 0, "N/A", "N/A", "Old Balance", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", o_amt, 0, 0, 0, 0, 0, o_amt])
+                    else:
+                        # Broker ke liye payments sheet mein dummy "Hired Cost" ki jagah dummy trip entry kar sakte hain
+                        # Ya simple trips mein hi Broker ka naam daal kar HiredCharges mein balance daal dein
+                        res = save("trips", [str(o_date), "OPENING", "Market Hired", "N/A", "N/A", "N/A", 0, 0, "N/A", "N/A", "Old Balance", "N/A", "N/A", "N/A", o_acc, "N/A", "N/A", 0, o_amt, 0, 0, 0, 0, -o_amt])
+                    
+                    if res:
+                        st.success(f"Opening Balance for {o_acc} added successfully!"); st.rerun()
 elif menu == "5. Business Insights":
     st.header("📊 Business Dashboard & Own Fleet Analytics")
     df_t = load("trips")
@@ -840,6 +849,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
