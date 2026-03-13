@@ -257,205 +257,73 @@ def get_fy(date_str):
 if menu == "0. Dashboard":
     st.title("📊 Virat Logistics - Business Overview")
     
+    # Force Refresh Button
+    if st.button("🔄 Refresh Data"):
+        st.cache_data.clear()
+        st.rerun()
+
+    # 1. Data Load karna
     df_t = load("trips")
     df_p = load("payments")
     
-    # --- STEP 1: COLUMN CLEANING ---
-    if not df_t.empty: df_t.columns = [str(c).strip() for c in df_t.columns]
-    if not df_p.empty: df_p.columns = [str(c).strip() for c in df_p.columns]
-    
-    # --- STEP 2: SMART COLUMN DETECTION ---
-    # Trips sheet mein Party column dhoondna
-    party_col_t = next((c for c in df_t.columns if 'Billing' in c or 'Party' in c), None)
-    # Trips sheet mein Freight column dhoondna
-    f_col = next((c for c in df_t.columns if 'Freight' in c or 'Amount' in c), None)
-    # Payment sheet mein Party column dhoondna
-    party_col_p = next((c for c in df_p.columns if 'Party' in c), None)
-    # Payment sheet mein Amount column dhoondna
-    p_col = next((c for c in df_p.columns if 'Amount' in c), None)
-    # Payment sheet mein Category/Type column dhoondna
-    t_col = next((c for c in df_p.columns if 'Type' in c or 'Category' in c), None)
+    # Check agar data khali hai
+    if df_t is None or df_t.empty:
+        st.warning("⚠️ Trips data load nahi ho raha hai. Kripya Google Sheet check karein.")
+    elif df_p is None or df_p.empty:
+        st.warning("⚠️ Payments data load nahi ho raha hai.")
+    else:
+        # Columns clean karein
+        df_t.columns = [str(c).strip() for c in df_t.columns]
+        df_p.columns = [str(c).strip() for c in df_p.columns]
 
-    # --- STEP 3: CALCULATION LOGIC ---
-    all_parties = gl("Party")
-    unpaid_data = []
+        # --- ASLI COLUMN NAAM (Yahan check kijiye ki aapki sheet mein yahi naam hain) ---
+        p_col_t = 'Billing Party' 
+        f_col = 'Total Freight'
+        p_col_p = 'Party Name'
+        amt_col = 'Amount'
+        type_col = 'Type*' # Ya 'Type'
 
-    if party_col_t and f_col:
+        # --- CALCULATION ---
+        all_parties = gl("Party")
+        unpaid_data = []
+
         for p in all_parties:
-            # Current Bills
-            bill = df_t[df_t[party_col_t] == p][f_col].apply(pd.to_numeric, errors='coerce').sum() if not df_t.empty else 0
-            # Opening Balance from Payment sheet
-            op_bal = df_p[(df_p[party_col_p] == p) & (df_p[t_col].str.contains('Opening', na=False))][p_col].apply(pd.to_numeric, errors='coerce').sum() if not df_p.empty and t_col else 0
-            # Real Payments
-            recd = df_p[(df_p[party_col_p] == p) & (~df_p[t_col].str.contains('Opening', na=False))][p_col].apply(pd.to_numeric, errors='coerce').sum() if not df_p.empty and t_col else 0
+            # Trips ka total
+            t_data = df_t[df_t[p_col_t] == p]
+            bill = pd.to_numeric(t_data[f_col], errors='coerce').sum() if not t_data.empty else 0
+            
+            # Payments & Opening Bal
+            p_data = df_p[df_p[p_col_p] == p]
+            if not p_data.empty:
+                op_bal = pd.to_numeric(p_data[p_data[type_col].str.contains('Opening', na=False)][amt_col], errors='coerce').sum()
+                recd = pd.to_numeric(p_data[~p_data[type_col].str.contains('Opening', na=False)][amt_col], errors='coerce').sum()
+            else:
+                op_bal = recd = 0
             
             due = (bill + op_bal) - recd
-            if due > 1: # ₹1 se zyada baki hai toh hi list mein dikhaye
+            if due > 1:
                 unpaid_data.append({"Party": p, "Outstanding": due})
 
-    df_unpaid = pd.DataFrame(unpaid_data)
-    if not df_unpaid.empty:
-        df_unpaid = df_unpaid.sort_values(by="Outstanding", ascending=False)
+        df_unpaid = pd.DataFrame(unpaid_data)
 
-    # --- STEP 4: DISPLAY METRICS ---
-    total_due = df_unpaid['Outstanding'].sum() if not df_unpaid.empty else 0
-    st.metric("Total Market Outstanding", f"₹{total_due:,.2f}")
+        # --- DISPLAY ---
+        total_due = df_unpaid['Outstanding'].sum() if not df_unpaid.empty else 0
+        st.metric("Total Market Outstanding", f"₹{total_due:,.2f}")
 
-    st.divider()
-
-    # --- STEP 5: INTERACTIVE TABLE ---
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        st.subheader("🚩 Top Unpaid Parties")
-        if not df_unpaid.empty:
-            # Modern table with selection
-            event = st.dataframe(df_unpaid.head(10), use_container_width=True, on_select="rerun", selection_mode="single_row")
-            
-            # Click details logic
-            if len(event.get('selection', {}).get('rows', [])) > 0:
-                selected_idx = event['selection']['rows'][0]
-                st.session_state.dash_party = df_unpaid.iloc[selected_idx]['Party']
-        else:
-            st.write("All clear! No pending payments.")
-
-    with col2:
-        st.subheader("🚛 Recent Trips")
-        if not df_t.empty:
-            st.dataframe(df_t[[party_col_t, f_col]].tail(10), use_container_width=True)
-
-    # --- STEP 6: DRILL DOWN DETAILS ---
-    if 'dash_party' in st.session_state:
         st.divider()
-        st.subheader(f"🔍 Quick Summary: {st.session_state.dash_party}")
-        quick_view = df_t[df_t[party_col_t] == st.session_state.dash_party].tail(5)
-        st.table(quick_view[[party_col_t, f_col]])
-elif menu == "2. LR Entry":
-    st.header("📝 Professional LR Entry")
-    if st.button("🆕 RESET FORM"):
-        st.session_state.reset_trigger += 1
-        st.session_state.pdf_ready = None
-        st.rerun()
 
-    k = st.session_state.reset_trigger
-    cp1, cp2, cp3 = st.columns(3)
-    
-    with cp1:
-        sel_br = st.selectbox("Select Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
-        br_code = df_m[df_m['Name'] == sel_br].iloc[0].get('GST', '01') if sel_br != "Select" else "01"
-        v_cat = st.radio("Trip Type*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"vcat_{k}")
-        lr_mode = st.radio("LR No Mode", ["Auto", "Manual"], horizontal=True, key=f"lrmode_{k}")
-        lr_no_auto = f"VIL/25-26/{br_code}/{len(df_t)+1:03d}"
-        lr_no = st.text_input("LR Number*", value=lr_no_auto if lr_mode == "Auto" else "", key=f"lrno_{k}")
-        risk = st.radio("Risk*", ["At Owner Risk", "Insured"], horizontal=True, key=f"risk_{k}")
-
-    with cp2:
-        is_np = st.checkbox("New Party?", key=f"isnp_{k}")
-        if is_np:
-            bill_pty = st.text_input("Enter New Party Name*", key=f"np_{k}")
-        else:
-            bill_pty = st.selectbox("Billing Party*", ["Select"] + gl("Party"), key=f"bp_{k}")
-
-        is_nc = st.checkbox("New Consignor?", key=f"isnc_{k}")
-        if is_nc:
-            cnor_name = st.text_input("Enter New Consignor Name*", key=f"nc_{k}")
-        else:
-            cnor_name = st.selectbox("Consignor Name*", ["Select"] + gl("Party"), key=f"cnor_{k}")
-            
-        cnor_gst = st.text_input("Consignor GST", key=f"cgst_{k}")
-        ins_by = st.selectbox("Insurance Paid By*", ["N/A", "Consignor", "Consignee", "Transporter"], key=f"ins_{k}")
-
-    with cp3:
-        # --- UPDATE: CONSIGNEE DROPDOWN LOGIC ---
-        is_nee = st.checkbox("New Consignee?", key=f"isnee_{k}")
-        if is_nee:
-            cnee_name = st.text_input("Consignee Name*", key=f"cnee_{k}")
-        else:
-            # Consignee ki list Masters se uthayega
-            cnee_name = st.selectbox("Consignee Name*", ["Select"] + gl("Party"), key=f"cnee_sel_{k}")
-            
-        cnee_gst = st.text_input("Consignee GST", key=f"cngst_{k}")
-        paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pby_{k}")
-        sel_bank = st.selectbox("Select Bank*", ["Select"] + gl("Bank"), key=f"bank_{k}")
-
-    with st.form(f"lr_form_{k}"):
-        st.markdown("---")
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            d = st.date_input("Date", date.today())
-            v_list = gl("Vehicle")
-            v_no = st.selectbox("Vehicle No*", ["Select"] + v_list) if v_cat == "Own Fleet" else st.text_input("Market Vehicle No*")
-            
-            if v_cat == "Own Fleet":
-                d_list = gl("Driver")
-                sel_driver = st.selectbox("Driver Name*", ["Select"] + d_list)
-                br_name = "OWN"
-                # UPDATE: APNI GADI KISI BROKER SE BHARI HAI TO NAAM DALNE KA OPTION
-                loading_broker = st.text_input("Loading Broker (If Own Fleet hired via Broker)", key=f"lb_{k}")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("🚩 Top Unpaid Parties")
+            if not df_unpaid.empty:
+                df_unpaid = df_unpaid.sort_values(by="Outstanding", ascending=False)
+                st.dataframe(df_unpaid, use_container_width=True)
             else:
-                sel_driver = "Market Driver"
-                br_name = st.selectbox("Broker*", ["Select"] + gl("Broker"))
-                loading_broker = "" # Market hired mein zarurat nahi, par variable define hona chahiye
-                
-            ship_to = st.text_area("Ship To Address")
+                st.success("Sabka hisab clear hai!")
 
-        with c2:
-            fl, tl = st.text_input("From City"), st.text_input("To City")
-            mat, pkg = st.text_input("Material"), st.selectbox("Packaging", ["Drums", "Bags", "Boxes", "Loose", "Pallets"])
-            inv_no = st.text_input("Invoice No & Date")
-
-        with c3:
-            n_wt, c_wt = st.number_input("Net Wt", min_value=0.0), st.number_input("Chg Wt", min_value=0.0)
-            fr_amt = st.number_input("Total Freight*", min_value=0.0)
-            show_fr = st.checkbox("Show Freight in PDF?", value=True)
-            if v_cat == "Own Fleet": 
-                dsl, toll, drv = st.number_input("Diesel"), st.number_input("Toll"), st.number_input("Driver Adv")
-                hc = 0.0
-            else: 
-                hc = st.number_input("Hired Charges")
-                dsl = toll = drv = 0.0
-
-        if st.form_submit_button("🚀 SAVE LR"):
-            if bill_pty and bill_pty != "Select" and fr_amt > 0:
-                br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
-                
-                prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
-                
-                # UPDATE: row list mein 'loading_broker' ko party ke baad ya kahin bhi fit kiya (Yahan maine 5th position par rakha hai)
-                row = [str(d), lr_no, v_cat, bill_pty, loading_broker, cnor_name, cnee_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, sel_driver, br_name, fl, tl, fr_amt, (hc if v_cat == "Market Hired" else 0.0), dsl, drv, toll, 0, prof]
-                
-                if save("trips", row):
-                    # NEW CONSIGNEE SAVE LOGIC
-                    if is_nee and cnee_name and cnee_name not in gl("Consignee"):
-                        save("masters", ["Consignee", cnee_name])
-                    
-                    if is_np and bill_pty not in gl("Party"):
-                        save("masters", ["Party", bill_pty])
-                    if is_nc and cnor_name not in gl("Consignor"):
-                        save("masters", ["Consignor", cnor_name])
-
-                    st.session_state.pdf_ready = {
-                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
-                        "Cnor": cnor_name, "CnorGST": cnor_gst, 
-                        "Cnee": cnee_name, "CneeGST": cnee_gst, 
-                        "BillP": bill_pty, "From": fl, "To": tl, 
-                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, 
-                        "Freight": fr_amt, "PaidBy": paid_by, "Risk": risk, 
-                        "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr, "InsBy": ins_by,
-                        "BranchName": sel_br,
-                        "BranchGST": br_info.get('GST', 'N/A'),
-                        "BranchAddr": br_info.get('Address', 'N/A'),
-                        "BankName": br_info.get('Name', 'N/A'),
-                        "BankAC": br_info.get('A_C_No', 'N/A'),
-                        "BankIFSC": br_info.get('IFSC', 'N/A')
-                    }
-                    st.success("LR Saved and Masters Updated!")
-                    st.rerun()
-            else:
-                st.error("Please fill Party Name and Freight!")
-
-    if st.session_state.pdf_ready:
-        st.divider()
-        st.download_button("📥 DOWNLOAD LR PDF", generate_lr_pdf(st.session_state.pdf_ready, st.session_state.pdf_ready.get('show_fr', True)), f"LR_{st.session_state.pdf_ready['LR No']}.pdf")    
+        with col2:
+            st.subheader("🚛 Recent 5 Trips")
+            st.dataframe(df_t[[p_col_t, f_col]].tail(5), use_container_width=True)    
 elif menu == "3. LR Register":
     st.title("📋 LR REGISTER")
     if not df_t.empty:
@@ -867,6 +735,7 @@ elif menu == "9. Data Manager (Delete/Edit)":
                         ws_p.delete_rows(row_idx + 2)
                     st.success("Payment entry delete ho gayi hai!")
                     st.rerun()
+
 
 
 
