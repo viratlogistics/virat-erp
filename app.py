@@ -622,7 +622,7 @@ elif menu == "4. Financials":
     df_t = load("trips")
     df_p = load("payments")
     
-    # 2. Column names clean karna
+    # 2. Column names clean karna (Extra spaces hatana)
     if not df_t.empty:
         df_t.columns = [str(c).strip() for c in df_t.columns]
     if not df_p.empty:
@@ -632,98 +632,88 @@ elif menu == "4. Financials":
     f_col = 'Total Freight' if 'Total Freight' in df_t.columns else ('Freight' if 'Freight' in df_t.columns else None)
     p_col = 'Amount' if 'Amount' in df_p.columns else None
 
-    # --- ERROR FIX: Convert to Numeric (Sirf Number ko Jodna) ---
-    if f_col and not df_t.empty:
-        # errors='coerce' matlab agar koi text hai toh use 0 bana do taaki error na aaye
+    # 4. ADVANCED CALCULATION LOGIC
+    if not df_t.empty and f_col:
         df_t[f_col] = pd.to_numeric(df_t[f_col], errors='coerce').fillna(0)
-        total_bill = df_t[f_col].sum()
+        total_freight_bills = df_t[f_col].sum()
     else:
-        total_bill = 0
+        total_freight_bills = 0
 
-    if p_col and not df_p.empty:
+    if not df_p.empty and p_col:
         df_p[p_col] = pd.to_numeric(df_p[p_col], errors='coerce').fillna(0)
-        total_rec = df_p[p_col].sum()
+        
+        # LOGIC: Opening Balance ko 'Bill' ki tarah treat karna hai (Plus)
+        # Payment aur TDS ko 'Received' ki tarah treat karna hai (Minus)
+        op_bal_total = df_p[df_p['Type*'] == 'Opening Balance'][p_col].sum()
+        actual_payments = df_p[df_p['Type*'].isin(['Payment', 'TDS', 'Discount'])][p_col].sum()
     else:
-        total_rec = 0
+        op_bal_total = 0
+        actual_payments = 0
 
-    pending_bal = total_bill - total_rec
+    # FORMULA: (Purana Baki + Naya Bhada) - Mila Hua Paisa
+    final_outstanding = (op_bal_total + total_freight_bills) - actual_payments
 
     # --- TOP METRICS DISPLAY ---
     m1, m2, m3 = st.columns(3)
-    with m1: st.metric("Total Billed (Freight)", f"₹{total_bill:,.2f}")
-    with m2: st.metric("Total Received (Inc. Opening)", f"₹{total_rec:,.2f}")
-    with m3: st.metric("Total Outstanding", f"₹{pending_bal:,.2f}", delta="- Receivable", delta_color="inverse")
+    with m1:
+        st.metric("Total Billed (New)", f"₹{total_freight_bills:,.2f}", help="Sirf Trips ka Total")
+    with m2:
+        st.metric("Total Payments Recd.", f"₹{actual_payments:,.2f}", help="Sirf Paisa jo Recd hua")
+    with m3:
+        # Outstanding Balance hamesha Positive dikhega agar lena baki hai
+        st.metric("Final Outstanding", f"₹{final_outstanding:,.2f}", delta=f"Inc. Opening: ₹{op_bal_total:,.2f}", delta_color="inverse")
 
     st.divider()
 
     # --- SECTION: NEW ENTRY FORM ---
     with st.expander("➕ Add New Payment / Opening Balance Entry"):
-        with st.form("financial_entry_form", clear_on_submit=True):
+        with st.form("fin_entry_final", clear_on_submit=True):
             c1, c2, c3 = st.columns(3)
             with c1:
                 p_date = st.date_input("Transaction Date", date.today())
                 p_party = st.selectbox("Select Party*", ["Select"] + gl("Party"))
             with c2:
-                p_type = st.selectbox("Entry Type*", ["Payment", "Opening Balance", "TDS", "Discount"])
+                # Type dropdown - Important for Calculation
+                p_type = st.selectbox("Type*", ["Payment", "Opening Balance", "TDS", "Discount"])
                 p_amount = st.number_input("Amount*", min_value=0.0)
             with c3:
                 p_mode = st.selectbox("Payment Mode", ["Bank Transfer", "Cash", "Cheque", "UPI"])
                 p_remarks = st.text_input("Remarks / Reference No.")
 
-            if st.form_submit_button("💾 Save Financial Entry"):
+            if st.form_submit_button("💾 Save Entry"):
                 if p_party != "Select" and p_amount > 0:
                     pay_row = [str(p_date), p_party, p_type, p_amount, p_mode, p_remarks]
                     if save("payments", pay_row):
-                        st.success(f"Entry Successful: {p_party} | {p_type} | ₹{p_amount}")
+                        st.success(f"Saved: {p_party} | {p_type} | ₹{p_amount}")
                         st.rerun()
 
-    # --- SECTION: PARTY LEDGER REPORT (RE-FIXED) ---
     st.divider()
+
+    # --- SECTION: PARTY LEDGER REPORT ---
     st.subheader("📑 Party Wise Detailed Ledger")
-    search_party = st.selectbox("Search Ledger", ["Select Party"] + gl("Party"), key="ledger_search")
+    search_p = st.selectbox("Search Ledger", ["Select Party"] + gl("Party"), key="final_search")
 
-    if search_party != "Select Party":
-        # 1. Trips filter logic
-        if not df_t.empty:
-            # Billing Party column dhoondna (kabhi-kabhi 'Party' hota hai)
-            party_col_t = 'Billing Party' if 'Billing Party' in df_t.columns else ('Party' if 'Party' in df_t.columns else df_t.columns[3])
-            p_trips = df_t[df_t[party_col_t] == search_party].copy()
-        else:
-            p_trips = pd.DataFrame()
+    if search_p != "Select Party":
+        # Specific Party Data
+        p_trips = df_t[df_t['Billing Party'] == search_p].copy() if not df_t.empty else pd.DataFrame()
+        p_pays_all = df_p[df_p['Party Name'] == search_p].copy() if not df_p.empty else pd.DataFrame()
 
-        # 2. Payments filter logic
-        if not df_p.empty:
-            # Party Name column dhoondna
-            party_col_p = 'Party Name' if 'Party Name' in df_p.columns else ('Party' if 'Party' in df_p.columns else df_p.columns[1])
-            p_pays = df_p[df_p[party_col_p] == search_party].copy()
-        else:
-            p_pays = pd.DataFrame()
+        # Calculation for this Party
+        p_new_bill = p_trips[f_col].sum() if f_col and not p_trips.empty else 0
+        p_op_bal = p_pays_all[p_pays_all['Type*'] == 'Opening Balance'][p_col].sum() if not p_pays_all.empty else 0
+        p_recd = p_pays_all[p_pays_all['Type*'].isin(['Payment', 'TDS', 'Discount'])][p_col].sum() if not p_pays_all.empty else 0
+        p_final = (p_op_bal + p_new_bill) - p_recd
 
-        # 3. Calculation
-        p_bill = p_trips[f_col].sum() if f_col and not p_trips.empty else 0
-        p_rec = p_pays[p_col].sum() if p_col and not p_pays.empty else 0
-        p_out = p_bill - p_rec
-
-        # --- Dashboard Metrics for Party ---
         sc1, sc2, sc3 = st.columns(3)
-        sc1.info(f"Total Freight\n\n₹{p_bill:,.2f}")
-        sc2.success(f"Total Received\n\n₹{p_rec:,.2f}")
-        sc3.warning(f"Closing Balance\n\n₹{p_out:,.2f}")
+        sc1.info(f"Purana Baki: ₹{p_op_bal:,.2f}")
+        sc2.success(f"Naya Bill: ₹{p_new_bill:,.2f}")
+        sc3.warning(f"Abhi Lena Baki: ₹{p_final:,.2f}")
 
-        # --- Tabs for Details ---
-        t1, t2 = st.tabs(["🚛 Trips Details", "💳 Payment & Opening Details"])
-        
+        t1, t2 = st.tabs(["🚛 Trips Ledger", "💳 Payments / TDS / Opening Bal"])
         with t1:
-            if not p_trips.empty:
-                st.dataframe(p_trips, use_container_width=True)
-            else:
-                st.write("Is party ki koi Trip entry nahi mili.")
-                
+            st.dataframe(p_trips, use_container_width=True)
         with t2:
-            if not p_pays.empty:
-                st.dataframe(p_pays, use_container_width=True)
-            else:
-                st.write("Is party ki koi Payment ya Opening Balance nahi mila.")
+            st.dataframe(p_pays_all, use_container_width=True)
 elif menu == "5. Business Insights":
     st.header("📊 Business Dashboard & Own Fleet Analytics")
     df_t = load("trips")
@@ -990,6 +980,7 @@ elif menu == "9. Data Manager (Delete/Edit)":
                         ws_p.delete_rows(row_idx + 2)
                     st.success("Payment entry delete ho gayi hai!")
                     st.rerun()
+
 
 
 
