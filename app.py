@@ -224,115 +224,217 @@ with st.sidebar:
 def gl(t): 
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
 
-if menu == "0. Dashboard":
-    st.title("📊 Virat Logistics - Cash & Profit Dashboard")
+if menu == "0. Dashboard":if menu == "0. Dashboard":
+    st.title("📊 Virat Logistics - Financial Control Center")
     
-    # --- 1. DATA PREP ---
+    # --- 1. DATA LOADING ---
     df_p = load("payments")
+    df_t = load("trips")
     df_oe = load("office_expenses")
-    
-    # Trim spaces from columns
-    for dff in [df_t, df_p, df_oe]:
-        if not dff.empty: dff.columns = [str(c).strip() for c in dff.columns]
+    df_m = load("masters")
 
-    # --- 2. CASH FLOW CALCULATION (Actual Paisa) ---
-    cash_in = 0
-    payments_out = 0
-    
-    if not df_p.empty:
-        # Amount aur Type column dhoondna
-        amt_col_p = next((c for c in df_p.columns if 'amount' in c.lower()), None)
-        type_col_p = next((c for c in df_p.columns if 'type' in c.lower()), None)
-        
-        if amt_col_p and type_col_p:
-            df_p[amt_col_p] = pd.to_numeric(df_p[amt_col_p], errors='coerce').fillna(0)
-            # Receipt = Paisa Aaya | Payment = Paisa Gaya
-            cash_in = df_p[df_p[type_col_p].str.contains('Receipt|In', case=False, na=False)][amt_col_p].sum()
-            payments_out = df_p[df_p[type_col_p].str.contains('Payment|Out', case=False, na=False)][amt_col_p].sum()
+    # Sabhi columns ko trim aur numeric set karna taaki calculation perfect ho
+    for dff in [df_p, df_t, df_oe]:
+        if not dff.empty:
+            dff.columns = [str(c).strip() for c in dff.columns]
+            # Numeric Columns identify karna
+            num_cols = [c for c in dff.columns if any(x in c.lower() for x in ['amount', 'freight', 'diesel', 'toll', 'adv', 'hired', 'exp'])]
+            for col in num_cols:
+                dff[col] = pd.to_numeric(dff[col], errors='coerce').fillna(0)
 
-    # Own Fleet ka Cash Out (Diesel, Toll, Adv from Trips)
-    own_cash_out = 0
+    # --- 2. ADVANCED CALCULATIONS ---
+    
+    # A. P&L (Profit & Loss - Accrual Basis)
+    total_revenue = df_t['Freight'].sum() if not df_t.empty else 0
+    # Saare direct trip kharche
+    direct_trip_exp = df_t[['Diesel', 'Toll', 'DriverAdv', 'Other']].sum().sum() if not df_t.empty else 0
+    total_hired_cost = df_t['HiredCharges'].sum() if not df_t.empty else 0
+    office_exp_total = df_oe['Amount'].sum() if not df_oe.empty else 0
+    
+    total_expenses = direct_trip_exp + total_hired_cost + office_exp_total
+    net_profit = total_revenue - total_expenses
+
+    # B. CASH FLOW (Actual Cash In vs Cash Out)
+    cash_in = df_p[df_p['Type'].str.contains('Receipt|In', case=False, na=False)]['Amount'].sum() if not df_p.empty else 0
+    # Actual cash jo bank/jeb se gaya: Payments + Own Fleet ki Cash expenses + Office
+    cash_out_payments = df_p[df_p['Type'].str.contains('Payment|Out', case=False, na=False)]['Amount'].sum() if not df_p.empty else 0
+    cash_out_trips = direct_trip_exp # Diesel/Toll/Adv usually cash/card hota hai
+    total_cash_out = cash_out_payments + cash_out_trips + office_exp_total
+    current_cash_balance = cash_in - total_cash_out
+
+    # C. RECEIVABLES & PAYABLES
+    # Receivable = Jo Parties se lena baki hai
+    total_receivable = total_revenue - cash_in
+    # Payable = Jo Brokers/Market Hired gaadiyon ko dena baki hai
+    total_payable = total_hired_cost - cash_out_payments
+
+    # --- 3. DASHBOARD DISPLAY (TOP METRICS) ---
+    st.subheader("📌 Key Financial Indicators")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("📈 Net Profit (P&L)", f"₹{net_profit:,.0f}")
+        st.caption("Revenue - Total Expenses")
+    with col2:
+        st.metric("🌊 Cash Balance", f"₹{current_cash_balance:,.0f}", delta="In-Hand/Bank")
+        st.caption("Actual Cash Flow")
+    with col3:
+        st.metric("📥 Receivables", f"₹{max(0, total_receivable):,.0f}", delta_color="normal")
+        st.caption("Pending from Parties")
+    with col4:
+        st.metric("📤 Payables", f"₹{max(0, total_payable):,.0f}", delta_color="inverse")
+        st.caption("Pending to Brokers")
+
+    st.divider()
+
+    # --- 4. FUND FLOW & DETAILED SECTIONS (CLICK TO EXPAND) ---
+    st.subheader("📋 Detailed Financial Breakdown")
+    
+    # DETAIL: P&L Report
+    with st.expander("📊 View Profit & Loss (P&L) Details"):
+        c1, c2 = st.columns(2)
+        with c1:
+            st.write("**Revenue Sources**")
+            rev_df = df_t.groupby('Party')['Freight'].sum().sort_values(ascending=False).reset_index()
+            st.dataframe(rev_df.style.format({'Freight': '₹{:,.0f}'}), use_container_width=True)
+        with c2:
+            st.write("**Expense Structure**")
+            exp_breakdown = pd.DataFrame({
+                "Category": ["Broker Charges", "Diesel (Own)", "Toll (Own)", "Driver Adv (Own)", "Office Exp"],
+                "Amount": [total_hired_cost, df_t['Diesel'].sum(), df_t['Toll'].sum(), df_t['DriverAdv'].sum(), office_exp_total]
+            })
+            st.dataframe(exp_breakdown.style.format({'Amount': '₹{:,.0f}'}), use_container_width=True)
+
+    # DETAIL: Cash Flow
+    with st.expander("💸 View Cash Flow & Fund Movement"):
+        st.write("**Actual Cash In/Out History**")
+        if not df_p.empty:
+            st.dataframe(df_p.tail(20), use_container_width=True)
+        st.info(f"Fund Flow Ratio: {(cash_in / total_cash_out if total_cash_out != 0 else 0):.2f} (Income vs Spends)")
+
+    # DETAIL: Receivables
+    with st.expander("⏳ View Detailed Receivables (Party Wise)"):
+        if not df_t.empty:
+            p_bill = df_t.groupby('Party')['Freight'].sum()
+            p_paid = df_p[df_p['Type'].str.contains('Receipt', case=False, na=False)].groupby('Account_Name')['Amount'].sum()
+            receiv_df = pd.DataFrame({'Billed': p_bill, 'Received': p_paid}).fillna(0)
+            receiv_df['Balance'] = receiv_df['Billed'] - receiv_df['Received']
+            st.dataframe(receiv_df[receiv_df['Balance'] > 0].style.format('₹{:,.0f}'), use_container_width=True)
+
+    # DETAIL: Payables
+    with st.expander("🚛 View Detailed Payables (Broker Wise)"):
+        if not df_t.empty:
+            b_bill = df_t[df_t['Type'].str.contains('Market', case=False, na=False)].groupby('Broker')['HiredCharges'].sum()
+            b_paid = df_p[df_p['Type'].str.contains('Payment', case=False, na=False)].groupby('Account_Name')['Amount'].sum()
+            pay_df = pd.DataFrame({'Total_Cost': b_bill, 'Paid': b_paid}).fillna(0)
+            pay_df['Pending'] = pay_df['Total_Cost'] - pay_df['Paid']
+            st.dataframe(pay_df[pay_df['Pending'] > 0].style.format('₹{:,.0f}'), use_container_width=True)
+
+    # --- 5. VISUAL ANALYTICS ---
+    st.subheader("📈 Business Growth Trend")
     if not df_t.empty:
-        # Own Fleet filter karna
-        type_col_t = next((c for c in df_t.columns if 'type' in c.lower()), None)
-        if type_col_t:
-            df_own = df_t[df_t[type_col_t].str.contains('Own', case=False, na=False)]
-            # Cash columns ka total
-            c_cols = [c for c in df_t.columns if any(x in c.lower() for x in ['diesel', 'toll', 'adv', 'driverexp'])]
-            for c in c_cols: df_own[c] = pd.to_numeric(df_own[c], errors='coerce').fillna(0)
-            own_cash_out = df_own[c_cols].sum().sum()
-
-    # Office Expense
-    office_cash_out = 0
-    if not df_oe.empty:
-        amt_col_oe = next((c for c in df_oe.columns if 'amount' in c.lower()), 'Amount')
-        df_oe[amt_col_oe] = pd.to_numeric(df_oe[amt_col_oe], errors='coerce').fillna(0)
-        office_cash_out = df_oe[amt_col_oe].sum()
-
-    total_actual_cash_out = payments_out + own_cash_out + office_cash_out
-    cash_hand_balance = cash_in - total_actual_cash_out
-
-    # --- 3. PROFIT CALCULATION (Business Performance) ---
-    rev_col = next((c for c in df_t.columns if any(x in c.lower() for x in ['freight', 'revenue'])), None)
-    total_rev = pd.to_numeric(df_t[rev_col], errors='coerce').sum() if rev_col else 0
+        df_t['Date'] = pd.to_datetime(df_t['Date'])
+        trend_df = df_t.groupby('Date')['Freight'].sum().reset_index()
+        fig = px.line(trend_df, x='Date', y='Freight', title="Monthly Revenue Trend", markers=True)
+        st.plotly_chart(fig, use_container_width=True)
+    st.title("📊 Virat Logistics - Financial Control Center")
     
-    # Sare trip kharche (Hired Charges bhi shamil)
-    trip_exp_cols = [c for c in df_t.columns if any(x in c.lower() for x in ['hired', 'diesel', 'toll', 'adv', 'driverexp', 'other'])]
-    for c in trip_exp_cols: df_t[c] = pd.to_numeric(df_t[c], errors='coerce').fillna(0)
-    total_trip_cost = df_t[trip_exp_cols].sum().sum()
-    
-    net_profit = total_rev - (total_trip_cost + office_cash_out)
+    # --- 1. DATA LOADING & CLEANING ---
+    df_p = load("payments")
+    df_t = load("trips")
+    df_oe = load("office_expenses")
+    df_m = load("masters") # To identify Parties/Brokers
 
-    # --- 4. DISPLAY METRICS (Cards) ---
-    st.subheader("📌 Financial Summary")
-    r1, r2, r3, r4 = st.columns(4)
-    r1.metric("Cash In (Receipts)", f"₹{cash_in:,.0f}")
-    r2.metric("Cash Out (Actual)", f"₹{total_actual_cash_out:,.0f}", delta_color="inverse")
-    r3.metric("Bank/Hand Balance", f"₹{cash_hand_balance:,.0f}", delta="In-Hand")
-    r4.metric("Net Business Profit", f"₹{net_profit:,.0f}")
+    # Numeric conversion for safety
+    for dff in [df_p, df_t, df_oe]:
+        if not dff.empty:
+            for col in dff.columns:
+                if any(x in col.lower() for x in ['amount', 'freight', 'diesel', 'toll', 'adv', 'charge']):
+                    dff[col] = pd.to_numeric(dff[col], errors='coerce').fillna(0)
+
+    # --- 2. LOGIC CALCULATIONS ---
+    # A. CASH FLOW (Actual Paisa Aaya vs Gaya)
+    cash_in = df_p[df_p['Type'].str.contains('Receipt|In', case=False, na=False)]['Amount'].sum()
+    cash_out_direct = df_p[df_p['Type'].str.contains('Payment|Out', case=False, na=False)]['Amount'].sum()
+    trip_expenses = df_t[['Diesel', 'Toll', 'DriverAdv']].sum().sum()
+    office_exp = df_oe['Amount'].sum()
+    total_cash_out = cash_out_direct + trip_expenses + office_exp
+    net_cash_flow = cash_in - total_cash_out
+
+    # B. P&L (Billed Revenue vs Total Accrued Expenses)
+    total_revenue = df_t['Freight'].sum()
+    total_broker_cost = df_t['HiredCharges'].sum()
+    net_profit = total_revenue - (total_broker_cost + trip_expenses + office_exp)
+
+    # C. RECEIVABLES & PAYABLES (Billed vs Paid)
+    # Receivable = Party se kitna lena hai (Freight - Received)
+    total_receivable = total_revenue - cash_in 
+    # Payable = Hired Gaadiyo ko kitna dena baki hai
+    total_payable = total_broker_cost - cash_out_direct 
+
+    # --- 3. METRICS DISPLAY ---
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("💰 Net Profit (P&L)", f"₹{net_profit:,.0f}")
+        st.metric("📥 Total Receivable", f"₹{max(0, total_receivable):,.0f}", delta="From Parties")
+    with col2:
+        st.metric("🌊 Net Cash Flow", f"₹{net_cash_flow:,.0f}")
+        st.metric("📤 Total Payable", f"₹{max(0, total_payable):,.0f}", delta="To Brokers", delta_color="inverse")
+    with col3:
+        st.metric("🏢 Office & Trip Exp", f"₹{trip_expenses + office_exp:,.0f}")
+        st.metric("💹 Fund Flow Index", f"{((cash_in/total_cash_out) if total_cash_out !=0 else 0):.2f}", help="Paisa aane aur jaane ka ratio")
 
     st.divider()
 
-    # --- 5. CHARTS ---
-    c1, c2 = st.columns(2)
+    # --- 4. CLICKABLE DETAILS (EXPANDERS) ---
     
-    with c1:
-        st.subheader("💰 Actual Cash Flow (Paisa)")
-        # Cash Flow Bar Chart
-        cash_df = pd.DataFrame({'Category': ['Cash In', 'Cash Out'], 'Amount': [cash_in, total_actual_cash_out]})
-        fig_cash = px.bar(cash_df, x='Category', y='Amount', color='Category', 
-                          color_discrete_map={'Cash In': '#2ecc71', 'Cash Out': '#e74c3c'}, text_auto='.3s')
-        st.plotly_chart(fig_cash, use_container_width=True)
+    # DETAIL 1: P&L Breakdown
+    with st.expander("📈 View P&L & Revenue Details (Kahan se kitna kamaya)"):
+        c1, c2 = st.columns(2)
+        with c1:
+            st.write("**Party-wise Revenue**")
+            rev_party = df_t.groupby('Party')['Freight'].sum().reset_index()
+            st.dataframe(rev_party.sort_values(by='Freight', ascending=False), use_container_width=True)
+        with c2:
+            st.write("**Expense Breakdown**")
+            exp_data = {
+                "Category": ["Broker Charges", "Diesel", "Toll", "Driver Adv", "Office Exp"],
+                "Amount": [total_broker_cost, df_t['Diesel'].sum(), df_t['Toll'].sum(), df_t['DriverAdv'].sum(), office_exp]
+            }
+            st.dataframe(pd.DataFrame(exp_data), use_container_width=True)
 
-    with c2:
-        st.subheader("🚛 Vehicle Profit (Own Fleet)")
-        v_col = next((c for c in df_t.columns if 'vehicle' in c.lower()), None)
-        if v_col and not df_t.empty:
-            df_v = df_t[df_t[type_col_t].str.contains('Own', case=False, na=False)].copy()
-            if not df_v.empty:
-                v_perf = df_v.groupby(v_col)[rev_col].sum().reset_index()
-                v_perf.columns = ['Vehicle', 'Revenue']
-                fig_v = px.bar(v_perf, x='Vehicle', y='Revenue', color='Revenue', color_continuous_scale='Blues')
-                st.plotly_chart(fig_v, use_container_width=True)
+    # DETAIL 2: Cash Flow & Fund Flow
+    with st.expander("🌊 View Cash Flow & Fund Movement (Paisa kahan hai)"):
+        st.write("**Recent Cash Transactions (Receipts vs Payments)**")
+        if not df_p.empty:
+            st.dataframe(df_p.tail(20), use_container_width=True)
+        st.info(f"Summary: Aaj tak total ₹{cash_in:,.0f} receive hua aur ₹{total_cash_out:,.0f} kharch hua.")
 
-    # --- 6. UNPAID BILLS (RECEIVABLES) ---
-    st.divider()
-    st.subheader("⏳ Top Unpaid Parties (Receivables)")
-    party_col = next((c for c in df_t.columns if 'party' in c.lower()), None)
-    if party_col:
-        p_rev = df_t.groupby(party_col)[rev_col].sum()
-        p_acc_col = next((c for c in df_p.columns if any(x in c.lower() for x in ['account', 'name', 'party'])), None)
-        p_rec = df_p[df_p[type_col_p].str.contains('Receipt', case=False, na=False)].groupby(p_acc_col)[amt_col_p].sum() if p_acc_col else pd.Series()
-        
-        pending = pd.DataFrame({'Billed': p_rev, 'Received': p_rec}).fillna(0)
-        pending['Due'] = pending['Billed'] - pending['Received']
-        top_pending = pending[pending['Due'] > 100].sort_values('Due', ascending=False).head(10).reset_index()
-        top_pending.columns = ['Party', 'Billed', 'Received', 'Due']
-        
-        if not top_pending.empty:
-            fig_due = px.bar(top_pending, x='Due', y='Party', orientation='h', color='Due', color_continuous_scale='Reds')
-            st.plotly_chart(fig_due, use_container_width=True)
-            st.dataframe(pending[pending['Due'] > 1].style.format("₹{:,.0f}"), use_container_width=True)
+    # DETAIL 3: Receivables (Dena Baki)
+    with st.expander("📝 View Detailed Receivables (Party Wise Pending)"):
+        if not df_t.empty:
+            party_bill = df_t.groupby('Party')['Freight'].sum()
+            party_paid = df_p[df_p['Type'].str.contains('Receipt', case=False, na=False)].groupby('Account_Name')['Amount'].sum()
+            
+            receivable_df = pd.DataFrame({'Total_Billed': party_bill, 'Total_Paid': party_paid}).fillna(0)
+            receivable_df['Balance_Pending'] = receivable_df['Total_Billed'] - receivable_df['Total_Paid']
+            st.dataframe(receivable_df[receivable_df['Balance_Pending'] > 0], use_container_width=True)
+
+    # DETAIL 4: Payables (Lena Baki)
+    with st.expander("🚛 View Detailed Payables (Broker/Driver Wise Pending)"):
+        if not df_t.empty:
+            broker_bill = df_t[df_t['Type']=='Market Fleet'].groupby('Broker')['HiredCharges'].sum()
+            broker_paid = df_p[df_p['Type'].str.contains('Payment', case=False, na=False)].groupby('Account_Name')['Amount'].sum()
+            
+            payable_df = pd.DataFrame({'Total_Hired_Cost': broker_bill, 'Total_Paid': broker_paid}).fillna(0)
+            payable_df['Balance_To_Pay'] = payable_df['Total_Hired_Cost'] - payable_df['Total_Paid']
+            st.dataframe(payable_df[payable_df['Balance_To_Pay'] > 0], use_container_width=True)
+
+    # --- 5. VISUAL CHART ---
+    st.subheader("📊 Performance Trend")
+    if not df_t.empty:
+        fig = px.area(df_t, x='Date', y='Freight', title="Revenue over Time", line_shape="spline")
+        st.plotly_chart(fig, use_container_width=True)
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
@@ -840,6 +942,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
