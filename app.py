@@ -260,120 +260,75 @@ if menu == "0. Dashboard":
     df_t = load("trips")
     df_p = load("payments")
     
-    # --- DATA CLEANING ---
+    # --- STEP 1: COLUMN CLEANING ---
     if not df_t.empty: df_t.columns = [str(c).strip() for c in df_t.columns]
     if not df_p.empty: df_p.columns = [str(c).strip() for c in df_p.columns]
     
-    f_col = 'Total Freight' if 'Total Freight' in df_t.columns else 'Freight'
-    p_col = 'Amount' if 'Amount' in df_p.columns else 'Amount'
-    t_col = next((c for c in df_p.columns if 'Type' in c or 'Category' in c), 'Type')
+    # --- STEP 2: SMART COLUMN DETECTION ---
+    # Trips sheet mein Party column dhoondna
+    party_col_t = next((c for c in df_t.columns if 'Billing' in c or 'Party' in c), None)
+    # Trips sheet mein Freight column dhoondna
+    f_col = next((c for c in df_t.columns if 'Freight' in c or 'Amount' in c), None)
+    # Payment sheet mein Party column dhoondna
+    party_col_p = next((c for c in df_p.columns if 'Party' in c), None)
+    # Payment sheet mein Amount column dhoondna
+    p_col = next((c for c in df_p.columns if 'Amount' in c), None)
+    # Payment sheet mein Category/Type column dhoondna
+    t_col = next((c for c in df_p.columns if 'Type' in c or 'Category' in c), None)
 
-    # --- CALCULATION PER PARTY (For Unpaid List) ---
+    # --- STEP 3: CALCULATION LOGIC ---
     all_parties = gl("Party")
     unpaid_data = []
 
-    for p in all_parties:
-        bill = df_t[df_t['Billing Party'] == p][f_col].apply(pd.to_numeric, errors='coerce').sum() if not df_t.empty else 0
-        op_bal = df_p[(df_p['Party Name'] == p) & (df_p[t_col].str.contains('Opening', na=False))][p_col].sum() if not df_p.empty else 0
-        recd = df_p[(df_p['Party Name'] == p) & (~df_p[t_col].str.contains('Opening', na=False))][p_col].sum() if not df_p.empty else 0
-        
-        due = (bill + op_bal) - recd
-        if due > 0:
-            unpaid_data.append({"Party": p, "Outstanding": due})
+    if party_col_t and f_col:
+        for p in all_parties:
+            # Current Bills
+            bill = df_t[df_t[party_col_t] == p][f_col].apply(pd.to_numeric, errors='coerce').sum() if not df_t.empty else 0
+            # Opening Balance from Payment sheet
+            op_bal = df_p[(df_p[party_col_p] == p) & (df_p[t_col].str.contains('Opening', na=False))][p_col].apply(pd.to_numeric, errors='coerce').sum() if not df_p.empty and t_col else 0
+            # Real Payments
+            recd = df_p[(df_p[party_col_p] == p) & (~df_p[t_col].str.contains('Opening', na=False))][p_col].apply(pd.to_numeric, errors='coerce').sum() if not df_p.empty and t_col else 0
+            
+            due = (bill + op_bal) - recd
+            if due > 1: # ₹1 se zyada baki hai toh hi list mein dikhaye
+                unpaid_data.append({"Party": p, "Outstanding": due})
 
-    df_unpaid = pd.DataFrame(unpaid_data).sort_values(by="Outstanding", ascending=False)
+    df_unpaid = pd.DataFrame(unpaid_data)
+    if not df_unpaid.empty:
+        df_unpaid = df_unpaid.sort_values(by="Outstanding", ascending=False)
 
-    # --- TOP METRICS ---
+    # --- STEP 4: DISPLAY METRICS ---
     total_due = df_unpaid['Outstanding'].sum() if not df_unpaid.empty else 0
     st.metric("Total Market Outstanding", f"₹{total_due:,.2f}")
 
     st.divider()
 
-    # --- INTERACTIVE SECTION ---
+    # --- STEP 5: INTERACTIVE TABLE ---
     col1, col2 = st.columns([1, 1])
-
     with col1:
         st.subheader("🚩 Top Unpaid Parties")
         if not df_unpaid.empty:
-            # Table jisme click karke select kar sakein
-            selected_row = st.dataframe(df_unpaid.head(10), use_container_width=True, on_select="rerun", selection_mode="single_row")
+            # Modern table with selection
+            event = st.dataframe(df_unpaid.head(10), use_container_width=True, on_select="rerun", selection_mode="single_row")
             
-            # Agar kisi party par click kiya toh niche details khulegi
-            if len(selected_row['selection']['rows']) > 0:
-                idx = selected_row['selection']['rows'][0]
-                party_to_check = df_unpaid.iloc[idx]['Party']
-                st.session_state.search_party = party_to_check
-                st.info(f"💡 Click '4. Financials' to see full ledger for: {party_to_check}")
+            # Click details logic
+            if len(event.get('selection', {}).get('rows', [])) > 0:
+                selected_idx = event['selection']['rows'][0]
+                st.session_state.dash_party = df_unpaid.iloc[selected_idx]['Party']
         else:
-            st.write("Sabka hisab barabar hai! No unpaid parties.")
+            st.write("All clear! No pending payments.")
 
     with col2:
         st.subheader("🚛 Recent Trips")
         if not df_t.empty:
-            st.dataframe(df_t[['Date', 'LR Number', 'Billing Party', f_col]].tail(10), use_container_width=True)
+            st.dataframe(df_t[[party_col_t, f_col]].tail(10), use_container_width=True)
 
-    # --- DRILL DOWN DETAILS (Automatic niche dikhega jab click karenge) ---
-    if 'search_party' in st.session_state:
+    # --- STEP 6: DRILL DOWN DETAILS ---
+    if 'dash_party' in st.session_state:
         st.divider()
-        st.subheader(f"🔍 Quick Details: {st.session_state.search_party}")
-        p_trips = df_t[df_t['Billing Party'] == st.session_state.search_party].tail(5)
-        st.write("Last 5 Trips:")
-        st.table(p_trips[['Date', 'LR Number', 'From City', 'To City', f_col]])
-if menu == "1. Masters Setup":
-    st.header("🏗️ Master Management")
-    
-    # 1. Category Selection
-    m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver"])
-    
-    with st.form("m_form", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        
-        # Default empty values
-        name, gst, addr, cont, ac, ifsc, d_name, d_no = "", "", "", "", "", "", "", ""
-
-        if m_type == "Branch (Company)":
-            with col1:
-                name = st.text_input("Branch Name (e.g. Virat Kim)")
-                gst = st.text_input("Branch GST")
-                addr = st.text_area("Branch Address")
-            with col2:
-                ac = st.text_input("Bank A/C No")
-                ifsc = st.text_input("Bank IFSC")
-                cont = st.text_input("Branch Contact No")
-
-        elif m_type in ["Party", "Broker"]:
-            with col1:
-                name = st.text_input(f"{m_type} Name")
-                gst = st.text_input("GST Number")
-            with col2:
-                addr = st.text_area("Full Address")
-                cont = st.text_input("Contact Number")
-
-        elif m_type == "Driver":
-            with col1:
-                d_name = st.text_input("Driver Full Name")
-            with col2:
-                d_no = st.text_input("License Number / Mobile")
-
-        elif m_type == "Vehicle":
-            name = st.text_input("Vehicle Number (e.g. GJ05BX1234)")
-
-        # Save Button
-        if st.form_submit_button(f"Save {m_type}"):
-            if name or d_name:
-                # Order: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name, Driver_No
-                new_row = [m_type, name, gst, addr, cont, ac, ifsc, d_name, d_no]
-                if save("masters", new_row):
-                    st.success(f"{m_type} Saved!"); st.rerun()
-            else:
-                st.error("Please enter Name!")
-
-    st.divider()
-    # Display existing masters
-    if not df_m.empty:
-        st.write(f"### Current {m_type} List")
-        curr_m = df_m[df_m['Type'] == m_type]
-        st.dataframe(curr_m.dropna(axis=1, how='all'), use_container_width=True)
+        st.subheader(f"🔍 Quick Summary: {st.session_state.dash_party}")
+        quick_view = df_t[df_t[party_col_t] == st.session_state.dash_party].tail(5)
+        st.table(quick_view[[party_col_t, f_col]])
 elif menu == "2. LR Entry":
     st.header("📝 Professional LR Entry")
     if st.button("🆕 RESET FORM"):
@@ -912,6 +867,7 @@ elif menu == "9. Data Manager (Delete/Edit)":
                         ws_p.delete_rows(row_idx + 2)
                     st.success("Payment entry delete ho gayi hai!")
                     st.rerun()
+
 
 
 
