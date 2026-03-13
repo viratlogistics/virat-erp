@@ -257,17 +257,25 @@ def get_fy(date_str):
 if menu == "0. Dashboard":
     st.title("📊 Virat Logistics - Analytics")
     
+    # --- DATA LOADING (Error Fix) ---
     df_t = load("trips")
+    df_p = load("payments")
+    df_oe = load("office_expenses")
     
+    # Agar koi sheet khali hai toh error na aaye, isliye empty dataframe define karna zaroori hai
+    if df_p is None: df_p = pd.DataFrame()
+    if df_oe is None: df_oe = pd.DataFrame()
+
+    # Ab ye loop perfect chalega
+    for dff in [df_t, df_p, df_oe]:
+        if dff is not None and not dff.empty: 
+            dff.columns = [str(c).strip() for c in dff.columns]
+
+    # --- FINANCIAL YEAR FILTER ---
     if not df_t.empty:
-        # Ab ye line error nahi degi kyunki get_fy upar define ho chuka hai
-        df_t['FY_Check'] = df_t['Date'].apply(get_fy)
-        
-        # Financial Year Filter
+        df_t['FY_Check'] = df_t['Date'].apply(get_fy) # get_fy function upar define hona chahiye
         available_fy = sorted(df_t['FY_Check'].unique().tolist(), reverse=True)
         selected_fy = st.selectbox("📅 Select Financial Year", available_fy)
-        
-        # Data Filter karein
         df_t = df_t[df_t['FY_Check'] == selected_fy]    
     # Trim spaces from columns
     for dff in [df_t, df_p, df_oe]:
@@ -946,6 +954,7 @@ elif menu == "9. Data Manager (Delete/Edit)":
                         ws_p.delete_rows(row_idx + 2)
                     st.success("Payment entry delete ho gayi hai!")
                     st.rerun()
+
 
 
 
