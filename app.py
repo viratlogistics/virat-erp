@@ -242,20 +242,18 @@ def gl(t):
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
 
 if menu == "0. Dashboard":
-    st.title("📊 Virat Logistics - Cash & Profit Dashboard")
+    st.title("📊 Virat Logistics - Analytics")
     
-    # --- 1. DATA PREP ---
-    df_p = load("payments")
-    df_oe = load("office_expenses")
-
-    # --- FINANCIAL YEAR LOGIC (Sirf Dashboard ke liye) ---
-def get_fy(date_str):
-    try:
-        dt = pd.to_datetime(date_str)
-        # April se naya saal shuru hota hai
-        return f"{dt.year}-{str(dt.year+1)[2:]}" if dt.month >= 4 else f"{dt.year-1}-{str(dt.year)[2:]}"
-    except: return "Unknown"
-
+    # --- DATA LOADING (Error Fix) ---
+    df_t = load("trips")      # Pehle ye load hona chahiye
+    df_p = load("payments")   # Phir ye
+    df_oe = load("office_expenses") # Aur ye
+    
+    # Ab ye loop kaam karega kyunki upar teeno define ho chuke hain
+    for dff in [df_t, df_p, df_oe]:
+        if not dff.empty: 
+            dff.columns = [str(c).strip() for c in dff.columns]
+            
 # Dashboard par top filter
 available_fy = ["2025-26", "2026-27", "2027-28"]
 selected_fy = st.selectbox("📅 Financial Year Chunye", available_fy, index=1)
@@ -942,6 +940,7 @@ elif menu == "9. Data Manager (Delete/Edit)":
                         ws_p.delete_rows(row_idx + 2)
                     st.success("Payment entry delete ho gayi hai!")
                     st.rerun()
+
 
 
 
