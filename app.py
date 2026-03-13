@@ -224,7 +224,7 @@ with st.sidebar:
 def gl(t): 
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
 
-if menu == "0. Dashboard":if menu == "0. Dashboard":
+if menu == "0. Dashboard":
     st.title("📊 Virat Logistics - Financial Control Center")
     
     # --- 1. DATA LOADING ---
@@ -942,6 +942,7 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
 
 
 
