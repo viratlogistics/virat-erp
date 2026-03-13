@@ -255,130 +255,70 @@ def get_fy(date_str):
 
 # --- 2. Ab Dashboard ka logic shuru karein ---
 if menu == "0. Dashboard":
-    st.title("📊 Virat Logistics - Analytics")
+    st.title("📊 Virat Logistics - Business Overview")
     
-    # --- DATA LOADING (Error Fix) ---
     df_t = load("trips")
     df_p = load("payments")
-    df_oe = load("office_expenses")
     
-    # Agar koi sheet khali hai toh error na aaye, isliye empty dataframe define karna zaroori hai
-    if df_p is None: df_p = pd.DataFrame()
-    if df_oe is None: df_oe = pd.DataFrame()
-
-    # Ab ye loop perfect chalega
-    for dff in [df_t, df_p, df_oe]:
-        if dff is not None and not dff.empty: 
-            dff.columns = [str(c).strip() for c in dff.columns]
-
-    # --- FINANCIAL YEAR FILTER ---
-    if not df_t.empty:
-        df_t['FY_Check'] = df_t['Date'].apply(get_fy) # get_fy function upar define hona chahiye
-        available_fy = sorted(df_t['FY_Check'].unique().tolist(), reverse=True)
-        selected_fy = st.selectbox("📅 Select Financial Year", available_fy)
-        df_t = df_t[df_t['FY_Check'] == selected_fy]    
-    # Trim spaces from columns
-    for dff in [df_t, df_p, df_oe]:
-        if not dff.empty: dff.columns = [str(c).strip() for c in dff.columns]
-
-    # --- 2. CASH FLOW CALCULATION (Actual Paisa) ---
-    cash_in = 0
-    payments_out = 0
+    # --- DATA CLEANING ---
+    if not df_t.empty: df_t.columns = [str(c).strip() for c in df_t.columns]
+    if not df_p.empty: df_p.columns = [str(c).strip() for c in df_p.columns]
     
-    if not df_p.empty:
-        # Amount aur Type column dhoondna
-        amt_col_p = next((c for c in df_p.columns if 'amount' in c.lower()), None)
-        type_col_p = next((c for c in df_p.columns if 'type' in c.lower()), None)
+    f_col = 'Total Freight' if 'Total Freight' in df_t.columns else 'Freight'
+    p_col = 'Amount' if 'Amount' in df_p.columns else 'Amount'
+    t_col = next((c for c in df_p.columns if 'Type' in c or 'Category' in c), 'Type')
+
+    # --- CALCULATION PER PARTY (For Unpaid List) ---
+    all_parties = gl("Party")
+    unpaid_data = []
+
+    for p in all_parties:
+        bill = df_t[df_t['Billing Party'] == p][f_col].apply(pd.to_numeric, errors='coerce').sum() if not df_t.empty else 0
+        op_bal = df_p[(df_p['Party Name'] == p) & (df_p[t_col].str.contains('Opening', na=False))][p_col].sum() if not df_p.empty else 0
+        recd = df_p[(df_p['Party Name'] == p) & (~df_p[t_col].str.contains('Opening', na=False))][p_col].sum() if not df_p.empty else 0
         
-        if amt_col_p and type_col_p:
-            df_p[amt_col_p] = pd.to_numeric(df_p[amt_col_p], errors='coerce').fillna(0)
-            # Receipt = Paisa Aaya | Payment = Paisa Gaya
-            cash_in = df_p[df_p[type_col_p].str.contains('Receipt|In', case=False, na=False)][amt_col_p].sum()
-            payments_out = df_p[df_p[type_col_p].str.contains('Payment|Out', case=False, na=False)][amt_col_p].sum()
+        due = (bill + op_bal) - recd
+        if due > 0:
+            unpaid_data.append({"Party": p, "Outstanding": due})
 
-    # Own Fleet ka Cash Out (Diesel, Toll, Adv from Trips)
-    own_cash_out = 0
-    if not df_t.empty:
-        # Own Fleet filter karna
-        type_col_t = next((c for c in df_t.columns if 'type' in c.lower()), None)
-        if type_col_t:
-            df_own = df_t[df_t[type_col_t].str.contains('Own', case=False, na=False)]
-            # Cash columns ka total
-            c_cols = [c for c in df_t.columns if any(x in c.lower() for x in ['diesel', 'toll', 'adv', 'driverexp'])]
-            for c in c_cols: df_own[c] = pd.to_numeric(df_own[c], errors='coerce').fillna(0)
-            own_cash_out = df_own[c_cols].sum().sum()
+    df_unpaid = pd.DataFrame(unpaid_data).sort_values(by="Outstanding", ascending=False)
 
-    # Office Expense
-    office_cash_out = 0
-    if not df_oe.empty:
-        amt_col_oe = next((c for c in df_oe.columns if 'amount' in c.lower()), 'Amount')
-        df_oe[amt_col_oe] = pd.to_numeric(df_oe[amt_col_oe], errors='coerce').fillna(0)
-        office_cash_out = df_oe[amt_col_oe].sum()
-
-    total_actual_cash_out = payments_out + own_cash_out + office_cash_out
-    cash_hand_balance = cash_in - total_actual_cash_out
-
-    # --- 3. PROFIT CALCULATION (Business Performance) ---
-    rev_col = next((c for c in df_t.columns if any(x in c.lower() for x in ['freight', 'revenue'])), None)
-    total_rev = pd.to_numeric(df_t[rev_col], errors='coerce').sum() if rev_col else 0
-    
-    # Sare trip kharche (Hired Charges bhi shamil)
-    trip_exp_cols = [c for c in df_t.columns if any(x in c.lower() for x in ['hired', 'diesel', 'toll', 'adv', 'driverexp', 'other'])]
-    for c in trip_exp_cols: df_t[c] = pd.to_numeric(df_t[c], errors='coerce').fillna(0)
-    total_trip_cost = df_t[trip_exp_cols].sum().sum()
-    
-    net_profit = total_rev - (total_trip_cost + office_cash_out)
-
-    # --- 4. DISPLAY METRICS (Cards) ---
-    st.subheader("📌 Financial Summary")
-    r1, r2, r3, r4 = st.columns(4)
-    r1.metric("Cash In (Receipts)", f"₹{cash_in:,.0f}")
-    r2.metric("Cash Out (Actual)", f"₹{total_actual_cash_out:,.0f}", delta_color="inverse")
-    r3.metric("Bank/Hand Balance", f"₹{cash_hand_balance:,.0f}", delta="In-Hand")
-    r4.metric("Net Business Profit", f"₹{net_profit:,.0f}")
+    # --- TOP METRICS ---
+    total_due = df_unpaid['Outstanding'].sum() if not df_unpaid.empty else 0
+    st.metric("Total Market Outstanding", f"₹{total_due:,.2f}")
 
     st.divider()
 
-    # --- 5. CHARTS ---
-    c1, c2 = st.columns(2)
-    
-    with c1:
-        st.subheader("💰 Actual Cash Flow (Paisa)")
-        # Cash Flow Bar Chart
-        cash_df = pd.DataFrame({'Category': ['Cash In', 'Cash Out'], 'Amount': [cash_in, total_actual_cash_out]})
-        fig_cash = px.bar(cash_df, x='Category', y='Amount', color='Category', 
-                          color_discrete_map={'Cash In': '#2ecc71', 'Cash Out': '#e74c3c'}, text_auto='.3s')
-        st.plotly_chart(fig_cash, use_container_width=True)
+    # --- INTERACTIVE SECTION ---
+    col1, col2 = st.columns([1, 1])
 
-    with c2:
-        st.subheader("🚛 Vehicle Profit (Own Fleet)")
-        v_col = next((c for c in df_t.columns if 'vehicle' in c.lower()), None)
-        if v_col and not df_t.empty:
-            df_v = df_t[df_t[type_col_t].str.contains('Own', case=False, na=False)].copy()
-            if not df_v.empty:
-                v_perf = df_v.groupby(v_col)[rev_col].sum().reset_index()
-                v_perf.columns = ['Vehicle', 'Revenue']
-                fig_v = px.bar(v_perf, x='Vehicle', y='Revenue', color='Revenue', color_continuous_scale='Blues')
-                st.plotly_chart(fig_v, use_container_width=True)
+    with col1:
+        st.subheader("🚩 Top Unpaid Parties")
+        if not df_unpaid.empty:
+            # Table jisme click karke select kar sakein
+            selected_row = st.dataframe(df_unpaid.head(10), use_container_width=True, on_select="rerun", selection_mode="single_row")
+            
+            # Agar kisi party par click kiya toh niche details khulegi
+            if len(selected_row['selection']['rows']) > 0:
+                idx = selected_row['selection']['rows'][0]
+                party_to_check = df_unpaid.iloc[idx]['Party']
+                st.session_state.search_party = party_to_check
+                st.info(f"💡 Click '4. Financials' to see full ledger for: {party_to_check}")
+        else:
+            st.write("Sabka hisab barabar hai! No unpaid parties.")
 
-    # --- 6. UNPAID BILLS (RECEIVABLES) ---
-    st.divider()
-    st.subheader("⏳ Top Unpaid Parties (Receivables)")
-    party_col = next((c for c in df_t.columns if 'party' in c.lower()), None)
-    if party_col:
-        p_rev = df_t.groupby(party_col)[rev_col].sum()
-        p_acc_col = next((c for c in df_p.columns if any(x in c.lower() for x in ['account', 'name', 'party'])), None)
-        p_rec = df_p[df_p[type_col_p].str.contains('Receipt', case=False, na=False)].groupby(p_acc_col)[amt_col_p].sum() if p_acc_col else pd.Series()
-        
-        pending = pd.DataFrame({'Billed': p_rev, 'Received': p_rec}).fillna(0)
-        pending['Due'] = pending['Billed'] - pending['Received']
-        top_pending = pending[pending['Due'] > 100].sort_values('Due', ascending=False).head(10).reset_index()
-        top_pending.columns = ['Party', 'Billed', 'Received', 'Due']
-        
-        if not top_pending.empty:
-            fig_due = px.bar(top_pending, x='Due', y='Party', orientation='h', color='Due', color_continuous_scale='Reds')
-            st.plotly_chart(fig_due, use_container_width=True)
-            st.dataframe(pending[pending['Due'] > 1].style.format("₹{:,.0f}"), use_container_width=True)
+    with col2:
+        st.subheader("🚛 Recent Trips")
+        if not df_t.empty:
+            st.dataframe(df_t[['Date', 'LR Number', 'Billing Party', f_col]].tail(10), use_container_width=True)
+
+    # --- DRILL DOWN DETAILS (Automatic niche dikhega jab click karenge) ---
+    if 'search_party' in st.session_state:
+        st.divider()
+        st.subheader(f"🔍 Quick Details: {st.session_state.search_party}")
+        p_trips = df_t[df_t['Billing Party'] == st.session_state.search_party].tail(5)
+        st.write("Last 5 Trips:")
+        st.table(p_trips[['Date', 'LR Number', 'From City', 'To City', f_col]])
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
@@ -972,6 +912,7 @@ elif menu == "9. Data Manager (Delete/Edit)":
                         ws_p.delete_rows(row_idx + 2)
                     st.success("Payment entry delete ho gayi hai!")
                     st.rerun()
+
 
 
 
