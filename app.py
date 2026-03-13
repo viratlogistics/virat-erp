@@ -470,7 +470,14 @@ elif menu == "2. LR Entry":
         ins_by = st.selectbox("Insurance Paid By*", ["N/A", "Consignor", "Consignee", "Transporter"], key=f"ins_{k}")
 
     with cp3:
-        cnee_name = st.text_input("Consignee Name*", key=f"cnee_{k}")
+        # --- UPDATE: CONSIGNEE DROPDOWN LOGIC ---
+        is_nee = st.checkbox("New Consignee?", key=f"isnee_{k}")
+        if is_nee:
+            cnee_name = st.text_input("Consignee Name*", key=f"cnee_{k}")
+        else:
+            # Consignee ki list Masters se uthayega
+            cnee_name = st.selectbox("Consignee Name*", ["Select"] + gl("Consignee"), key=f"cnee_sel_{k}")
+            
         cnee_gst = st.text_input("Consignee GST", key=f"cngst_{k}")
         paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pby_{k}")
         sel_bank = st.selectbox("Select Bank*", ["Select"] + gl("Bank"), key=f"bank_{k}")
@@ -487,9 +494,12 @@ elif menu == "2. LR Entry":
                 d_list = gl("Driver")
                 sel_driver = st.selectbox("Driver Name*", ["Select"] + d_list)
                 br_name = "OWN"
+                # UPDATE: APNI GADI KISI BROKER SE BHARI HAI TO NAAM DALNE KA OPTION
+                loading_broker = st.text_input("Loading Broker (If Own Fleet hired via Broker)", key=f"lb_{k}")
             else:
                 sel_driver = "Market Driver"
                 br_name = st.selectbox("Broker*", ["Select"] + gl("Broker"))
+                loading_broker = "" # Market hired mein zarurat nahi, par variable define hona chahiye
                 
             ship_to = st.text_area("Ship To Address")
 
@@ -508,28 +518,26 @@ elif menu == "2. LR Entry":
             else: 
                 hc = st.number_input("Hired Charges")
                 dsl = toll = drv = 0.0
-                # LR Entry Form ke andar kahin bhi (preferable near Party selection)
-                loading_broker = st.text_input("Loading Broker Name (Agar gaadi kisi broker se bhari hai)", help="Apni gaadi jab broker se bharenge tab kaam aayega")
 
-# Aur jab save(trips, [...]) wala function call ho, toh is loading_broker variable ko bhi list mein jodd dein
-
-        # --- YE FORM KA END HAI ---
         if st.form_submit_button("🚀 SAVE LR"):
             if bill_pty and bill_pty != "Select" and fr_amt > 0:
-                # 1. Branch Master se sara data fetch karna
                 br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
                 
                 prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
-                row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, sel_driver, br_name, fl, tl, fr_amt, (hc if v_cat == "Market Hired" else 0.0), dsl, drv, toll, 0, prof]
+                
+                # UPDATE: row list mein 'loading_broker' ko party ke baad ya kahin bhi fit kiya (Yahan maine 5th position par rakha hai)
+                row = [str(d), lr_no, v_cat, bill_pty, loading_broker, cnor_name, cnee_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, sel_driver, br_name, fl, tl, fr_amt, (hc if v_cat == "Market Hired" else 0.0), dsl, drv, toll, 0, prof]
                 
                 if save("trips", row):
-                    # 2. AGAR NEW PARTY/CONSIGNOR HAI TO MASTER MEIN SAVE KARO
+                    # NEW CONSIGNEE SAVE LOGIC
+                    if is_nee and cnee_name and cnee_name not in gl("Consignee"):
+                        save("masters", ["Consignee", cnee_name])
+                    
                     if is_np and bill_pty not in gl("Party"):
                         save("masters", ["Party", bill_pty])
                     if is_nc and cnor_name not in gl("Consignor"):
                         save("masters", ["Consignor", cnor_name])
 
-                    # 3. PDF ke liye Branch/Company ka sara data bundle karna
                     st.session_state.pdf_ready = {
                         "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
                         "Cnor": cnor_name, "CnorGST": cnor_gst, 
@@ -549,7 +557,7 @@ elif menu == "2. LR Entry":
                     st.rerun()
             else:
                 st.error("Please fill Party Name and Freight!")
-    # --- YE LINE FORM KE BAHAR (LEFT MARGIN SE MATCH KAREIN) ---
+
     if st.session_state.pdf_ready:
         st.divider()
         st.download_button("📥 DOWNLOAD LR PDF", generate_lr_pdf(st.session_state.pdf_ready, st.session_state.pdf_ready.get('show_fr', True)), f"LR_{st.session_state.pdf_ready['LR No']}.pdf")    
@@ -954,6 +962,7 @@ elif menu == "9. Data Manager (Delete/Edit)":
                         ws_p.delete_rows(row_idx + 2)
                     st.success("Payment entry delete ho gayi hai!")
                     st.rerun()
+
 
 
 
