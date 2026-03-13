@@ -677,28 +677,53 @@ elif menu == "4. Financials":
                         st.success(f"Entry Successful: {p_party} | {p_type} | ₹{p_amount}")
                         st.rerun()
 
+    # --- SECTION: PARTY LEDGER REPORT (RE-FIXED) ---
     st.divider()
-
-    # --- SECTION: PARTY LEDGER REPORT ---
     st.subheader("📑 Party Wise Detailed Ledger")
-    search_party = st.selectbox("Search Ledger", ["Select Party"] + gl("Party"))
+    search_party = st.selectbox("Search Ledger", ["Select Party"] + gl("Party"), key="ledger_search")
 
     if search_party != "Select Party":
-        p_trips = df_t[df_t['Billing Party'] == search_party].copy() if not df_t.empty else pd.DataFrame()
-        p_pays = df_p[df_p['Party Name'] == search_party].copy() if not df_p.empty else pd.DataFrame()
+        # 1. Trips filter logic
+        if not df_t.empty:
+            # Billing Party column dhoondna (kabhi-kabhi 'Party' hota hai)
+            party_col_t = 'Billing Party' if 'Billing Party' in df_t.columns else ('Party' if 'Party' in df_t.columns else df_t.columns[3])
+            p_trips = df_t[df_t[party_col_t] == search_party].copy()
+        else:
+            p_trips = pd.DataFrame()
 
+        # 2. Payments filter logic
+        if not df_p.empty:
+            # Party Name column dhoondna
+            party_col_p = 'Party Name' if 'Party Name' in df_p.columns else ('Party' if 'Party' in df_p.columns else df_p.columns[1])
+            p_pays = df_p[df_p[party_col_p] == search_party].copy()
+        else:
+            p_pays = pd.DataFrame()
+
+        # 3. Calculation
         p_bill = p_trips[f_col].sum() if f_col and not p_trips.empty else 0
         p_rec = p_pays[p_col].sum() if p_col and not p_pays.empty else 0
         p_out = p_bill - p_rec
 
+        # --- Dashboard Metrics for Party ---
         sc1, sc2, sc3 = st.columns(3)
-        sc1.info(f"Total Freight: ₹{p_bill:,.2f}")
-        sc2.success(f"Total Received: ₹{p_rec:,.2f}")
-        sc3.warning(f"Closing Balance: ₹{p_out:,.2f}")
+        sc1.info(f"Total Freight\n\n₹{p_bill:,.2f}")
+        sc2.success(f"Total Received\n\n₹{p_rec:,.2f}")
+        sc3.warning(f"Closing Balance\n\n₹{p_out:,.2f}")
 
-        t1, t2 = st.tabs(["🚛 Trips", "💳 Payments"])
-        with t1: st.dataframe(p_trips, use_container_width=True)
-        with t2: st.dataframe(p_pays, use_container_width=True)
+        # --- Tabs for Details ---
+        t1, t2 = st.tabs(["🚛 Trips Details", "💳 Payment & Opening Details"])
+        
+        with t1:
+            if not p_trips.empty:
+                st.dataframe(p_trips, use_container_width=True)
+            else:
+                st.write("Is party ki koi Trip entry nahi mili.")
+                
+        with t2:
+            if not p_pays.empty:
+                st.dataframe(p_pays, use_container_width=True)
+            else:
+                st.write("Is party ki koi Payment ya Opening Balance nahi mila.")
 elif menu == "5. Business Insights":
     st.header("📊 Business Dashboard & Own Fleet Analytics")
     df_t = load("trips")
@@ -965,6 +990,7 @@ elif menu == "9. Data Manager (Delete/Edit)":
                         ws_p.delete_rows(row_idx + 2)
                     st.success("Payment entry delete ho gayi hai!")
                     st.rerun()
+
 
 
 
