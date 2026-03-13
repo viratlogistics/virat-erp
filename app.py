@@ -247,6 +247,23 @@ if menu == "0. Dashboard":
     # --- 1. DATA PREP ---
     df_p = load("payments")
     df_oe = load("office_expenses")
+
+    # --- FINANCIAL YEAR LOGIC (Sirf Dashboard ke liye) ---
+def get_fy(date_str):
+    try:
+        dt = pd.to_datetime(date_str)
+        # April se naya saal shuru hota hai
+        return f"{dt.year}-{str(dt.year+1)[2:]}" if dt.month >= 4 else f"{dt.year-1}-{str(dt.year)[2:]}"
+    except: return "Unknown"
+
+# Dashboard par top filter
+available_fy = ["2025-26", "2026-27", "2027-28"]
+selected_fy = st.selectbox("📅 Financial Year Chunye", available_fy, index=1)
+
+# Pure data ko filter karna
+if not df_t.empty:
+    df_t['FY_Check'] = df_t['Date'].apply(get_fy)
+    df_t = df_t[df_t['FY_Check'] == selected_fy]
     
     # Trim spaces from columns
     for dff in [df_t, df_p, df_oe]:
@@ -479,6 +496,10 @@ elif menu == "2. LR Entry":
             else: 
                 hc = st.number_input("Hired Charges")
                 dsl = toll = drv = 0.0
+                # LR Entry Form ke andar kahin bhi (preferable near Party selection)
+                loading_broker = st.text_input("Loading Broker Name (Agar gaadi kisi broker se bhari hai)", help="Apni gaadi jab broker se bharenge tab kaam aayega")
+
+# Aur jab save(trips, [...]) wala function call ho, toh is loading_broker variable ko bhi list mein jodd dein
 
         # --- YE FORM KA END HAI ---
         if st.form_submit_button("🚀 SAVE LR"):
@@ -921,6 +942,7 @@ elif menu == "9. Data Manager (Delete/Edit)":
                         ws_p.delete_rows(row_idx + 2)
                     st.success("Payment entry delete ho gayi hai!")
                     st.rerun()
+
 
 
 
