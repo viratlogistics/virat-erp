@@ -476,7 +476,7 @@ elif menu == "2. LR Entry":
             cnee_name = st.text_input("Consignee Name*", key=f"cnee_{k}")
         else:
             # Consignee ki list Masters se uthayega
-            cnee_name = st.selectbox("Consignee Name*", ["Select"] + gl("Consignee"), key=f"cnee_sel_{k}")
+            cnee_name = st.selectbox("Consignee Name*", ["Select"] + gl("Party"), key=f"cnee_sel_{k}")
             
         cnee_gst = st.text_input("Consignee GST", key=f"cngst_{k}")
         paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pby_{k}")
@@ -962,6 +962,7 @@ elif menu == "9. Data Manager (Delete/Edit)":
                         ws_p.delete_rows(row_idx + 2)
                     st.success("Payment entry delete ho gayi hai!")
                     st.rerun()
+
 
 
 
