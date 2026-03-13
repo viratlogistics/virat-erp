@@ -617,8 +617,31 @@ elif menu == "3. LR Register":
         
 elif menu == "4. Financials":
     st.header("⚖️ Financial Management & Ledger")
-    df_p = load("payments")
-    df_t = load("trips")
+    # --- PAYMENT REPORT LOGIC (Corrected) ---
+
+df_p = load("payments") # Aapki payments wali sheet load karein
+
+if not df_p.empty:
+    # 1. Column names ko clean karein (Extra space hatane ke liye)
+    df_p.columns = [str(c).strip() for c in df_p.columns]
+    
+    # 2. FILTER: Hum 'Payment' AUR 'Opening Balance' dono ko dikhayenge
+    # Is line ko dhyaan se dekhiye, yahan 'isin' ka use kiya hai
+    report_df = df_p[df_p['Type/Category'].isin(['Payment', 'Opening Balance', 'Receipt'])]
+    
+    # 3. Agar kisi specific Party ka report dekhna hai
+    selected_party = st.selectbox("Select Party for Report", ["All"] + gl("Party"))
+    
+    if selected_party != "All":
+        report_df = report_df[report_df['Party Name'] == selected_party]
+
+    # 4. Report Table dikhana
+    st.subheader(f"📊 Payment & Opening Balance Report: {selected_party}")
+    st.dataframe(report_df, use_container_width=True)
+    
+    # 5. Total Calculation
+    total_received = report_df['Amount'].sum()
+    st.metric("Total Amount Received (including Opening Bal)", f"₹{total_received:,.2f}")
     
     # Cleaning
     if not df_t.empty: df_t.columns = [str(c).strip() for c in df_t.columns]
@@ -962,6 +985,7 @@ elif menu == "9. Data Manager (Delete/Edit)":
                         ws_p.delete_rows(row_idx + 2)
                     st.success("Payment entry delete ho gayi hai!")
                     st.rerun()
+
 
 
 
