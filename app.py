@@ -649,44 +649,88 @@ elif menu == "4. Financials":
         sel_a = st.selectbox("Select Account for Statement", ["Select"] + all_accs)
         if sel_a != "Select":
             ledger_entries = []
+            
+            # --- 1. TRIP DATA SE ENTRIES (DEBIT & CREDIT DONO CHECK KAREIN) ---
             if not df_t.empty:
+                # Agar woh hamari PARTY hai (Humein freight DENA hai - Debit)
                 p_trips = df_t[df_t['Party'] == sel_a]
                 for _, r in p_trips.iterrows():
-                    ledger_entries.append({'Date': r.get('Date', date.today()), 'Particulars': f"LR: {r.get('LR No','--')} ({r.get('From','')} to {r.get('To','')})", 'Debit': pd.to_numeric(r.get('Freight', 0), errors='coerce'), 'Credit': 0})
+                    ledger_entries.append({
+                        'Date': r.get('Date', date.today()), 
+                        'Particulars': f"LR: {r.get('LR No','--')} (Freight Bill)", 
+                        'Debit': pd.to_numeric(r.get('Freight', 0), errors='coerce'), 
+                        'Credit': 0
+                    })
                 
+                # Agar woh hamara BROKER hai (Humein usko hired charges DENA hai - Credit)
                 b_trips = df_t[df_t['Broker'] == sel_a]
                 for _, r in b_trips.iterrows():
-                    ledger_entries.append({'Date': r.get('Date', date.today()), 'Particulars': f"LR: {r.get('LR No','--')} (Market Hired Charges)", 'Debit': 0, 'Credit': pd.to_numeric(r.get('HiredCharges', 0), errors='coerce')})
+                    ledger_entries.append({
+                        'Date': r.get('Date', date.today()), 
+                        'Particulars': f"LR: {r.get('LR No','--')} (Hired Charges)", 
+                        'Debit': 0, 
+                        'Credit': pd.to_numeric(r.get('HiredCharges', 0), errors='coerce')
+                    })
 
+            # --- 2. PAYMENT DATA SE ENTRIES (RECEIPT & PAYMENT) ---
             if not df_p.empty:
-                p_entries = df_p[df_p['Account_Name'] == sel_a]
+                # Column name check (Account_Name ya Account)
+                acc_col = next((c for c in df_p.columns if any(x in c.lower() for x in ['account', 'name'])), 'Account_Name')
+                p_entries = df_p[df_p[acc_col] == sel_a]
+                
                 for _, r in p_entries.iterrows():
                     amt = pd.to_numeric(r.get('Amount', 0), errors='coerce')
+                    p_type = str(r.get('Type','')).lower()
                     mode = r.get('Mode', 'N/A')
                     ref = r.get('Ref_No', r.get('Ref No', 'N/A'))
-                    if "Receipt" in str(r.get('Type','')):
-                        ledger_entries.append({'Date': r.get('Date', date.today()), 'Particulars': f"Payment Recd ({mode}) Ref:{ref}", 'Debit': 0, 'Credit': amt})
+                    
+                    if "receipt" in p_type or "in" in p_type:
+                        # Paisa Aaya (Hamari taraf se credit/kam hua receivable)
+                        ledger_entries.append({
+                            'Date': r.get('Date', date.today()), 
+                            'Particulars': f"Cash/Bank Recd ({mode}) Ref:{ref}", 
+                            'Debit': 0, 
+                            'Credit': amt
+                        })
                     else:
-                        ledger_entries.append({'Date': r.get('Date', date.today()), 'Particulars': f"Payment Paid ({mode}) Ref:{ref}", 'Debit': amt, 'Credit': 0})
+                        # Humne Paisa Diya (Payment Out)
+                        ledger_entries.append({
+                            'Date': r.get('Date', date.today()), 
+                            'Particulars': f"Cash/Bank Paid ({mode}) Ref:{ref}", 
+                            'Debit': amt, 
+                            'Credit': 0
+                        })
 
+            # --- 3. FINAL DISPLAY ---
             if ledger_entries:
                 full_df = pd.DataFrame(ledger_entries)
                 full_df['Date'] = pd.to_datetime(full_df['Date']).dt.date
                 full_df = full_df.sort_values(by=['Date'])
+                
+                # Running Balance Calculation
                 full_df['Balance'] = (full_df['Debit'] - full_df['Credit']).cumsum()
                 
                 st.divider()
                 m1, m2, m3 = st.columns(3)
                 dr_total = full_df['Debit'].sum()
                 cr_total = full_df['Credit'].sum()
-                bal = dr_total - cr_total
+                net_bal = dr_total - cr_total
                 
-                m1.metric("Total Billed (DR)", f"₹{dr_total:,.0f}")
-                m2.metric("Total Paid (CR)", f"₹{cr_total:,.0f}")
-                status_text = "Receivable" if bal > 0 else "Payable"
-                m3.metric(f"Net {status_text}", f"₹{abs(bal):,.0f}")
-                st.write(f"#### Ledger History: {sel_a}")
+                m1.metric("Total DR (Freight/Paid)", f"₹{dr_total:,.0f}")
+                m2.metric("Total CR (Hired/Recd)", f"₹{cr_total:,.0f}")
+                
+                # Logic: Agar balance (+) hai toh Receivable, (-) hai toh Payable
+                if net_bal > 0:
+                    m3.metric("Net Receivable (Lena hai)", f"₹{abs(net_bal):,.0f}", delta="Paisa Lena hai")
+                elif net_bal < 0:
+                    m3.metric("Net Payable (Dena hai)", f"₹{abs(net_bal):,.0f}", delta="- Paisa Dena hai", delta_color="inverse")
+                else:
+                    m3.metric("Net Balance", "₹0", delta="Settled")
+                
+                st.write(f"#### 📖 Combined Ledger Statement: {sel_a}")
                 st.dataframe(full_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("Is account ke liye koi transaction nahi mila.")
 
 elif menu == "5. Business Insights":
     st.header(f"⚖️ Financial Insights & Fleet Ledgers")
