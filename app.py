@@ -221,7 +221,6 @@ with st.sidebar:
         "8. Monthly Bill"
     ], index=0) # Default selection Dashboard rahega
 
-# --- Yeh function dhoond kar replace karein ---
 def gl(t): 
     if df_m.empty: return []
     
@@ -232,9 +231,6 @@ def gl(t):
     
     # Baaki sab (Vehicle, Driver, Bank) ke liye normal logic
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist())
-if menu == "0. Dashboard":
-    ...    return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
-
 if menu == "0. Dashboard":
     st.title("📊 Virat Logistics - Financial Dashboard")
 
