@@ -7,5 +7,5 @@ reportlab
 openpyxl
 plotly
 streamlit-option-menu
-
+matplotlib
 
