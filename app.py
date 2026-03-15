@@ -955,10 +955,15 @@ elif menu == "6. Expense Manager":
         if not df_oe.empty:
             ind_df = df_oe[df_oe['Category'] == "Indrajit Personal"]
             if not ind_df.empty:
-                total_i = pd.to_numeric(ind_df['Amount'], errors='coerce').sum()
+                # Amount column dhoondna
+                amt_col = next((c for c in ind_df.columns if 'amount' in c.lower()), 'Amount')
+                total_i = pd.to_numeric(ind_df[amt_col], errors='coerce').sum()
                 st.metric("Total Withdrawals (Indrajit)", f"₹{total_i:,.0f}")
+                
                 st.divider()
-                st.dataframe(ind_df[[next(c for c in ind_df.columns if 'date' in c.lower()), 'Description', 'Amount', 'Payment Mode']], use_container_width=True, hide_index=True)
+                # Sirf wahi columns dikhana jo sheet mein available hain
+                st.write("#### Detailed Transaction History")
+                st.dataframe(ind_df, use_container_width=True, hide_index=True)
             else:
                 st.info("Indrajit ka koi personal record nahi mila.")
 
@@ -967,10 +972,15 @@ elif menu == "6. Expense Manager":
         if not df_oe.empty:
             vis_df = df_oe[df_oe['Category'] == "Vishal Personal"]
             if not vis_df.empty:
-                total_v = pd.to_numeric(vis_df['Amount'], errors='coerce').sum()
+                # Amount column dhoondna
+                amt_col = next((c for c in vis_df.columns if 'amount' in c.lower()), 'Amount')
+                total_v = pd.to_numeric(vis_df[amt_col], errors='coerce').sum()
                 st.metric("Total Withdrawals (Vishal)", f"₹{total_v:,.0f}")
+                
                 st.divider()
-                st.dataframe(vis_df[[next(c for c in vis_df.columns if 'date' in c.lower()), 'Description', 'Amount', 'Payment Mode']], use_container_width=True, hide_index=True)
+                # Pura dataframe dikhana safe hai
+                st.write("#### Detailed Transaction History")
+                st.dataframe(vis_df, use_container_width=True, hide_index=True)
             else:
                 st.info("Vishal ka koi personal record nahi mila.")
 elif menu == "7. Driver Khata":
