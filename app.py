@@ -744,12 +744,14 @@ elif menu == "5. Business Insights":
 
     with t2:
         st.subheader("Own Fleet: Trip-wise Performance")
+        # Variable ko block se pehle khali define karein (NameError se bachne ke liye)
+        v_summary = pd.DataFrame() 
+        
         type_c_t = next((c for c in df_tf.columns if 'type' in c.lower()), 'Type')
         df_own = df_tf[df_tf[type_c_t].str.contains('Own', case=False, na=False)].copy() if not df_tf.empty else pd.DataFrame()
         
         if not df_own.empty:
             v_col = next((c for c in df_own.columns if 'vehicle' in c.lower()), 'Vehicle')
-            # Columns clean up
             cols_to_num = ['Freight', 'Diesel', 'Toll', 'DriverExp', 'Other']
             for c in cols_to_num:
                 if c in df_own.columns: df_own[c] = pd.to_numeric(df_own[c], errors='coerce').fillna(0)
@@ -757,50 +759,49 @@ elif menu == "5. Business Insights":
             df_own['Trip_Cost'] = df_own['Diesel'] + df_own['Toll'] + df_own['DriverExp'] + df_own['Other']
             df_own['Net_Profit'] = df_own['Freight'] - df_own['Trip_Cost']
             
-            # --- Own Fleet Summary Cleaned ---
-            st.write("#### 📊 Vehicle-wise Profit Summary")
+            v_summary = df_own.groupby(v_col).agg({
+                'Freight': 'sum', 'Diesel': 'sum', 'Toll': 'sum', 
+                'DriverExp': 'sum', 'Trip_Cost': 'sum', 'Net_Profit': 'sum'
+            }).reset_index()
             
-            # Step 1: Data ko clean karein (NaN values hataein)
+            st.write("#### 📊 Vehicle-wise Profit Summary")
             v_summary_clean = v_summary.fillna(0)
             
-            # Step 2: Styling apply karein (Safe way)
-            try:
-                st.dataframe(
-                    v_summary_clean.style.format({
-                        'Freight': '₹{:,.0f}', 
-                        'Diesel': '₹{:,.0f}', 
-                        'Toll': '₹{:,.0f}', 
-                        'DriverExp': '₹{:,.0f}', 
-                        'Trip_Cost': '₹{:,.0f}', 
-                        'Net_Profit': '₹{:,.0f}'
-                    }).background_gradient(subset=['Net_Profit'], cmap='Greens'), 
-                    use_container_width=True
-                )
-            except:
-                # Agar phir bhi koi error aaye toh bina styling ke dikhayein
-                st.dataframe(v_summary_clean, use_container_width=True)
+            # Styling apply karein (Safe way)
+            st.dataframe(
+                v_summary_clean.style.format({
+                    'Freight': '₹{:,.0f}', 'Diesel': '₹{:,.0f}', 'Toll': '₹{:,.0f}', 
+                    'DriverExp': '₹{:,.0f}', 'Trip_Cost': '₹{:,.0f}', 'Net_Profit': '₹{:,.0f}'
+                }).background_gradient(subset=['Net_Profit'], cmap='Greens'), 
+                use_container_width=True
+            )
+        else:
+            st.info("Own fleet ka koi data available nahi hai.")
+
     with t3:
         st.subheader("Market Hiring & Broker Ledger")
+        # Variable ko block se pehle khali define karein
+        b_summary = pd.DataFrame()
+
         df_mkt = df_tf[df_tf[type_c_t].str.contains('Market|Hired', case=False, na=False)].copy() if not df_tf.empty else pd.DataFrame()
         
         if not df_mkt.empty:
             b_col = next((c for c in df_mkt.columns if 'broker' in c.lower()), 'Broker')
-            df_mkt['HiredCharges'] = pd.to_numeric(df_mkt['HiredCharges'], errors='coerce').fillna(0)
-            df_mkt['Freight'] = pd.to_numeric(df_mkt['Freight'], errors='coerce').fillna(0)
+            # Numeric conversion
+            for c in ['HiredCharges', 'Freight']:
+                df_mkt[c] = pd.to_numeric(df_mkt[c], errors='coerce').fillna(0)
+            
             df_mkt['Commission'] = df_mkt['Freight'] - df_mkt['HiredCharges']
             
-            # --- Broker Summary Cleaned ---
+            b_summary = df_mkt.groupby(b_col).agg({
+                'LR No': 'count', 'Freight': 'sum', 'HiredCharges': 'sum', 'Commission': 'sum'
+            }).rename(columns={'LR No': 'Trips'}).reset_index()
+            
             st.write("#### 📊 Broker Wise Summary")
             b_summary_clean = b_summary.fillna(0)
-            
-            st.dataframe(
-                b_summary_clean.style.format({
-                    'Freight': '₹{:,.0f}', 
-                    'HiredCharges': '₹{:,.0f}', 
-                    'Commission': '₹{:,.0f}'
-                }), 
-                use_container_width=True
-            )
+            st.dataframe(b_summary_clean.style.format({
+                'Freight': '₹{:,.0f}', 'HiredCharges': '₹{:,.0f}', 'Commission': '₹{:,.0f}'
+            }), use_container_width=True)
         else:
             st.info("Market hiring ka koi data available nahi hai.")
 elif menu == "6. Expense Manager":
