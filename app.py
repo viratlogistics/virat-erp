@@ -225,7 +225,40 @@ def gl(t):
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
 
 if menu == "0. Dashboard":
-    st.title("📊 Virat Logistics - Cash & Profit Dashboard")
+    st.title("📊 Virat Logistics - Financial Dashboard")
+
+    # --- 1. FY SELECTION ---
+    # We use st.columns to put the selector in a neat corner
+    col_fy, col_empty = st.columns([1, 3])
+    with col_fy:
+        available_fy = ["2024-25", "2025-26", "2026-27"]
+        selected_fy = st.selectbox("📅 Financial Year", available_fy, index=1)
+
+    def get_fy(date_str):
+        try:
+            dt = pd.to_datetime(date_str)
+            return f"{dt.year}-{str(dt.year+1)[2:]}" if dt.month >= 4 else f"{dt.year-1}-{str(dt.year)[2:]}"
+        except: return "Unknown"
+
+    # --- 2. DATA LOADING & FILTERING ---
+    df_p = load("payments")
+    df_oe = load("office_expenses")
+    # df_t is already loaded at the top of your script
+
+    # Apply FY Filter to all Dataframes
+    for dff in [df_t, df_p, df_oe]:
+        if not dff.empty:
+            # Ensure 'Date' column is cleaned
+            date_col = next((c for c in dff.columns if 'date' in c.lower()), 'Date')
+            dff['FY'] = dff[date_col].apply(get_fy)
+            
+    # Filter only the current FY data
+    df_t_filtered = df_t[df_t['FY'] == selected_fy] if not df_t.empty else df_t
+    df_p_filtered = df_p[df_p['FY'] == selected_fy] if not df_p.empty else df_p
+    df_oe_filtered = df_oe[df_oe['FY'] == selected_fy] if not df_oe.empty else df_oe
+
+    # --- 3. PROCEED WITH CALCULATIONS ---
+    # Use the _filtered dataframes for all your Dashboard metrics (Cash In, Cash Out, Profit)    st.title("📊 Virat Logistics - Cash & Profit Dashboard")
     
     # --- 1. DATA PREP ---
     df_p = load("payments")
