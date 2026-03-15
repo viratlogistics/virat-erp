@@ -852,29 +852,67 @@ elif menu == "5. Business Insights":
         else:
             st.info("Market hiring ka koi data available nahi hai.")
 elif menu == "6. Expense Manager":
-    st.header("🏢 Office & General Expense Manager")
+    st.header("🏢 Office & Personal Expense Manager")
     df_oe = load("office_expenses")
-    tab_add, tab_view = st.tabs(["➕ Add Expense", "📊 View Expenses"])
+    if not df_oe.empty: df_oe.columns = [str(c).strip() for c in df_oe.columns]
+
+    # Char alag tabs: Entry, Office View, Indrajit Khata, Vishal Khata
+    tab_add, tab_view, tab_indrajit, tab_vishal = st.tabs([
+        "➕ Add Expense", "📊 Office Expenses", "👤 Indrajit Khata", "👤 Vishal Khata"
+    ])
+    
     with tab_add:
         with st.form("office_exp_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
                 e_date = st.date_input("Date", date.today())
-                e_cat = st.selectbox("Category", ["Office Rent", "Electricity", "Staff Salary", "Stationery", "Tea/Coffee", "maintenance", "Others"])
+                e_cat = st.selectbox("Category", [
+                    "Office Rent", "Electricity", "Staff Salary", 
+                    "Stationery", "Tea/Coffee", "maintenance", 
+                    "Indrajit Personal", "Vishal Personal", "Others"
+                ])
             with col2:
                 e_amt = st.number_input("Amount (₹)", min_value=0.0)
                 e_mode = st.selectbox("Payment Mode", ["Cash", "Online", "Cheque"])
-            e_desc = st.text_input("Description")
-            if st.form_submit_button("Save Office Expense"):
+            
+            e_desc = st.text_input("Description / Remarks")
+            
+            if st.form_submit_button("Save Expense"):
                 if e_amt > 0:
                     if save("office_expenses", [str(e_date), e_cat, e_desc, e_amt, e_mode]):
-                        st.success("Office Expense Saved Successfully!"); st.rerun()
-    with tab_view:
-        if not df_oe.empty:
-            df_oe.columns = [str(c).strip() for c in df_oe.columns]
-            st.dataframe(df_oe, use_container_width=True)
-            st.info(f"Total: ₹{pd.to_numeric(df_oe['Amount'], errors='coerce').sum():,.2f}")
+                        st.success(f"{e_cat} Entry Saved!"); st.rerun()
 
+    with tab_view:
+        st.subheader("General Office Expenses")
+        if not df_oe.empty:
+            # Sirf Office wale (Personal ko filter karke hata rahe hain)
+            office_df = df_oe[~df_oe['Category'].str.contains('Indrajit|Vishal', na=False)]
+            st.dataframe(office_df, use_container_width=True)
+            st.info(f"Total Office Expense: ₹{pd.to_numeric(office_df['Amount'], errors='coerce').sum():,.2f}")
+
+    with tab_indrajit:
+        st.subheader("👤 Indrajit Personal Ledger")
+        if not df_oe.empty:
+            ind_df = df_oe[df_oe['Category'] == "Indrajit Personal"]
+            if not ind_df.empty:
+                total_i = pd.to_numeric(ind_df['Amount'], errors='coerce').sum()
+                st.metric("Total Withdrawals (Indrajit)", f"₹{total_i:,.0f}")
+                st.divider()
+                st.dataframe(ind_df[[next(c for c in ind_df.columns if 'date' in c.lower()), 'Description', 'Amount', 'Payment Mode']], use_container_width=True, hide_index=True)
+            else:
+                st.info("Indrajit ka koi personal record nahi mila.")
+
+    with tab_vishal:
+        st.subheader("👤 Vishal Personal Ledger")
+        if not df_oe.empty:
+            vis_df = df_oe[df_oe['Category'] == "Vishal Personal"]
+            if not vis_df.empty:
+                total_v = pd.to_numeric(vis_df['Amount'], errors='coerce').sum()
+                st.metric("Total Withdrawals (Vishal)", f"₹{total_v:,.0f}")
+                st.divider()
+                st.dataframe(vis_df[[next(c for c in vis_df.columns if 'date' in c.lower()), 'Description', 'Amount', 'Payment Mode']], use_container_width=True, hide_index=True)
+            else:
+                st.info("Vishal ka koi personal record nahi mila.")
 elif menu == "7. Driver Khata":
     st.header("🚛 Driver Khata & Trip Settlement")
     df_dk = load("driver_khata")
