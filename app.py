@@ -305,16 +305,42 @@ if menu == "0. Dashboard":
         st.plotly_chart(fig_cash, use_container_width=True)
 
     with c2:
-        st.subheader("🚛 Vehicle Profit (Own Fleet)")
+        st.subheader("🚛 Vehicle Performance (Revenue vs Profit)")
         v_col = next((c for c in df_t.columns if 'vehicle' in c.lower()), None)
+        
         if v_col and not df_t.empty:
+            # 1. Filter Own Fleet and convert numbers
             df_v = df_t[df_t[type_col_t].str.contains('Own', case=False, na=False)].copy()
+            
             if not df_v.empty:
-                v_perf = df_v.groupby(v_col)[rev_col].sum().reset_index()
-                v_perf.columns = ['Vehicle', 'Revenue']
-                fig_v = px.bar(v_perf, x='Vehicle', y='Revenue', color='Revenue', color_continuous_scale='Blues')
-                st.plotly_chart(fig_v, use_container_width=True)
+                # 2. Identify Expense Columns
+                exp_cols = [c for c in df_v.columns if any(x in c.lower() for x in ['diesel', 'toll', 'adv', 'driverexp'])]
+                for c in exp_cols + [rev_col]:
+                    df_v[c] = pd.to_numeric(df_v[c], errors='coerce').fillna(0)
+                
+                # 3. Calculate Profit per Vehicle
+                v_perf = df_v.groupby(v_col).agg({rev_col: 'sum', **{c: 'sum' for c in exp_cols}}).reset_index()
+                v_perf['Total_Exp'] = v_perf[exp_cols].sum(axis=1)
+                v_perf['Profit'] = v_perf[rev_col] - v_perf['Total_Exp']
+                
+                # 4. Melt the data for Plotly (to show side-by-side bars)
+                # This creates a 'Metric' column (Revenue/Profit) and 'Value' column
+                v_plot = v_perf.melt(id_vars=v_col, value_vars=[rev_col, 'Profit'], 
+                                     var_name='Metric', value_name='Amount')
 
+                # 5. Create Grouped Bar Chart
+                fig_v = px.bar(v_plot, 
+                               x=v_col, 
+                               y='Amount', 
+                               color='Metric', 
+                               barmode='group',
+                               color_discrete_map={rev_col: '#3498db', 'Profit': '#2ecc71'}, # Blue for Rev, Green for Profit
+                               text_auto='.2s')
+                
+                fig_v.update_layout(xaxis_title="Vehicle Number", yaxis_title="Amount (₹)")
+                st.plotly_chart(fig_v, use_container_width=True)
+            else:
+                st.info("No 'Own Fleet' data found for vehicle analysis.")
     # --- 6. UNPAID BILLS (RECEIVABLES) ---
     st.divider()
     st.subheader("⏳ Top Unpaid Parties (Receivables)")
