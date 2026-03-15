@@ -723,19 +723,66 @@ elif menu == "5. Business Insights":
     t1, t2, t3 = st.tabs(["💰 Cash & Fund Flow", "🚛 Own Truck Ledger", "🤝 Market Hiring Ledger"])
 
     with t1:
-        st.subheader(f"Fund Flow Statement ({ins_fy})")
+        st.subheader(f"📊 Real-Time Cash Flow Statement ({ins_fy})")
+        
+        # --- A. PAYMENTS SHEET SE DATA (Direct Receipts & Payments) ---
+        cash_in_direct = 0
+        cash_out_direct = 0
         if not df_pf.empty:
             amt_c = next((c for c in df_pf.columns if 'amount' in c.lower()), 'Amount')
             type_c = next((c for c in df_pf.columns if 'type' in c.lower()), 'Type')
+            df_pf[amt_c] = pd.to_numeric(df_pf[amt_c], errors='coerce').fillna(0)
             
-            # Grouping Fund Flow
-            inflow = df_pf[df_pf[type_c].str.contains('Receipt|In', case=False, na=False)][amt_c].sum()
-            outflow = df_pf[df_pf[type_c].str.contains('Payment|Out', case=False, na=False)][amt_c].sum()
+            cash_in_direct = df_pf[df_pf[type_c].str.contains('Receipt|In', case=False, na=False)][amt_c].sum()
+            cash_out_direct = df_pf[df_pf[type_c].str.contains('Payment|Out', case=False, na=False)][amt_c].sum()
+
+        # --- B. TRIPS SHEET SE DATA (Own Truck Trip Expenses) ---
+        trip_cash_out = 0
+        if not df_tf.empty:
+            type_c_t = next((c for c in df_tf.columns if 'type' in c.lower()), 'Type')
+            # Sirf Own Fleet ke kharche jo on-the-spot pay hote hain
+            df_own_exp = df_tf[df_tf[type_c_t].str.contains('Own', case=False, na=False)].copy()
             
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Total Inflow (Receipts)", f"₹{inflow:,.0f}", delta_color="normal")
-            c2.metric("Total Outflow (Payments)", f"₹{outflow:,.0f}", delta_color="inverse")
-            c3.metric("Net Fund Movement", f"₹{(inflow - outflow):,.0f}")
+            # Kharchon ke columns ka total
+            exp_cols = [c for c in df_own_exp.columns if any(x in c.lower() for x in ['diesel', 'toll', 'adv', 'driverexp'])]
+            for col in exp_cols:
+                df_own_exp[col] = pd.to_numeric(df_own_exp[col], errors='coerce').fillna(0)
+            
+            trip_cash_out = df_own_exp[exp_cols].sum().sum()
+
+        # --- C. OFFICE EXPENSES ---
+        office_out = 0
+        if not df_oef.empty:
+            amt_c_oe = next((c for c in df_oef.columns if 'amount' in c.lower()), 'Amount')
+            office_out = pd.to_numeric(df_oef[amt_c_oe], errors='coerce').fillna(0).sum()
+
+        # --- FINAL TOTALS ---
+        total_cash_in = cash_in_direct
+        total_cash_out = cash_out_direct + trip_cash_out + office_out
+        net_cash_flow = total_cash_in - total_cash_out
+
+        # Display Metrics
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Cash Inflow", f"₹{total_cash_in:,.0f}")
+        m2.metric("Total Cash Outflow", f"₹{total_cash_out:,.0f}", delta=f"Trips: ₹{trip_cash_out:,.0f}", delta_color="inverse")
+        m3.metric("Net Cash Position", f"₹{net_cash_flow:,.0f}")
+
+        st.divider()
+        
+        # Cash Flow Breakdown Chart
+        st.write("#### 📉 Cash Flow Breakdown")
+        cf_data = pd.DataFrame({
+            'Category': ['Receipts', 'Direct Payments', 'Trip Expenses (Own)', 'Office Exp'],
+            'Amount': [cash_in_direct, cash_out_direct, trip_cash_out, office_out]
+        })
+        fig_cf = px.pie(cf_data, values='Amount', names='Category', hole=0.4, 
+                         color_discrete_sequence=px.colors.sequential.RdBu)
+        st.plotly_chart(fig_cf, use_container_width=True)
+
+        # Detailed List of Trip Cash Out (Optional Table)
+        if trip_cash_out > 0:
+            with st.expander("🔍 View Own Truck Trip Cash Details"):
+                st.dataframe(df_own_exp[['Date', 'Vehicle', 'LR No'] + exp_cols], use_container_width=True)
             
             st.write("#### Detailed Transaction History")
             st.dataframe(df_pf[[d_col, 'Account_Name', type_c, amt_c, 'Mode']].sort_values(d_col, ascending=False), use_container_width=True)
