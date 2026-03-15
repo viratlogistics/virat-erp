@@ -225,15 +225,13 @@ with st.sidebar:
 def gl(t): 
     if df_m.empty: return []
     
-    # Agar dropdown Party, Consignor ya Broker maange, toh teeno ka combined list dikhao
+    # Party, Consignor aur Broker ko combine karke dikhane ke liye
     if t in ["Party", "Consignor", "Broker"]:
         combined = df_m[df_m['Type'].isin(["Party", "Broker", "Consignor"])]['Name'].unique().tolist()
         return sorted([str(x) for x in combined if x and str(x).strip() != ""])
     
     # Baaki sab (Vehicle, Driver, Bank) ke liye normal logic
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist())
-
-# --- Iske neeche aapka menu selection start hota hai ---
 if menu == "0. Dashboard":
     ...    return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
 
