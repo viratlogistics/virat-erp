@@ -689,58 +689,110 @@ elif menu == "4. Financials":
                 st.dataframe(full_df, use_container_width=True, hide_index=True)
 
 elif menu == "5. Business Insights":
-    st.header("📊 Business Dashboard & Own Fleet Analytics")
-    df_t = load("trips")
-    df_oe = load("office_expenses")
+    st.header(f"⚖️ Financial Insights & Fleet Ledgers")
+
+    # --- 1. LOCAL YEAR FILTER (Taki error na aaye) ---
+    def get_fy_local(date_str):
+        try:
+            dt = pd.to_datetime(date_str)
+            return f"{dt.year}-{str(dt.year+1)[2:]}" if dt.month >= 4 else f"{dt.year-1}-{str(dt.year)[2:]}"
+        except: return "Unknown"
+
+    available_fy = ["2024-25", "2025-26", "2026-27"]
+    y_col1, _ = st.columns([1, 3])
+    with y_col1:
+        ins_fy = st.selectbox("📅 Select Year for Insights", available_fy, index=1, key="ins_fy_sel")
+
+    # Filter Data locally for this menu
+    df_tf = df_t.copy()
+    df_pf = load("payments").copy()
+    df_oef = load("office_expenses").copy()
+
+    for dff in [df_tf, df_pf, df_oef]:
+        if not dff.empty:
+            dff.columns = [str(c).strip() for c in dff.columns]
+            d_col = next((c for c in dff.columns if 'date' in c.lower()), 'Date')
+            dff['FY'] = dff[d_col].apply(get_fy_local)
     
-    if not df_t.empty:
-        df_t.columns = [str(c).strip() for c in df_t.columns]
-        num_cols = ['Freight', 'HiredCharges', 'Diesel', 'DriverExp', 'Toll', 'Other']
-        for col in num_cols:
-            if col in df_t.columns:
-                df_t[col] = pd.to_numeric(df_t[col], errors='coerce').fillna(0)
+    # Final Filtered Data
+    df_tf = df_tf[df_tf['FY'] == ins_fy] if not df_tf.empty else pd.DataFrame()
+    df_pf = df_pf[df_pf['FY'] == ins_fy] if not df_pf.empty else pd.DataFrame()
+    df_oef = df_oef[df_oef['FY'] == ins_fy] if not df_oef.empty else pd.DataFrame()
 
-        off_total = 0
-        if not df_oe.empty:
-            df_oe.columns = [str(c).strip() for c in df_oe.columns]
-            off_total = pd.to_numeric(df_oe['Amount'], errors='coerce').fillna(0).sum()
+    # --- 2. TABS FOR DETAILED LEDGERS ---
+    t1, t2, t3 = st.tabs(["💰 Cash & Fund Flow", "🚛 Own Truck Ledger", "🤝 Market Hiring Ledger"])
 
-        t_rev = df_t['Freight'].sum()
-        trip_costs = df_t[['HiredCharges', 'Diesel', 'DriverExp', 'Toll', 'Other']].sum().sum()
-        f_profit = t_rev - (trip_costs + off_total)
+    with t1:
+        st.subheader(f"Fund Flow Statement ({ins_fy})")
+        if not df_pf.empty:
+            amt_c = next((c for c in df_pf.columns if 'amount' in c.lower()), 'Amount')
+            type_c = next((c for c in df_pf.columns if 'type' in c.lower()), 'Type')
+            
+            # Grouping Fund Flow
+            inflow = df_pf[df_pf[type_c].str.contains('Receipt|In', case=False, na=False)][amt_c].sum()
+            outflow = df_pf[df_pf[type_c].str.contains('Payment|Out', case=False, na=False)][amt_c].sum()
+            
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total Inflow (Receipts)", f"₹{inflow:,.0f}", delta_color="normal")
+            c2.metric("Total Outflow (Payments)", f"₹{outflow:,.0f}", delta_color="inverse")
+            c3.metric("Net Fund Movement", f"₹{(inflow - outflow):,.0f}")
+            
+            st.write("#### Detailed Transaction History")
+            st.dataframe(df_pf[[d_col, 'Account_Name', type_c, amt_c, 'Mode']].sort_values(d_col, ascending=False), use_container_width=True)
+        else:
+            st.info("No payment data found for this year.")
+
+    with t2:
+        st.subheader("Own Fleet: Trip-wise Performance")
+        type_c_t = next((c for c in df_tf.columns if 'type' in c.lower()), 'Type')
+        df_own = df_tf[df_tf[type_c_t].str.contains('Own', case=False, na=False)].copy() if not df_tf.empty else pd.DataFrame()
         
-        t_sum, t_own = st.tabs(["📈 Overview", "🚛 Own Vehicle Profit"])
-        with t_sum:
-            st.subheader("Total Performance Summary")
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Total Revenue", f"₹{t_rev:,.0f}")
-            m2.metric("Total Expenses (Trip+Off)", f"₹{(trip_costs + off_total):,.0f}")
-            m3.metric("Final Net Profit", f"₹{f_profit:,.0f}", delta=f"Office: ₹{off_total:,.0f}", delta_color="inverse")
-            st.divider()
-            cl, cr = st.columns(2)
-            with cl:
-                st.write("#### 🏆 Top Parties (By Revenue)")
-                p_data = df_t.groupby('Party')['Freight'].sum().sort_values(ascending=False).head(5)
-                st.bar_chart(p_data)
-            with cr:
-                st.write("#### 📊 Trip Distribution & Revenue")
-                dist = df_t.groupby('Type').agg({'Type': 'count', 'Freight': 'sum'}).rename(columns={'Type': 'Trips', 'Freight': 'Revenue'})
-                st.dataframe(dist.style.format({'Revenue': '₹{:,.0f}'}), use_container_width=True)
+        if not df_own.empty:
+            v_col = next((c for c in df_own.columns if 'vehicle' in c.lower()), 'Vehicle')
+            # Columns clean up
+            cols_to_num = ['Freight', 'Diesel', 'Toll', 'DriverExp', 'Other']
+            for c in cols_to_num:
+                if c in df_own.columns: df_own[c] = pd.to_numeric(df_own[c], errors='coerce').fillna(0)
+            
+            df_own['Trip_Cost'] = df_own['Diesel'] + df_own['Toll'] + df_own['DriverExp'] + df_own['Other']
+            df_own['Net_Profit'] = df_own['Freight'] - df_own['Trip_Cost']
+            
+            # Show Vehicle-wise Summary
+            v_summary = df_own.groupby(v_col).agg({
+                'Freight': 'sum', 'Diesel': 'sum', 'Toll': 'sum', 
+                'DriverExp': 'sum', 'Trip_Cost': 'sum', 'Net_Profit': 'sum'
+            }).reset_index()
+            
+            st.write("#### 📊 Vehicle-wise Profit Summary")
+            st.dataframe(v_summary.style.format("₹{:,.0f}").background_gradient(subset=['Net_Profit'], cmap='Greens'), use_container_width=True)
+            
+            st.write("#### 📜 Trip Details (Own Fleet)")
+            st.dataframe(df_own[[d_col, v_col, 'LR No', 'Freight', 'Diesel', 'Toll', 'DriverExp', 'Net_Profit']], use_container_width=True)
+        else:
+            st.info("Own fleet ka koi data available nahi hai.")
 
-        with t_own:
-            df_own = df_t[df_t['Type'] == "Own Fleet"].copy()
-            if not df_own.empty:
-                st.subheader("🚛 Individual Own Vehicle Performance")
-                v_an = df_own.groupby('Vehicle').agg({'Freight': 'sum', 'Diesel': 'sum', 'DriverExp': 'sum', 'Toll': 'sum', 'Other': 'sum'}).reset_index()
-                v_an['Total_Exp'] = v_an[['Diesel', 'DriverExp', 'Toll', 'Other']].sum(axis=1)
-                v_an['Net_Profit'] = v_an['Freight'] - v_an['Total_Exp']
-                v_an = v_an.sort_values(by='Net_Profit', ascending=False)
-                st.success(f"💰 Own Fleet Net Profit: ₹{v_an['Net_Profit'].sum():,.2f}")
-                st.bar_chart(v_an.set_index('Vehicle')['Net_Profit'])
-                st.dataframe(v_an, column_config={"Freight": st.column_config.NumberColumn("Revenue", format="₹%d"), "Total_Exp": st.column_config.NumberColumn("Expenses", format="₹%d"), "Net_Profit": st.column_config.NumberColumn("Net Profit", format="₹%d")}, use_container_width=True, hide_index=True)
-    else:
-        st.error("No trip data found.")
-
+    with t3:
+        st.subheader("Market Hiring & Broker Ledger")
+        df_mkt = df_tf[df_tf[type_c_t].str.contains('Market|Hired', case=False, na=False)].copy() if not df_tf.empty else pd.DataFrame()
+        
+        if not df_mkt.empty:
+            b_col = next((c for c in df_mkt.columns if 'broker' in c.lower()), 'Broker')
+            df_mkt['HiredCharges'] = pd.to_numeric(df_mkt['HiredCharges'], errors='coerce').fillna(0)
+            df_mkt['Freight'] = pd.to_numeric(df_mkt['Freight'], errors='coerce').fillna(0)
+            df_mkt['Commission'] = df_mkt['Freight'] - df_mkt['HiredCharges']
+            
+            # Broker-wise Summary
+            b_summary = df_mkt.groupby(b_col).agg({
+                'LR No': 'count', 'Freight': 'sum', 'HiredCharges': 'sum', 'Commission': 'sum'
+            }).rename(columns={'LR No': 'Trips'}).reset_index()
+            
+            st.write("#### 📊 Broker Wise Summary")
+            st.dataframe(b_summary.style.format({c: "₹{:,.0f}" for c in ['Freight', 'HiredCharges', 'Commission']}), use_container_width=True)
+            
+            st.write("#### 📜 Market Trip Details")
+            st.dataframe(df_mkt[[d_col, b_col, 'LR No', 'Vehicle', 'Freight', 'HiredCharges', 'Commission']], use_container_width=True)
+        else:
+            st.info("Market hiring ka koi data available nahi hai.")
 elif menu == "6. Expense Manager":
     st.header("🏢 Office & General Expense Manager")
     df_oe = load("office_expenses")
@@ -750,7 +802,7 @@ elif menu == "6. Expense Manager":
             col1, col2 = st.columns(2)
             with col1:
                 e_date = st.date_input("Date", date.today())
-                e_cat = st.selectbox("Category", ["Office Rent", "Electricity", "Staff Salary", "Stationery", "Tea/Coffee", "Repairs", "Others"])
+                e_cat = st.selectbox("Category", ["Office Rent", "Electricity", "Staff Salary", "Stationery", "Tea/Coffee", "maintenance", "Others"])
             with col2:
                 e_amt = st.number_input("Amount (₹)", min_value=0.0)
                 e_mode = st.selectbox("Payment Mode", ["Cash", "Online", "Cheque"])
