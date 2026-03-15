@@ -221,8 +221,21 @@ with st.sidebar:
         "8. Monthly Bill"
     ], index=0) # Default selection Dashboard rahega
 
+# --- Yeh function dhoond kar replace karein ---
 def gl(t): 
-    return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
+    if df_m.empty: return []
+    
+    # Agar dropdown Party, Consignor ya Broker maange, toh teeno ka combined list dikhao
+    if t in ["Party", "Consignor", "Broker"]:
+        combined = df_m[df_m['Type'].isin(["Party", "Broker", "Consignor"])]['Name'].unique().tolist()
+        return sorted([str(x) for x in combined if x and str(x).strip() != ""])
+    
+    # Baaki sab (Vehicle, Driver, Bank) ke liye normal logic
+    return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist())
+
+# --- Iske neeche aapka menu selection start hota hai ---
+if menu == "0. Dashboard":
+    ...    return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
 
 if menu == "0. Dashboard":
     st.title("📊 Virat Logistics - Financial Dashboard")
@@ -471,23 +484,32 @@ elif menu == "2. LR Entry":
         if is_np:
             bill_pty = st.text_input("Enter New Party Name*", key=f"np_{k}")
         else:
+            # gl("Party") ab humne global function mein update kar diya hai 
+            # ki wo Broker + Party dono dikhaye
             bill_pty = st.selectbox("Billing Party*", ["Select"] + gl("Party"), key=f"bp_{k}")
 
         is_nc = st.checkbox("New Consignor?", key=f"isnc_{k}")
         if is_nc:
             cnor_name = st.text_input("Enter New Consignor Name*", key=f"nc_{k}")
         else:
+            # Yahan bhi combined list aayegi
             cnor_name = st.selectbox("Consignor Name*", ["Select"] + gl("Party"), key=f"cnor_{k}")
             
         cnor_gst = st.text_input("Consignor GST", key=f"cgst_{k}")
         ins_by = st.selectbox("Insurance Paid By*", ["N/A", "Consignor", "Consignee", "Transporter"], key=f"ins_{k}")
 
     with cp3:
-        cnee_name = st.text_input("Consignee Name*", key=f"cnee_{k}")
+        # Consignee dropdown mein bhi aksar wahi log hote hain, 
+        # isliye yahan bhi dropdown dena better hai
+        is_nee = st.checkbox("New Consignee?", key=f"isnee_{k}")
+        if is_nee:
+            cnee_name = st.text_input("Consignee Name*", key=f"cnee_{k}")
+        else:
+            cnee_name = st.selectbox("Consignee Name*", ["Select"] + gl("Party"), key=f"cneesel_{k}")
+            
         cnee_gst = st.text_input("Consignee GST", key=f"cngst_{k}")
         paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pby_{k}")
         sel_bank = st.selectbox("Select Bank*", ["Select"] + gl("Bank"), key=f"bank_{k}")
-
     with st.form(f"lr_form_{k}"):
         st.markdown("---")
         c1, c2, c3 = st.columns(3)
