@@ -210,16 +210,31 @@ if 'pdf_ready' not in st.session_state: st.session_state.pdf_ready = None
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Virat Logistics ERP", layout="wide", initial_sidebar_state="collapsed")
 
-# Sidebar ko hide karne ke liye CSS
+# CSS for BIG FONTS and ATTRACTIVE LOOK
 st.markdown("""
     <style>
         [data-testid="stSidebar"] {display: none;}
-        .stMain {margin-top: -60px;}
-        .nav-link { border-radius: 0px !important; }
+        .stMain {margin-top: -70px;}
+        
+        /* Menu ka font bada aur bold karne ke liye */
+        .nav-link {
+            font-size: 16px !important; 
+            font-weight: 700 !important; 
+            text-transform: uppercase !important;
+            border-radius: 0px !important;
+            padding: 10px !important;
+        }
+        
+        /* Heading attractive banane ke liye */
+        h2, h3 {
+            color: #00d4ff !important;
+            font-weight: 800;
+            letter-spacing: 1px;
+        }
     </style>
     """, unsafe_allow_html=True)
 
-# --- NEW TOP MENU ---
+# --- UPDATED TOP MENU (Attractive Colors) ---
 menu = option_menu(
     menu_title=None, 
     options=[
@@ -234,20 +249,24 @@ menu = option_menu(
     default_index=0, 
     orientation="horizontal", 
     styles={
-        "container": {"padding": "0!important", "background-color": "#1a1a1a", "border-radius": "0px"},
-        "icon": {"color": "#00d4ff", "font-size": "18px"}, 
-        "nav-link": {
-            "font-size": "11px", 
-            "text-align": "center", 
-            "margin":"0px", 
-            "color": "white",
-            "text-transform": "uppercase"
+        "container": {
+            "padding": "0!important", 
+            "background-color": "#0e1117", # Dark Premium Background
+            "border-bottom": "2px solid #00d4ff" # Niche ek neon line
         },
-        "nav-link-selected": {"background-color": "#005f73", "font-weight": "bold"},
+        "icon": {"color": "#ffaa00", "font-size": "18px"}, # Icons thode bade aur orange
+        "nav-link": {
+            "color": "white",
+            "text-align": "center", 
+            "margin":"0px",
+            "--hover-color": "#262730"
+        },
+        "nav-link-selected": {
+            "background-color": "#00d4ff", # Cyan color selection
+            "color": "black" # Text black taaki uthkar dikhe
+        },
     }
 )
-
-# --- ISKE NICHE AAPKA PURANA GL FUNCTION REHNE DEIN ---
 def gl(t): 
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
 def gl(t): 
