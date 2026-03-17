@@ -232,10 +232,9 @@ def gl(t):
     # Baaki sab (Vehicle, Driver, Bank) ke liye normal logic
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist())
 if menu == "0. Dashboard":
-    st.title("📊 Virat Logistics - Financial Dashboard")
+    st.title("📊 Virat Logistics - Cash & Profit Dashboard")
 
     # --- 1. FY SELECTION ---
-    # We use st.columns to put the selector in a neat corner
     col_fy, col_empty = st.columns([1, 3])
     with col_fy:
         available_fy = ["2024-25", "2025-26", "2026-27"]
@@ -247,98 +246,77 @@ if menu == "0. Dashboard":
             return f"{dt.year}-{str(dt.year+1)[2:]}" if dt.month >= 4 else f"{dt.year-1}-{str(dt.year)[2:]}"
         except: return "Unknown"
 
-    # --- 2. DATA LOADING & FILTERING ---
-    df_p = load("payments")
-    df_oe = load("office_expenses")
-    # df_t is already loaded at the top of your script
-
-    # Apply FY Filter to all Dataframes
-    for dff in [df_t, df_p, df_oe]:
-        if not dff.empty:
-            # Ensure 'Date' column is cleaned
-            date_col = next((c for c in dff.columns if 'date' in c.lower()), 'Date')
-            dff['FY'] = dff[date_col].apply(get_fy)
-            
-    # Filter only the current FY data
-    df_t_filtered = df_t[df_t['FY'] == selected_fy] if not df_t.empty else df_t
-    df_p_filtered = df_p[df_p['FY'] == selected_fy] if not df_p.empty else df_p
-    df_oe_filtered = df_oe[df_oe['FY'] == selected_fy] if not df_oe.empty else df_oe
-
-    # --- 3. PROCEED WITH CALCULATIONS ---
-    # Use the _filtered dataframes for all your Dashboard metrics (Cash In, Cash Out, Profit)    st.title("📊 Virat Logistics - Cash & Profit Dashboard")
-    
-    # --- 1. DATA PREP ---
+    # --- 2. DATA LOADING & PREP ---
     df_p = load("payments")
     df_oe = load("office_expenses")
     
-    # Trim spaces from columns
-    for dff in [df_t, df_p, df_oe]:
-        if not dff.empty: dff.columns = [str(c).strip() for c in dff.columns]
+    # Cleaning & FY Filtering for ALL Dataframes
+    def filter_data(df_raw):
+        if df_raw.empty: return pd.DataFrame()
+        df_c = df_raw.copy()
+        df_c.columns = [str(c).strip() for c in df_c.columns]
+        d_col = next((c for c in df_c.columns if 'date' in c.lower()), 'Date')
+        df_c['FY'] = df_c[d_col].apply(get_fy)
+        return df_c[df_c['FY'] == selected_fy]
 
-    # --- 2. CASH FLOW CALCULATION (Actual Paisa) ---
+    df_t_f = filter_data(df_t)
+    df_p_f = filter_data(df_p)
+    df_oe_f = filter_data(df_oe)
+
+    # --- 3. CASH FLOW CALCULATION (Using df_p_f) ---
     cash_in = 0
     payments_out = 0
-    
-    if not df_p.empty:
-        # Amount aur Type column dhoondna
-        amt_col_p = next((c for c in df_p.columns if 'amount' in c.lower()), None)
-        type_col_p = next((c for c in df_p.columns if 'type' in c.lower()), None)
-        
-        if amt_col_p and type_col_p:
-            df_p[amt_col_p] = pd.to_numeric(df_p[amt_col_p], errors='coerce').fillna(0)
-            # Receipt = Paisa Aaya | Payment = Paisa Gaya
-            cash_in = df_p[df_p[type_col_p].str.contains('Receipt|In', case=False, na=False)][amt_col_p].sum()
-            payments_out = df_p[df_p[type_col_p].str.contains('Payment|Out', case=False, na=False)][amt_col_p].sum()
+    if not df_p_f.empty:
+        amt_col_p = next((c for c in df_p_f.columns if 'amount' in c.lower()), 'Amount')
+        type_col_p = next((c for c in df_p_f.columns if 'type' in c.lower()), 'Type')
+        df_p_f[amt_col_p] = pd.to_numeric(df_p_f[amt_col_p], errors='coerce').fillna(0)
+        cash_in = df_p_f[df_p_f[type_col_p].str.contains('Receipt|In', case=False, na=False)][amt_col_p].sum()
+        payments_out = df_p_f[df_p_f[type_col_p].str.contains('Payment|Out', case=False, na=False)][amt_col_p].sum()
 
-    # Own Fleet ka Cash Out (Diesel, Toll, Adv from Trips)
+    # Own Fleet Cash Out (Using df_t_f)
     own_cash_out = 0
-    if not df_t.empty:
-        # Own Fleet filter karna
-        type_col_t = next((c for c in df_t.columns if 'type' in c.lower()), None)
-        if type_col_t:
-            df_own = df_t[df_t[type_col_t].str.contains('Own', case=False, na=False)]
-            # Cash columns ka total
-            c_cols = [c for c in df_t.columns if any(x in c.lower() for x in ['diesel', 'toll', 'adv', 'driverexp'])]
-            for c in c_cols: df_own[c] = pd.to_numeric(df_own[c], errors='coerce').fillna(0)
-            own_cash_out = df_own[c_cols].sum().sum()
+    if not df_t_f.empty:
+        type_col_t = next((c for c in df_t_f.columns if 'type' in c.lower()), 'Type')
+        df_own = df_t_f[df_t_f[type_col_t].str.contains('Own', case=False, na=False)].copy()
+        c_cols = [c for c in df_t_f.columns if any(x in c.lower() for x in ['diesel', 'toll', 'adv', 'driverexp'])]
+        for c in c_cols: df_own[c] = pd.to_numeric(df_own[c], errors='coerce').fillna(0)
+        own_cash_out = df_own[c_cols].sum().sum()
 
-    # Office Expense
+    # Office Expense (Using df_oe_f)
     office_cash_out = 0
-    if not df_oe.empty:
-        amt_col_oe = next((c for c in df_oe.columns if 'amount' in c.lower()), 'Amount')
-        df_oe[amt_col_oe] = pd.to_numeric(df_oe[amt_col_oe], errors='coerce').fillna(0)
-        office_cash_out = df_oe[amt_col_oe].sum()
+    if not df_oe_f.empty:
+        amt_col_oe = next((c for c in df_oe_f.columns if 'amount' in c.lower()), 'Amount')
+        office_cash_out = pd.to_numeric(df_oe_f[amt_col_oe], errors='coerce').fillna(0).sum()
 
     total_actual_cash_out = payments_out + own_cash_out + office_cash_out
     cash_hand_balance = cash_in - total_actual_cash_out
 
-    # --- 3. PROFIT CALCULATION (Business Performance) ---
-    rev_col = next((c for c in df_t.columns if any(x in c.lower() for x in ['freight', 'revenue'])), None)
-    total_rev = pd.to_numeric(df_t[rev_col], errors='coerce').sum() if rev_col else 0
-    
-    # Sare trip kharche (Hired Charges bhi shamil)
-    trip_exp_cols = [c for c in df_t.columns if any(x in c.lower() for x in ['hired', 'diesel', 'toll', 'adv', 'driverexp', 'other'])]
-    for c in trip_exp_cols: df_t[c] = pd.to_numeric(df_t[c], errors='coerce').fillna(0)
-    total_trip_cost = df_t[trip_exp_cols].sum().sum()
-    
-    net_profit = total_rev - (total_trip_cost + office_cash_out)
+    # --- 4. PROFIT CALCULATION (Using df_t_f) ---
+    rev_col = next((c for c in df_t_f.columns if any(x in c.lower() for x in ['freight', 'revenue'])), 'Freight')
+    if not df_t_f.empty:
+        df_t_f[rev_col] = pd.to_numeric(df_t_f[rev_col], errors='coerce').fillna(0)
+        total_rev = df_t_f[rev_col].sum()
+        trip_exp_cols = [c for c in df_t_f.columns if any(x in c.lower() for x in ['hired', 'diesel', 'toll', 'adv', 'driverexp', 'other'])]
+        for c in trip_exp_cols: df_t_f[c] = pd.to_numeric(df_t_f[c], errors='coerce').fillna(0)
+        total_trip_cost = df_t_f[trip_exp_cols].sum().sum()
+        net_profit = total_rev - (total_trip_cost + office_cash_out)
+    else:
+        total_rev = net_profit = 0
 
-    # --- 4. DISPLAY METRICS (Cards) ---
-    st.subheader("📌 Financial Summary")
+    # Display Metrics
+    st.subheader(f"📌 Financial Summary: {selected_fy}")
     r1, r2, r3, r4 = st.columns(4)
     r1.metric("Cash In (Receipts)", f"₹{cash_in:,.0f}")
     r2.metric("Cash Out (Actual)", f"₹{total_actual_cash_out:,.0f}", delta_color="inverse")
-    r3.metric("Bank/Hand Balance", f"₹{cash_hand_balance:,.0f}", delta="In-Hand")
+    r3.metric("Bank/Hand Balance", f"₹{cash_hand_balance:,.0f}")
     r4.metric("Net Business Profit", f"₹{net_profit:,.0f}")
 
     st.divider()
 
     # --- 5. CHARTS ---
     c1, c2 = st.columns(2)
-    
     with c1:
-        st.subheader("💰 Actual Cash Flow (Paisa)")
-        # Cash Flow Bar Chart
+        st.subheader("💰 Actual Cash Flow")
         cash_df = pd.DataFrame({'Category': ['Cash In', 'Cash Out'], 'Amount': [cash_in, total_actual_cash_out]})
         fig_cash = px.bar(cash_df, x='Category', y='Amount', color='Category', 
                           color_discrete_map={'Cash In': '#2ecc71', 'Cash Out': '#e74c3c'}, text_auto='.3s')
@@ -346,49 +324,33 @@ if menu == "0. Dashboard":
 
     with c2:
         st.subheader("🚛 Vehicle Performance (Revenue vs Profit)")
-        v_col = next((c for c in df_t.columns if 'vehicle' in c.lower()), None)
-        
-        if v_col and not df_t.empty:
-            # 1. Filter Own Fleet and convert numbers
-            df_v = df_t[df_t[type_col_t].str.contains('Own', case=False, na=False)].copy()
-            
+        v_col = next((c for c in df_t_f.columns if 'vehicle' in c.lower()), 'Vehicle')
+        if not df_t_f.empty:
+            type_col_t = next((c for c in df_t_f.columns if 'type' in c.lower()), 'Type')
+            df_v = df_t_f[df_t_f[type_col_t].str.contains('Own', case=False, na=False)].copy()
             if not df_v.empty:
-                # 2. Identify Expense Columns
                 exp_cols = [c for c in df_v.columns if any(x in c.lower() for x in ['diesel', 'toll', 'adv', 'driverexp'])]
-                for c in exp_cols + [rev_col]:
-                    df_v[c] = pd.to_numeric(df_v[c], errors='coerce').fillna(0)
-                
-                # 3. Calculate Profit per Vehicle
                 v_perf = df_v.groupby(v_col).agg({rev_col: 'sum', **{c: 'sum' for c in exp_cols}}).reset_index()
                 v_perf['Total_Exp'] = v_perf[exp_cols].sum(axis=1)
                 v_perf['Profit'] = v_perf[rev_col] - v_perf['Total_Exp']
                 
-                # 4. Melt the data for Plotly (to show side-by-side bars)
-                # This creates a 'Metric' column (Revenue/Profit) and 'Value' column
-                v_plot = v_perf.melt(id_vars=v_col, value_vars=[rev_col, 'Profit'], 
-                                     var_name='Metric', value_name='Amount')
-
-                # 5. Create Grouped Bar Chart
-                fig_v = px.bar(v_plot, 
-                               x=v_col, 
-                               y='Amount', 
-                               color='Metric', 
-                               barmode='group',
-                               color_discrete_map={rev_col: '#3498db', 'Profit': '#2ecc71'}, # Blue for Rev, Green for Profit
-                               text_auto='.2s')
-                
-                fig_v.update_layout(xaxis_title="Vehicle Number", yaxis_title="Amount (₹)")
+                v_plot = v_perf.melt(id_vars=v_col, value_vars=[rev_col, 'Profit'], var_name='Metric', value_name='Amount')
+                fig_v = px.bar(v_plot, x=v_col, y='Amount', color='Metric', barmode='group',
+                               color_discrete_map={rev_col: '#3498db', 'Profit': '#2ecc71'}, text_auto='.2s')
                 st.plotly_chart(fig_v, use_container_width=True)
             else:
-                st.info("No 'Own Fleet' data found for vehicle analysis.")
-    # --- 6. UNPAID BILLS (RECEIVABLES) ---
+                st.info("No 'Own Fleet' data for this year.")
+        else:
+            st.info("No trip data found.")
+
+    # --- 6. RECEIVABLES ---
     st.divider()
     st.subheader("⏳ Top Unpaid Parties (Receivables)")
-    party_col = next((c for c in df_t.columns if 'party' in c.lower()), None)
-    if party_col:
-        p_rev = df_t.groupby(party_col)[rev_col].sum()
-        p_acc_col = next((c for c in df_p.columns if any(x in c.lower() for x in ['account', 'name', 'party'])), None)
-        p_rec = df_p[df_p[type_col_p].str.contains('Receipt', case=False, na=False)].groupby(p_acc_col)[amt_col_p].sum() if p_acc_col else pd.Series()
+    party_col = next((c for c in df_t_f.columns if 'party' in c.lower()), 'Party')
+    if not df_t_f.empty:
+        p_rev = df_t_f.groupby(party_col)[rev_col].sum()
+        p_acc_col = next((c for c in df_p_f.columns if any(x in c.lower() for x in ['account', 'name', 'party'])), 'Account_Name')
+        p_rec = df_p_f[df_p_f[type_col_p].str.contains('Receipt', case=False, na=False)].groupby(p_acc_col)[amt_col_p].sum() if not df_p_f.empty else pd.Series()
         
         pending = pd.DataFrame({'Billed': p_rev, 'Received': p_rec}).fillna(0)
         pending['Due'] = pending['Billed'] - pending['Received']
