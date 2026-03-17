@@ -235,7 +235,7 @@ menu = option_menu(
     orientation="horizontal", 
     styles={
         "container": {"padding": "0!important", "background-color": "#1a1a1a", "border-radius": "0px"},
-        "icon": {"color": "#00d4ff", "font-size": "14px"}, 
+        "icon": {"color": "#00d4ff", "font-size": "18px"}, 
         "nav-link": {
             "font-size": "11px", 
             "text-align": "center", 
