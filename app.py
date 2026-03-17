@@ -1,5 +1,6 @@
 import streamlit as st
-import pandas as pd
+from streamlit_option_menu import option_menu  # <--- Ye naya add karein
+import pandas as pd # Agar pehle se hai toh rehne dein
 import plotly.express as px
 from datetime import date
 from fpdf import FPDF
@@ -206,21 +207,49 @@ df_t = load("trips")
 if 'reset_trigger' not in st.session_state: st.session_state.reset_trigger = 0
 if 'pdf_ready' not in st.session_state: st.session_state.pdf_ready = None
 
-# Sidebar Navigation (Dashboard ko pehle rakha hai)
-with st.sidebar:
-    st.title("🚛 Virat Logistics")
-    menu = st.sidebar.selectbox("🚀 MENU", [
-        "0. Dashboard", # Sabse upar
-        "1. Masters Setup", 
-        "2. LR Entry", 
-        "3. LR Register", 
-        "4. Financials", 
-        "5. Business Insights", 
-        "6. Expense Manager", 
-        "7. Driver Khata", 
-        "8. Monthly Bill"
-    ], index=0) # Default selection Dashboard rahega
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="Virat Logistics ERP", layout="wide", initial_sidebar_state="collapsed")
 
+# Sidebar ko hide karne ke liye CSS
+st.markdown("""
+    <style>
+        [data-testid="stSidebar"] {display: none;}
+        .stMain {margin-top: -60px;}
+        .nav-link { border-radius: 0px !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- NEW TOP MENU ---
+menu = option_menu(
+    menu_title=None, 
+    options=[
+        "0. Dashboard", "1. Masters Setup", "2. LR Entry", "3. LR Register", 
+        "4. Financials", "5. Business Insights", "6. Expense Manager", 
+        "7. Driver Khata", "8. Monthly Bill"
+    ], 
+    icons=[
+        "speedometer2", "person-gear", "file-earmark-plus", "table", 
+        "currency-rupee", "graph-up-arrow", "wallet2", "person-badge", "receipt"
+    ], 
+    default_index=0, 
+    orientation="horizontal", 
+    styles={
+        "container": {"padding": "0!important", "background-color": "#1a1a1a", "border-radius": "0px"},
+        "icon": {"color": "#00d4ff", "font-size": "14px"}, 
+        "nav-link": {
+            "font-size": "11px", 
+            "text-align": "center", 
+            "margin":"0px", 
+            "color": "white",
+            "text-transform": "uppercase"
+        },
+        "nav-link-selected": {"background-color": "#005f73", "font-weight": "bold"},
+    }
+)
+
+# --- ISKE NICHE AAPKA PURANA GL FUNCTION REHNE DEIN ---
+def gl(t): 
+    return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
 def gl(t): 
     if df_m.empty: return []
     
