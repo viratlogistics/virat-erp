@@ -556,32 +556,32 @@ elif menu == "2. LR Entry":
                 
                 prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
                 row = [
-                    str(d),           # Date
-                    lr_no,            # LR No
-                    v_cat,            # Type (Own/Market)
-                    bill_pty,         # Party
-                    cnor_name,        # Consignor
-                    cnor_gst,         # Consignor_GST
-                    cnor_add,         # Consignor_Add
-                    cnee_name,        # Consignee
-                    cnee_gst,         # Consignee_GST
-                    ship_to,          # Consignee_Add (Delivery Address)
-                    mat,              # Material
-                    n_wt,             # Weight (Net)
-                    c_wt,             # Chg_Weight (Naya column)
-                    v_no,             # Vehicle
-                    sel_driver,       # Driver
-                    br_name,          # Broker
-                    fl,               # From
-                    tl,               # To
-                    fr_amt,           # Freight
-                    (hc if v_cat == "Market Hired" else 0.0), # HiredCharges
-                    dsl,              # Diesel
-                    drv,              # DriverExp
-                    toll,             # Toll
-                    0,                # Other
-                    prof              # Profit
-                ]
+                str(d),           # Date
+                lr_no,            # LR No
+                v_cat,            # Type
+                bill_pty,         # Party
+                cnor_name,        # Consignor
+                cnor_gst,         # Consignor_GST
+                cnor_add,         # Consignor_Add (Ab error nahi aayega)
+                cnee_name,        # Consignee
+                cnee_gst,         # Consignee_GST
+                cnee_add,         # Consignee_Add
+                mat,              # Material
+                n_wt,             # Weight
+                c_wt,             # Charge Weight
+                v_no,             # Vehicle
+                sel_driver,       # Driver
+                br_name,          # Broker
+                fl,               # From
+                tl,               # To
+                fr_amt,           # Freight
+                (hc if v_cat == "Market Hired" else 0.0), # HiredCharges
+                dsl,              # Diesel
+                drv,              # DriverExp
+                toll,             # Toll
+                0,                # Other
+                prof              # Profit
+            ]
                 
                 if save("trips", row):
                     # 2. AGAR NEW PARTY/CONSIGNOR HAI TO MASTER MEIN SAVE KARO
