@@ -565,7 +565,7 @@ elif menu == "2. LR Entry":
                 "",               # Consignor_Add (Ab error nahi aayega)
                 cnee_name,        # Consignee
                 cnee_gst,         # Consignee_GST
-                cnee_add,         # Consignee_Add
+                "",               # Consignee_Add
                 mat,              # Material
                 n_wt,             # Weight
                 c_wt,             # Charge Weight
