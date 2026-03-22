@@ -555,7 +555,33 @@ elif menu == "2. LR Entry":
                 br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
                 
                 prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
-                row = [str(d), lr_no, v_cat, bill_pty, cnor_name, paid_by, n_wt, c_wt, pkg, risk, mat, ins_by, v_no, sel_driver, br_name, fl, tl, fr_amt, (hc if v_cat == "Market Hired" else 0.0), dsl, drv, toll, 0, prof]
+                row = [
+                    str(d),           # Date
+                    lr_no,            # LR No
+                    v_cat,            # Type (Own/Market)
+                    bill_pty,         # Party
+                    cnor_name,        # Consignor
+                    cnor_gst,         # Consignor_GST
+                    cnor_add,         # Consignor_Add (Blank for now)
+                    cnee_name,        # Consignee
+                    cnee_gst,         # Consignee_GST
+                    ship_to,          # Consignee_Add (Delivery Address)
+                    mat,              # Material
+                    n_wt,             # Weight (Net)
+                    c_wt,             # Chg_Weight (Naya column)
+                    v_no,             # Vehicle
+                    sel_driver,       # Driver
+                    br_name,          # Broker
+                    fl,               # From
+                    tl,               # To
+                    fr_amt,           # Freight
+                    (hc if v_cat == "Market Hired" else 0.0), # HiredCharges
+                    dsl,              # Diesel
+                    drv,              # DriverExp
+                    toll,             # Toll
+                    0,                # Other
+                    prof              # Profit
+                ]
                 
                 if save("trips", row):
                     # 2. AGAR NEW PARTY/CONSIGNOR HAI TO MASTER MEIN SAVE KARO
