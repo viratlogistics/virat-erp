@@ -562,7 +562,7 @@ elif menu == "2. LR Entry":
                     bill_pty,         # Party
                     cnor_name,        # Consignor
                     cnor_gst,         # Consignor_GST
-                    cnor_add,         # Consignor_Add (Blank for now)
+                    cnor_add,         # Consignor_Add
                     cnee_name,        # Consignee
                     cnee_gst,         # Consignee_GST
                     ship_to,          # Consignee_Add (Delivery Address)
