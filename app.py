@@ -562,7 +562,7 @@ elif menu == "2. LR Entry":
                 bill_pty,         # Party
                 cnor_name,        # Consignor
                 cnor_gst,         # Consignor_GST
-                ""                # Consignor_Add (Ab error nahi aayega)
+                "",               # Consignor_Add (Ab error nahi aayega)
                 cnee_name,        # Consignee
                 cnee_gst,         # Consignee_GST
                 cnee_add,         # Consignee_Add
