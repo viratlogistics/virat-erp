@@ -210,63 +210,59 @@ if 'pdf_ready' not in st.session_state: st.session_state.pdf_ready = None
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Virat Logistics ERP", layout="wide", initial_sidebar_state="collapsed")
 
-# CSS for BIG FONTS and ATTRACTIVE LOOK
+# CSS for Professional Look
 st.markdown("""
     <style>
-        [data-testid="stSidebar"] {display: none;}
-        .stMain {margin-top: -70px;}
-        
-        /* Menu ka font bada aur bold karne ke liye */
-        .nav-link {
-            font-size: 16px !important; 
-            font-weight: 700 !important; 
-            text-transform: uppercase !important;
-            border-radius: 0px !important;
-            padding: 10px !important;
+        /* Sidebar width settings */
+        [data-testid="stSidebar"] {
+            background-color: #0e1117;
+            min-width: 250px;
+            max-width: 250px;
         }
         
-        /* Heading attractive banane ke liye */
-        h2, h3 {
+        /* Main content area */
+        .stMain {
+            padding-top: 20px;
+        }
+
+        /* Metric design update */
+        [data-testid="stMetricValue"] {
+            font-size: 28px !important;
             color: #00d4ff !important;
-            font-weight: 800;
-            letter-spacing: 1px;
+        }
+
+        /* Titles attractive design */
+        h1, h2, h3 {
+            color: #ffffff !important;
+            font-weight: 700;
         }
     </style>
     """, unsafe_allow_html=True)
 
-# --- UPDATED TOP MENU (Attractive Colors) ---
-menu = option_menu(
-    menu_title=None, 
-    options=[
-        "0. Dashboard", "1. Masters Setup", "2. LR Entry", "3. LR Register", 
-        "4. Financials", "5. Business Insights", "6. Expense Manager", 
-        "7. Driver Khata", "8. Monthly Bill"
-    ], 
-    icons=[
-        "speedometer2", "person-gear", "file-earmark-plus", "table", 
-        "currency-rupee", "graph-up-arrow", "wallet2", "person-badge", "receipt"
-    ], 
-    default_index=0, 
-    orientation="horizontal", 
-    styles={
-        "container": {
-            "padding": "0!important", 
-            "background-color": "#0e1117", # Dark Premium Background
-            "border-bottom": "2px solid #00d4ff" # Niche ek neon line
-        },
-        "icon": {"color": "#ffaa00", "font-size": "18px"}, # Icons thode bade aur orange
-        "nav-link": {
-            "color": "white",
-            "text-align": "center", 
-            "margin":"0px",
-            "--hover-color": "#262730"
-        },
-        "nav-link-selected": {
-            "background-color": "#00d4ff", # Cyan color selection
-            "color": "black" # Text black taaki uthkar dikhe
-        },
-    }
-)
+# --- UPDATED SIDEBAR MENU (Professional & Clean) ---
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/4090/4090434.png", width=80) # Ek transport icon
+    st.title("VIRAT LOGISTICS")
+    menu = option_menu(
+        menu_title="Main Menu", 
+        options=[
+            "0. Dashboard", "1. Masters Setup", "2. LR Entry", "3. LR Register", 
+            "4. Financials", "5. Business Insights", "6. Expense Manager", 
+            "7. Driver Khata", "8. Monthly Bill"
+        ], 
+        icons=[
+            "speedometer2", "person-gear", "file-earmark-plus", "table", 
+            "currency-rupee", "graph-up-arrow", "wallet2", "person-badge", "receipt"
+        ], 
+        default_index=0,
+        styles={
+            "container": {"padding": "5!important", "background-color": "#0e1117"},
+            "icon": {"color": "#00d4ff", "font-size": "20px"}, 
+            "nav-link": {"font-size": "14px", "text-align": "left", "margin":"5px", "color": "white"},
+            "nav-link-selected": {"background-color": "#00d4ff", "color": "black", "font-weight": "bold"},
+        }
+    )
+    st.info(f"F.Y. 2026-27 | Active")
 def gl(t): 
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist()) if not df_m.empty else []
 def gl(t): 
