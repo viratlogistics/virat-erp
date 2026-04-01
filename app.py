@@ -421,20 +421,6 @@ if menu == "1. Masters Setup":
         # Default empty values
         name, gst, addr, cont, ac, ifsc, d_name, d_no = "", "", "", "", "", "", "", ""
 
-        # --- Masters Setup Section Mein Change ---
-elif m_type == "Opening Balance":
-    with col1:
-        name = st.selectbox("Select Account", all_accs) # all_accs global list
-    with col2:
-        op_bal = st.number_input("Opening Balance Amount (₹)", help="+ for Receivable, - for Payable")
-        op_date = st.date_input("As of Date", date(2026, 4, 1))
-
-    if st.form_submit_button("Save Opening Balance"):
-        # Type 'OP_BAL' use karenge calculation ke liye
-        new_row = ["OP_BAL", name, "", "", "", "", "", str(op_bal), str(op_date)]
-        if save("masters", new_row):
-            st.success("Opening Balance Saved!"); st.rerun()
-
         if m_type == "Branch (Company)":
             with col1:
                 name = st.text_input("Branch Name (e.g. Virat Kim)")
