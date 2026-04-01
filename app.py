@@ -723,30 +723,24 @@ elif menu == "4. Financials":
         if sel_a != "Select":
             ledger_entries = []
             
-            # --- 1. TRIP DATA SE ENTRIES (DEBIT & CREDIT DONO CHECK KAREIN) ---
-            if not df_t.empty:
-                # Agar woh hamari PARTY hai (Humein freight DENA hai - Debit)
-                p_trips = df_t[df_t['Party'] == sel_a]
-                for _, r in p_trips.iterrows():
+            # --- 1. SABSE PEHLE OPENING BALANCE (Masters se) ---
+            if not df_m.empty:
+                # 'OP_BAL' type aur wahi account name dhoondhein
+                op_entry = df_m[(df_m['Type'] == 'OP_BAL') & (df_m['Name'] == sel_a)]
+                if not op_entry.empty:
+                    # Humne Amount column 7 (8th index) mein rakha tha
+                    val = pd.to_numeric(op_entry.iloc[0, 7], errors='coerce')
+                    op_dt = op_entry.iloc[0, 8]
                     ledger_entries.append({
-                        'Date': r.get('Date', date.today()), 
-                        'Particulars': f"LR: {r.get('LR No','--')} (Freight Bill)", 
-                        'Debit': pd.to_numeric(r.get('Freight', 0), errors='coerce'), 
-                        'Credit': 0
-                    })
-                
-                # Agar woh hamara BROKER hai (Humein usko hired charges DENA hai - Credit)
-                b_trips = df_t[df_t['Broker'] == sel_a]
-                for _, r in b_trips.iterrows():
-                    ledger_entries.append({
-                        'Date': r.get('Date', date.today()), 
-                        'Particulars': f"LR: {r.get('LR No','--')} (Hired Charges)", 
-                        'Debit': 0, 
-                        'Credit': pd.to_numeric(r.get('HiredCharges', 0), errors='coerce')
+                        'Date': op_dt, 
+                        'Particulars': '💰 OPENING BALANCE (F.Y. 2026-27)', 
+                        'Debit': val if val > 0 else 0, 
+                        'Credit': abs(val) if val < 0 else 0
                     })
 
-            # --- 2. PAYMENT DATA SE ENTRIES (RECEIPT & PAYMENT) ---
-            if not df_p.empty:
+            # --- 2. TRIP DATA SE ENTRIES (Debit & Credit) ---
+            if not df_t.empty:
+                # ... (Baki ka wahi purana logic jo aapke code mein pehle se hai) ...
                 # Column name check (Account_Name ya Account)
                 acc_col = next((c for c in df_p.columns if any(x in c.lower() for x in ['account', 'name'])), 'Account_Name')
                 p_entries = df_p[df_p[acc_col] == sel_a]
