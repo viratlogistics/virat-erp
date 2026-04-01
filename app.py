@@ -413,7 +413,7 @@ if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
     # 1. Category Selection
-    m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver"])
+    m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver" ,"Opening Balance"])
     
     with st.form("m_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
@@ -447,6 +447,27 @@ if menu == "1. Masters Setup":
 
         elif m_type == "Vehicle":
             name = st.text_input("Vehicle Number (e.g. GJ05BX1234)")
+
+        elif m_type == "Opening Balance":
+            with col1:
+                # Sabhi accounts ki list (Party + Broker + Driver)
+                all_accs = sorted(gl("Party") + gl("Broker") + gl("Driver"))
+                name = st.selectbox("Select Account", ["Select"] + all_accs)
+            with col2:
+                # Agar paisa lena hai toh positive (+), dena hai toh negative (-)
+                op_bal = st.number_input("Opening Balance (₹)", help="Paisa Lena hai (+) | Paisa Dena hai (-)")
+                op_date = st.date_input("F.Y. Start Date", date(2026, 4, 1))
+
+            # Manual override for save logic specifically for Opening Balance
+            if st.form_submit_button("Save Opening Balance"):
+                if name != "Select":
+                    # Order: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name(Amount), Driver_No(Date)
+                    # Hum Driver_Name aur Driver_No wale column ko temporary balance aur date ke liye use kar rahe hain
+                    new_row = ["OP_BAL", name, "", "", "", "", "", str(op_bal), str(op_date)]
+                    if save("masters", new_row):
+                        st.success(f"Opening Balance for {name} Saved!"); st.rerun()
+                else:
+                    st.error("Please select an account!")
 
         # Save Button
         if st.form_submit_button(f"Save {m_type}"):
