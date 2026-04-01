@@ -307,7 +307,16 @@ if menu == "0. Dashboard":
     df_p_f = filter_data(df_p)
     df_oe_f = filter_data(df_oe)
 
-    # --- 3. CASH FLOW CALCULATION (Using df_p_f) ---
+    # --- 3. CASH FLOW CALCULATION ---
+    
+    # A. Pehle Masters se "OP_BAL" (Opening Balance) uthao
+    total_opening_bal = 0
+    if not df_m.empty:
+        # Humne 'OP_BAL' type rakha tha aur Amount column index 7 par hai
+        op_df = df_m[df_m['Type'] == 'OP_BAL']
+        if not op_df.empty:
+            total_opening_bal = pd.to_numeric(op_df.iloc[:, 7], errors='coerce').fillna(0).sum()
+
     cash_in = 0
     payments_out = 0
     if not df_p_f.empty:
@@ -317,44 +326,21 @@ if menu == "0. Dashboard":
         cash_in = df_p_f[df_p_f[type_col_p].str.contains('Receipt|In', case=False, na=False)][amt_col_p].sum()
         payments_out = df_p_f[df_p_f[type_col_p].str.contains('Payment|Out', case=False, na=False)][amt_col_p].sum()
 
-    # Own Fleet Cash Out (Using df_t_f)
-    own_cash_out = 0
-    if not df_t_f.empty:
-        type_col_t = next((c for c in df_t_f.columns if 'type' in c.lower()), 'Type')
-        df_own = df_t_f[df_t_f[type_col_t].str.contains('Own', case=False, na=False)].copy()
-        c_cols = [c for c in df_t_f.columns if any(x in c.lower() for x in ['diesel', 'toll', 'adv', 'driverexp'])]
-        for c in c_cols: df_own[c] = pd.to_numeric(df_own[c], errors='coerce').fillna(0)
-        own_cash_out = df_own[c_cols].sum().sum()
+    # ... (Own Fleet aur Office Expense wala purana code rehne dein) ...
 
-    # Office Expense (Using df_oe_f)
-    office_cash_out = 0
-    if not df_oe_f.empty:
-        amt_col_oe = next((c for c in df_oe_f.columns if 'amount' in c.lower()), 'Amount')
-        office_cash_out = pd.to_numeric(df_oe_f[amt_col_oe], errors='coerce').fillna(0).sum()
-
+    # B. Final Calculation mein Opening Balance Jodein
     total_actual_cash_out = payments_out + own_cash_out + office_cash_out
-    cash_hand_balance = cash_in - total_actual_cash_out
+    
+    # Formula: (Purana Paisa + Naya Aaya) - Jo Kharch Hua
+    cash_hand_balance = (total_opening_bal + cash_in) - total_actual_cash_out
 
-    # --- 4. PROFIT CALCULATION (Using df_t_f) ---
-    rev_col = next((c for c in df_t_f.columns if any(x in c.lower() for x in ['freight', 'revenue'])), 'Freight')
-    if not df_t_f.empty:
-        df_t_f[rev_col] = pd.to_numeric(df_t_f[rev_col], errors='coerce').fillna(0)
-        total_rev = df_t_f[rev_col].sum()
-        trip_exp_cols = [c for c in df_t_f.columns if any(x in c.lower() for x in ['hired', 'diesel', 'toll', 'adv', 'driverexp', 'other'])]
-        for c in trip_exp_cols: df_t_f[c] = pd.to_numeric(df_t_f[c], errors='coerce').fillna(0)
-        total_trip_cost = df_t_f[trip_exp_cols].sum().sum()
-        net_profit = total_rev - (total_trip_cost + office_cash_out)
-    else:
-        total_rev = net_profit = 0
-
-    # Display Metrics
+    # --- 4. DISPLAY METRICS ---
     st.subheader(f"📌 Financial Summary: {selected_fy}")
     r1, r2, r3, r4 = st.columns(4)
-    r1.metric("Cash In (Receipts)", f"₹{cash_in:,.0f}")
-    r2.metric("Cash Out (Actual)", f"₹{total_actual_cash_out:,.0f}", delta_color="inverse")
+    r1.metric("Opening Balance", f"₹{total_opening_bal:,.0f}") # Naya Metric
+    r2.metric("Cash In (Receipts)", f"₹{cash_in:,.0f}")
     r3.metric("Bank/Hand Balance", f"₹{cash_hand_balance:,.0f}")
     r4.metric("Net Business Profit", f"₹{net_profit:,.0f}")
-
     st.divider()
 
     # --- 5. CHARTS ---
