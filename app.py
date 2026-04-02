@@ -377,16 +377,25 @@ if menu == "0. Dashboard":
 
     st.divider()
 
-    # --- 5. CHARTS ---
+    # --- 5. CHARTS (Updated for Visibility) ---
     col_a, col_b = st.columns(2)
+    
     with col_a:
         st.subheader("💰 Cash Flow Breakdown")
-        cf_data = pd.DataFrame({
-            'Category': ['Opening Bank', 'Current Receipts', 'Total Expenses'], 
-            'Amount': [total_opening_cash, cash_in, (cash_out + trip_outflow)]
-        })
-        fig_pie = px.pie(cf_data, values='Amount', names='Category', hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
-        st.plotly_chart(fig_pie, use_container_width=True)
+        if total_opening_cash > 0 or cash_in > 0:
+            cf_data = pd.DataFrame({
+                'Category': ['Opening Bank', 'Current Receipts', 'Total Expenses'], 
+                'Amount': [total_opening_cash, cash_in, (cash_out + trip_outflow)]
+            })
+            # Color sequence update for better visibility
+            fig_pie = px.pie(cf_data, values='Amount', names='Category', hole=0.4, 
+                             color_discrete_sequence=px.colors.qualitative.Bold)
+            
+            # Chart text color force to Black/White based on theme
+            fig_pie.update_layout(showlegend=True, legend_font_color="#00d4ff")
+            st.plotly_chart(fig_pie, use_container_width=True)
+        else:
+            st.info("No Cash Flow data to display.")
     
     with col_b:
         st.subheader("🚛 Own Vehicle Income")
@@ -394,18 +403,29 @@ if menu == "0. Dashboard":
             df_v = df_tf[df_tf['Type'].str.contains('Own', case=False, na=False)]
             if not df_v.empty:
                 v_perf = df_v.groupby('Vehicle')['Freight'].sum().reset_index()
-                fig_bar = px.bar(v_perf, x='Vehicle', y='Freight', text_auto='.2s', color='Freight', color_continuous_scale='Viridis')
+                # Bar chart with neon blue color and labels
+                fig_bar = px.bar(v_perf, x='Vehicle', y='Freight', text_auto='.2s', 
+                                 color_discrete_sequence=['#00d4ff'])
+                
+                # Layout updates for better visibility
+                fig_bar.update_traces(textfont_size=12, textangle=0, textposition="outside", cliponaxis=False)
+                fig_bar.update_layout(
+                    xaxis_title="Vehicle Number",
+                    yaxis_title="Total Freight (₹)",
+                    font=dict(color="#ffffff") # Forced white text for dark theme
+                )
                 st.plotly_chart(fig_bar, use_container_width=True)
-            else: st.info("No Own Vehicle Data")
+            else:
+                st.info("No Own Vehicle trips found for this FY.")
+        else:
+            st.info("No trip data found.")
 
-    # --- 6. RECEIVABLES TABLE ---
+    # --- 6. RECEIVABLES TABLE (Styled for Visibility) ---
     st.divider()
     st.subheader("⏳ Party-wise Pending Balance")
     if not df_tf.empty or op_party_receivable > 0:
-        # Purana data aur naya data combine karke table banayenge
         p_due = df_tf.groupby('Party')['Freight'].sum().reset_index() if not df_tf.empty else pd.DataFrame(columns=['Party', 'Freight'])
         
-        # Opening balance ko bhi add karein table mein
         if not op_entries.empty:
             party_op_list = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)][['Account_Name', 'Amount']]
             party_op_list.columns = ['Party', 'Opening']
@@ -421,9 +441,11 @@ if menu == "0. Dashboard":
         final_due['Pending'] = final_due['Total_Billed'] - final_due['Received']
         
         display_due = final_due[final_due['Pending'] > 1].sort_values('Pending', ascending=False)
+        
+        # Table Styling for better font visibility
         st.dataframe(display_due[['Party', 'Total_Billed', 'Received', 'Pending']].style.format({
             "Total_Billed": "₹{:,.0f}", "Received": "₹{:,.0f}", "Pending": "₹{:,.0f}"
-        }), use_container_width=True)
+        }).set_properties(**{'color': '#00d4ff', 'font-weight': 'bold'}), use_container_width=True)
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
