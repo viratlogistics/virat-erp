@@ -792,15 +792,17 @@ elif menu == "4. Financials":
             
             if st.form_submit_button("💾 Save Transaction"):
                 if acc != "Select" and p_a > 0:
-                    # Final Amount logic: Payable hai toh minus (-) laga do
-                    final_amount = p_a
-                    if p_t == "Opening Balance" and p_side == "Payable (Dena Hai)":
-                        final_amount = -p_a
+                    # --- YAHAN CHANGE HAI ---
+                    # 1. Negative logic for Payable
+                    final_val = -float(p_a) if (p_t == "Opening Balance" and p_side == "Payable (Dena Hai)") else float(p_a)
                     
+                    # 2. Save logic (Ensuring it's a number, not text)
                     entry_type = "OP_BAL" if p_t == "Opening Balance" else p_t
                     
-                    if save("payments", [str(p_d), acc, entry_type, final_amount, p_m, p_r]): 
-                        st.success(f"✅ Saved! Amount: ₹{final_amount}"); st.rerun()
+                    # 'final_val' ko as a float (number) bhej rahe hain
+                    if save("payments", [str(p_d), acc, entry_type, final_val, p_m, p_r]): 
+                        st.success(f"✅ Saved! Amount: {final_val}")
+                        st.rerun()
                 else:
                     st.error("Please select Account and enter Amount!")
 
