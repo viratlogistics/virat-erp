@@ -568,7 +568,9 @@ elif menu == "2. LR Entry":
     
     with cp1:
         sel_br = st.selectbox("Select Branch*", ["Select"] + gl("Branch"), key=f"br_{k}")
-        br_code = df_m[df_m['Name'] == sel_br].iloc[0].get('GST', '01') if sel_br != "Select" else "01"
+        br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
+        br_code = br_info.get('GST', '01') if sel_br != "Select" else "01"
+        
         v_cat = st.radio("Trip Type*", ["Own Fleet", "Market Hired"], horizontal=True, key=f"vcat_{k}")
         lr_mode = st.radio("LR No Mode", ["Auto", "Manual"], horizontal=True, key=f"lrmode_{k}")
         lr_no_auto = f"VIL/26-27/{br_code}/{len(df_t)+1:03d}"
@@ -577,35 +579,22 @@ elif menu == "2. LR Entry":
 
     with cp2:
         is_np = st.checkbox("New Party?", key=f"isnp_{k}")
-        if is_np:
-            bill_pty = st.text_input("Enter New Party Name*", key=f"np_{k}")
-        else:
-            # gl("Party") ab humne global function mein update kar diya hai 
-            # ki wo Broker + Party dono dikhaye
-            bill_pty = st.selectbox("Billing Party*", ["Select"] + gl("Party"), key=f"bp_{k}")
+        bill_pty = st.text_input("Enter New Party Name*", key=f"np_{k}") if is_np else st.selectbox("Billing Party*", ["Select"] + gl("Party"), key=f"bp_{k}")
 
         is_nc = st.checkbox("New Consignor?", key=f"isnc_{k}")
-        if is_nc:
-            cnor_name = st.text_input("Enter New Consignor Name*", key=f"nc_{k}")
-        else:
-            # Yahan bhi combined list aayegi
-            cnor_name = st.selectbox("Consignor Name*", ["Select"] + gl("Party"), key=f"cnor_{k}")
+        cnor_name = st.text_input("Enter New Consignor Name*", key=f"nc_{k}") if is_nc else st.selectbox("Consignor Name*", ["Select"] + gl("Party"), key=f"cnor_{k}")
             
         cnor_gst = st.text_input("Consignor GST", key=f"cgst_{k}")
         ins_by = st.selectbox("Insurance Paid By*", ["N/A", "Consignor", "Consignee", "Transporter"], key=f"ins_{k}")
 
     with cp3:
-        # Consignee dropdown mein bhi aksar wahi log hote hain, 
-        # isliye yahan bhi dropdown dena better hai
         is_nee = st.checkbox("New Consignee?", key=f"isnee_{k}")
-        if is_nee:
-            cnee_name = st.text_input("Consignee Name*", key=f"cnee_{k}")
-        else:
-            cnee_name = st.selectbox("Consignee Name*", ["Select"] + gl("Party"), key=f"cneesel_{k}")
+        cnee_name = st.text_input("Consignee Name*", key=f"cnee_{k}") if is_nee else st.selectbox("Consignee Name*", ["Select"] + gl("Party"), key=f"cneesel_{k}")
             
         cnee_gst = st.text_input("Consignee GST", key=f"cngst_{k}")
         paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pby_{k}")
         sel_bank = st.selectbox("Select Bank*", ["Select"] + gl("Bank"), key=f"bank_{k}")
+
     with st.form(f"lr_form_{k}"):
         st.markdown("---")
         c1, c2, c3 = st.columns(3)
@@ -615,8 +604,7 @@ elif menu == "2. LR Entry":
             v_no = st.selectbox("Vehicle No*", ["Select"] + v_list) if v_cat == "Own Fleet" else st.text_input("Market Vehicle No*")
             
             if v_cat == "Own Fleet":
-                d_list = gl("Driver")
-                sel_driver = st.selectbox("Driver Name*", ["Select"] + d_list)
+                sel_driver = st.selectbox("Driver Name*", ["Select"] + gl("Driver"))
                 br_name = "OWN"
             else:
                 sel_driver = "Market Driver"
@@ -633,76 +621,47 @@ elif menu == "2. LR Entry":
             n_wt, c_wt = st.number_input("Net Wt", min_value=0.0), st.number_input("Chg Wt", min_value=0.0)
             fr_amt = st.number_input("Total Freight*", min_value=0.0)
             show_fr = st.checkbox("Show Freight in PDF?", value=True)
-            if v_cat == "Own Fleet": 
-                dsl, toll, drv = st.number_input("Diesel"), st.number_input("Toll"), st.number_input("Driver Adv")
-                hc = 0.0
-            else: 
-                hc = st.number_input("Hired Charges")
+            
+            # --- UPDATED LOGIC HERE ---
+            if v_cat == "Market Hired": 
+                hc = st.number_input("Hired Charges (Market Bhada)", min_value=0.0)
                 dsl = toll = drv = 0.0
+            else: 
+                # Own Fleet ke liye inputs hata diye, Dashboard Cash & Bank se uthayega
+                st.info("💡 Own Fleet expenses will be tracked via 'Cash & Bank' menu.")
+                hc = dsl = toll = drv = 0.0
 
-        # --- YE FORM KA END HAI ---
         if st.form_submit_button("🚀 SAVE LR"):
             if bill_pty and bill_pty != "Select" and fr_amt > 0:
-                # 1. Branch Master se sara data fetch karna
-                br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
+                # Profit Calculation Logic
+                # Market Hired: Freight - Hired Charges
+                # Own Fleet: Filhal Freight (Baad mein Payments minus honge Dashboard par)
+                prof = (fr_amt - hc) if v_cat == "Market Hired" else fr_amt
                 
-                prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
                 row = [
-                str(d),           # Date
-                lr_no,            # LR No
-                v_cat,            # Type
-                bill_pty,         # Party
-                cnor_name,        # Consignor
-                cnor_gst,         # Consignor_GST
-                "",               # Consignor_Add (Ab error nahi aayega)
-                cnee_name,        # Consignee
-                cnee_gst,         # Consignee_GST
-                "",               # Consignee_Add
-                mat,              # Material
-                n_wt,             # Weight
-                c_wt,             # Charge Weight
-                v_no,             # Vehicle
-                sel_driver,       # Driver
-                br_name,          # Broker
-                fl,               # From
-                tl,               # To
-                fr_amt,           # Freight
-                (hc if v_cat == "Market Hired" else 0.0), # HiredCharges
-                dsl,              # Diesel
-                drv,              # DriverExp
-                toll,             # Toll
-                0,                # Other
-                prof              # Profit
-            ]
+                    str(d), lr_no, v_cat, bill_pty, cnor_name, cnor_gst, "", 
+                    cnee_name, cnee_gst, "", mat, n_wt, c_wt, v_no, 
+                    sel_driver, br_name, fl, tl, fr_amt, hc, dsl, drv, toll, 0, prof
+                ]
                 
                 if save("trips", row):
-                    # 2. AGAR NEW PARTY/CONSIGNOR HAI TO MASTER MEIN SAVE KARO
-                    if is_np and bill_pty not in gl("Party"):
-                        save("masters", ["Party", bill_pty])
-                    if is_nc and cnor_name not in gl("Consignor"):
-                        save("masters", ["Consignor", cnor_name])
+                    if is_np and bill_pty not in gl("Party"): save("masters", ["Party", bill_pty])
+                    if is_nc and cnor_name not in gl("Consignor"): save("masters", ["Consignor", cnor_name])
 
-                    # 3. PDF ke liye Branch/Company ka sara data bundle karna
                     st.session_state.pdf_ready = {
-                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
-                        "Cnor": cnor_name, "CnorGST": cnor_gst, 
-                        "Cnee": cnee_name, "CneeGST": cnee_gst, 
-                        "BillP": bill_pty, "From": fl, "To": tl, 
-                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, 
-                        "Freight": fr_amt, "PaidBy": paid_by, "Risk": risk, 
-                        "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr, "InsBy": ins_by,
-                        "BranchName": sel_br,
-                        "BranchGST": br_info.get('GST', 'N/A'),
-                        "BranchAddr": br_info.get('Address', 'N/A'),
-                        "BankName": br_info.get('Name', 'N/A'),
-                        "BankAC": br_info.get('A_C_No', 'N/A'),
-                        "BankIFSC": br_info.get('IFSC', 'N/A')
+                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, "Cnor": cnor_name, "CnorGST": cnor_gst, 
+                        "Cnee": cnee_name, "CneeGST": cnee_gst, "BillP": bill_pty, "From": fl, "To": tl, 
+                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, "Freight": fr_amt, 
+                        "PaidBy": paid_by, "Risk": risk, "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr, 
+                        "InsBy": ins_by, "BranchName": sel_br, "BranchGST": br_info.get('GST', 'N/A'), 
+                        "BranchAddr": br_info.get('Address', 'N/A'), "BankName": br_info.get('Name', 'N/A'), 
+                        "BankAC": br_info.get('A_C_No', 'N/A'), "BankIFSC": br_info.get('IFSC', 'N/A')
                     }
-                    st.success("LR Saved and Masters Updated!")
+                    st.success("LR Saved Successfully!")
                     st.rerun()
             else:
                 st.error("Please fill Party Name and Freight!")
-    # --- YE LINE FORM KE BAHAR (LEFT MARGIN SE MATCH KAREIN) ---
+
     if st.session_state.pdf_ready:
         st.divider()
         st.download_button("📥 DOWNLOAD LR PDF", generate_lr_pdf(st.session_state.pdf_ready, st.session_state.pdf_ready.get('show_fr', True)), f"LR_{st.session_state.pdf_ready['LR No']}.pdf")    
