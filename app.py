@@ -113,7 +113,7 @@ def generate_lr_pdf(lr_data, show_fr=True):
     # Bottom Bank & T&C
     pdf.set_y(-55)
     pdf.set_font("Arial", 'B', 9)
-    pdf.cell(100, 5, "PAYMENT BANK DETAILS:", 0, 0, 'L')
+    pdf.cell(100, 5, "PAYMENT Bank DETAILS:", 0, 0, 'L')
     pdf.cell(90, 5, f"FOR {lr_data.get('BranchName', 'VIRAT LOGISTICS')}", 0, 1, 'R')
     
     pdf.set_font("Arial", '', 8)
@@ -178,21 +178,21 @@ def generate_invoice_pdf(inv_data):
     pdf.cell(40, 10, f"Rs. {inv_data['Total']}", 1, 1, 'R')
     pdf.ln(10)
 
-    # --- BANK DETAILS SECTION (Multi-line Logic) ---
+    # --- Bank DETAILS SECTION (Multi-line Logic) ---
     b_name = inv_data.get('BankName', 'N/A')
     b_acc = inv_data.get('BankAC', 'N/A')
     b_ifsc = inv_data.get('BankIFSC', 'N/A')
     
-    y_bank = pdf.get_y()
+    y_Bank = pdf.get_y()
     pdf.set_font("Arial", 'B', 9)
-    pdf.set_xy(10, y_bank)
-    bank_text = f"Bank Name: {b_name}\nA/C No: {b_acc}\nIFSC Code: {b_ifsc}"
-    pdf.multi_cell(100, 5, bank_text, 1, 'L') 
+    pdf.set_xy(10, y_Bank)
+    Bank_text = f"Bank Name: {b_name}\nA/C No: {b_acc}\nIFSC Code: {b_ifsc}"
+    pdf.multi_cell(100, 5, Bank_text, 1, 'L') 
     y_end = pdf.get_y()
 
     # Right Box: Signatory
-    pdf.set_xy(110, y_bank)
-    pdf.cell(90, (y_end - y_bank), "For Virat Logistics (Auth. Signatory)", 1, 1, 'C')
+    pdf.set_xy(110, y_Bank)
+    pdf.cell(90, (y_end - y_Bank), "For Virat Logistics (Auth. Signatory)", 1, 1, 'C')
 
     # Final Return (Encoding Fix)
     try:
@@ -343,10 +343,10 @@ if menu == "0. Dashboard":
         # Opening Balances
         op_entries = df_p[df_p['Type'] == 'OP_BAL']
         if not op_entries.empty:
-            cash_bank_op = op_entries[op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
-            total_opening_cash = cash_bank_op['Amount'].sum()
+            cash_Bank_op = op_entries[op_entries['Account_Name'].str.contains('Bank|CASH', case=False, na=False)]
+            total_opening_cash = cash_Bank_op['Amount'].sum()
             
-            other_op = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
+            other_op = op_entries[~op_entries['Account_Name'].str.contains('Bank|CASH', case=False, na=False)]
             for _, r in other_op.iterrows():
                 val = pd.to_numeric(r['Amount'], errors='coerce')
                 if val < 0: total_op_payable += abs(val)
@@ -403,7 +403,7 @@ if menu == "0. Dashboard":
     if not df_tf.empty or total_op_receivable > 0:
         p_due = df_tf.groupby('Party')['Freight'].sum().reset_index() if not df_tf.empty else pd.DataFrame(columns=['Party', 'Freight'])
         if not op_entries.empty:
-            party_op_list = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)][['Account_Name', 'Amount']]
+            party_op_list = op_entries[~op_entries['Account_Name'].str.contains('Bank|CASH', case=False, na=False)][['Account_Name', 'Amount']]
             party_op_list.columns = ['Party', 'Opening_Bal']
             p_due = pd.merge(p_due, party_op_list, on='Party', how='outer').fillna(0)
         else: p_due['Opening_Bal'] = 0
@@ -423,7 +423,7 @@ if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
     # 1. Category Selection
-    m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver", "BANK"])
+    m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver", "Bank"])
     
     with st.form("m_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
@@ -458,15 +458,15 @@ if menu == "1. Masters Setup":
         elif m_type == "Vehicle":
             name = st.text_input("Vehicle Number (e.g. GJ05BX1234)")
 
-        if m_type == "BANK":
+        if m_type == "Bank":
             with col1:
-                name = st.text_input("BANK Name (e.g. BANK OF BARODA)")
-                gst = st.text_input("BANK GST")
-                addr = st.text_area("BANK Address")
+                name = st.text_input("Bank Name (e.g. Bank OF BARODA)")
+                gst = st.text_input("Bank GST")
+                addr = st.text_area("Bank Address")
             with col2:
                 ac = st.text_input("Bank A/C No")
                 ifsc = st.text_input("Bank IFSC")
-                cont = st.text_input("BANK Contact No")
+                cont = st.text_input("Bank Contact No")
 
         # Save Button
         if st.form_submit_button(f"Save {m_type}"):
@@ -521,7 +521,7 @@ elif menu == "2. LR Entry":
             
         cnee_gst = st.text_input("Consignee GST", key=f"cngst_{k}")
         paid_by = st.selectbox("Freight Paid By*", ["Consignor", "Consignee", "Billing Party"], key=f"pby_{k}")
-        sel_bank = st.selectbox("Select Bank*", ["Select"] + gl("Bank"), key=f"bank_{k}")
+        sel_Bank = st.selectbox("Select Bank*", ["Select"] + gl("Bank"), key=f"Bank_{k}")
 
     with st.form(f"lr_form_{k}"):
         st.markdown("---")
@@ -600,7 +600,7 @@ elif menu == "3. LR Register":
         df_t.columns = [str(c).strip() for c in df_t.columns]
         
         for i, row in df_t.iterrows():
-            # 1. Branch/Bank details fetch karna (kyunki trips sheet mein bank info nahi hoti)
+            # 1. Branch/Bank details fetch karna (kyunki trips sheet mein Bank info nahi hoti)
             br_name = row.get('Branch', 'Select') 
             br_row = df_m[df_m['Name'] == br_name]
             br_info = br_row.iloc[0] if not br_row.empty else {}
@@ -1155,11 +1155,11 @@ elif menu == "9. Cash & Bank":
 
     # 2. LIVE BALANCES (Metrics)
     st.subheader("📊 Live Account Balances", divider="blue")
-    banks_list = gl("Bank")
-    cols = st.columns(len(banks_list) + 1)
+    Banks_list = gl("Bank")
+    cols = st.columns(len(Banks_list) + 1)
     cash_bal = df_p[df_p['Account_Name'].str.contains('CASH', case=False, na=False)]['Amount'].sum()
     cols[0].metric("💵 Cash in Hand", f"₹{cash_bal:,.2f}")
-    for i, b in enumerate(banks_list):
+    for i, b in enumerate(Banks_list):
         b_bal = df_p[df_p['Account_Name'] == b]['Amount'].sum()
         cols[i+1].metric(f"🏦 {b}", f"₹{b_bal:,.2f}")
 
@@ -1174,7 +1174,7 @@ elif menu == "9. Cash & Bank":
         lr_options = ["General / No LR"] + (df_t_live['LR No'].unique().tolist()[::-1] if not df_t_live.empty else [])
         all_to_options = sorted(gl("Expense") + ["Indrajit Personal", "Vishal Personal"] + gl("Driver") + gl("Broker") + gl("Party"))
 
-        with st.form("cash_bank_expense_final_v3", clear_on_submit=True):
+        with st.form("cash_Bank_expense_final_v3", clear_on_submit=True):
             f1, f2 = st.columns(2)
             with f1:
                 p_date = st.date_input("Date", date.today())
