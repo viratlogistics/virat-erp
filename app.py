@@ -1258,37 +1258,76 @@ elif menu == "8. Monthly Bill":
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
 elif menu == "9. Cash & Bank":
-    st.header("🏦 Cash & Bank Management")
+    # Main Header with a Divider
+    st.header("🏦 Cash & Bank Management", divider="rainbow")
+    
     df_p = load("payments")
     
-    # 1. CLEANING DATA (Brackets/Minus Fix)
+    # 1. DATA CLEANING (Brackets/Minus Fix)
     if not df_p.empty:
         df_p['Amount'] = df_p['Amount'].astype(str).str.replace(r'\(', '-', regex=True).str.replace(r'\)', '', regex=True).str.replace(',', '').str.replace('₹', '')
         df_p['Amount'] = pd.to_numeric(df_p['Amount'], errors='coerce').fillna(0)
 
-    # 2. BANK-WISE BALANCES (Metrics)
-    st.subheader("📊 Live Balances")
-    banks = gl("Bank") # Maan lete hain ki aapne 'Bank' category banayi hai
+    # 2. BANK BALANCES SECTION
+    # Yahan hum naya subheader style use kar rahe hain
+    st.subheader("📊 Live Account Balances", divider="blue", help="Yeh aapke saare Bank aur Cash accounts ka current balance hai.")
+    
+    banks = gl("Bank")
     cols = st.columns(len(banks) + 1)
     
     # Cash Balance
-    cash_data = df_p[df_p['Account_Name'].str.contains('CASH', case=False, na=False)]
-    cash_bal = cash_data['Amount'].sum()
-    cols[0].metric("Cash in Hand", f"₹{cash_bal:,.0f}")
+    cash_bal = df_p[df_p['Account_Name'].str.contains('CASH', case=False, na=False)]['Amount'].sum()
+    cols[0].metric("💵 Cash in Hand", f"₹{cash_bal:,.0f}")
     
-    # Bank Balances
+    # Bank Balances (Loop)
     for i, b in enumerate(banks):
-        b_data = df_p[df_p['Account_Name'] == b]
-        b_bal = b_data['Amount'].sum()
-        cols[i+1].metric(b, f"₹{b_bal:,.0f}")
+        b_bal = df_p[df_p['Account_Name'] == b]['Amount'].sum()
+        cols[i+1].metric(f"🏦 {b}", f"₹{b_bal:,.0f}")
 
     st.divider()
 
-    # 3. ADD TRANSACTION WITH BANK SELECTION (Dropbox)
-    t1, t2 = st.tabs(["💸 New Payment/Expense", "📝 Bank Statement"])
+    # 3. TRANSACTION TABS
+    t1, t2 = st.tabs(["💸 Record Payment", "📑 Bank Passbook"])
     
     with t1:
-        st.subheader
+        # Subheader with center alignment for the form
+        st.subheader("Add New Payment / Expense", text_alignment="center", divider="orange")
+        
+        with st.form("cash_flow_pro_form", clear_on_submit=True):
+            f1, f2 = st.columns(2)
+            with f1:
+                d = st.date_input("Date", date.today())
+                to_acc = st.selectbox("Pay To (Kise dena hai)*", ["Select"] + sorted(gl("Party") + gl("Broker") + gl("Expense") + gl("Driver")))
+                amt = st.number_input("Amount*", min_value=0.0)
+            
+            with f2:
+                from_acc = st.selectbox("Pay From (Konsi Bank/Cash)*", ["Select"] + sorted(gl("Bank") + ["CASH"]))
+                p_m = st.selectbox("Mode", ["NEFT", "UPI", "Cash", "Cheque"])
+                rem = st.text_input("Remarks", placeholder="e.g. Office Rent, Diesel Payment...")
+
+            # Save Button
+            if st.form_submit_button("🚀 Confirm & Save Payment"):
+                if to_acc != "Select" and from_acc != "Select" and amt > 0:
+                    # Double Entry Logic (Minus from Bank, Plus in Expense/Party)
+                    e1 = save("payments", [str(d), from_acc, "Payment (Out)", -amt, p_m, f"Paid to {to_acc} - {rem}"])
+                    e2 = save("payments", [str(d), to_acc, "Payment (Out)", amt, p_m, f"Paid from {from_acc} - {rem}"])
+                    
+                    if e1 and e2:
+                        st.success(f"✅ ₹{amt} successfully recorded from {from_acc}!")
+                        st.rerun()
+                else:
+                    st.error("⚠️ Please fill all mandatory fields!")
+
+    with t2:
+        st.subheader("Digital Passbook", divider="violet")
+        sel_bank = st.selectbox("Select Account", ["Select"] + sorted(gl("Bank") + ["CASH"]))
+        
+        if sel_bank != "Select":
+            bank_stmt = df_p[df_p['Account_Name'] == sel_bank].sort_values('Date', ascending=False)
+            if not bank_stmt.empty:
+                st.dataframe(bank_stmt[['Date', 'Type', 'Amount', 'Mode', 'Ref/Remarks']], use_container_width=True)
+            else:
+                st.info(f"No transactions found for {sel_bank}")
 
 
 
