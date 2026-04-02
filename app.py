@@ -356,12 +356,23 @@ if menu == "0. Dashboard":
 
     # --- 4. DISPLAY ---
     st.subheader(f"📌 Financial Summary: {selected_fy}")
+    
+    # Metrics display logic
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Opening Balance", f"₹{total_opening_bal:,.0f}")
-    m2.metric("Cash In (Receipts)", f"₹{cash_in:,.0f}")
-    m3.metric("Bank/Hand Balance", f"₹{cash_hand_balance:,.0f}")
-    m4.metric("Net Profit (Trip)", f"₹{net_profit:,.0f}")
-
+    
+    # 1. CASH IN (Opening Balance + Is saal ki receipts)
+    total_inflow = total_opening_bal + cash_in
+    m1.metric("Total Cash In", f"₹{total_inflow:,.0f}", delta=f"Op: ₹{total_opening_bal:,.0f}")
+    
+    # 2. CASH OUT (Total Kharcha)
+    m2.metric("Total Cash Out", f"₹{total_actual_cash_out:,.0f}", delta_color="inverse")
+    
+    # 3. CASH IN HAND (Jo bacha hai)
+    m3.metric("Cash In Hand", f"₹{cash_hand_balance:,.0f}")
+    
+    # 4. PROFIT
+    m4.metric("Net Business Profit", f"₹{net_profit:,.0f}")
+    
     # --- 5. CHARTS ---
     c1, c2 = st.columns(2)
     with c1:
