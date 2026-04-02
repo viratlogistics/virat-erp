@@ -384,32 +384,27 @@ if menu == "0. Dashboard":
         # Display only those who have pending balance
         display_due = final_due[final_due['Pending'] > 1].sort_values('Pending', ascending=False)
         st.dataframe(display_due.style.format({"Freight": "₹{:,.0f}", "Received": "₹{:,.0f}", "Pending": "₹{:,.0f}"}), use_container_width=True)
-if menu == "1. Masters Setup":
+elif menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
-    # 1. Category Selection
-    m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver" ,"Cash in hand"])
+    # 1. Category Selection (Yahan 'Bank' add kiya hai)
+    m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver", "Bank"])
     
-    with st.form("m_form", clear_on_submit=True):
+    with st.form("m_form_masters", clear_on_submit=True):
         col1, col2 = st.columns(2)
         
-        # Default empty values
-        name, gst, addr, cont, ac, ifsc, d_name, d_no = "", "", "", "", "", "", "", ""
+        # Initialize variables
+        name, gst, addr, cont, ac, ifsc, d_name, d_no = "", "", "", "", "", "", "", "", ""
 
         if m_type == "Branch (Company)":
             with col1:
-                name = st.text_input("Branch Name (e.g. Virat Kim)")
+                name = st.text_input("Branch Name")
                 gst = st.text_input("Branch GST")
                 addr = st.text_area("Branch Address")
             with col2:
                 ac = st.text_input("Bank A/C No")
                 ifsc = st.text_input("Bank IFSC")
                 cont = st.text_input("Branch Contact No")
-            
-            if st.form_submit_button("Save Branch Details"):
-                if name:
-                    new_row = [m_type, name, gst, addr, cont, ac, ifsc, "", ""]
-                    if save("masters", new_row): st.success("Branch Saved!"); st.rerun()
 
         elif m_type in ["Party", "Broker"]:
             with col1:
@@ -418,45 +413,34 @@ if menu == "1. Masters Setup":
             with col2:
                 addr = st.text_area("Full Address")
                 cont = st.text_input("Contact Number")
-            
-            if st.form_submit_button(f"Save {m_type}"):
-                if name:
-                    new_row = [m_type, name, gst, addr, cont, "", "", "", ""]
-                    if save("masters", new_row): st.success(f"{m_type} Saved!"); st.rerun()
 
         elif m_type == "Driver":
             with col1: d_name = st.text_input("Driver Full Name")
             with col2: d_no = st.text_input("License Number / Mobile")
-            
-            if st.form_submit_button("Save Driver"):
-                if d_name:
-                    new_row = [m_type, "", "", "", "", "", "", d_name, d_no]
-                    if save("masters", new_row): st.success("Driver Saved!"); st.rerun()
 
         elif m_type == "Vehicle":
             name = st.text_input("Vehicle Number (e.g. GJ05BX1234)")
-            if st.form_submit_button("Save Vehicle"):
-                if name:
-                    new_row = [m_type, name, "", "", "", "", "", "", ""]
-                    if save("masters", new_row): st.success("Vehicle Saved!"); st.rerun()
 
-        # --- Masters Setup Section ---
-elif m_type == "Bank":
-    with col1:
-        name = st.text_input("Bank Name (e.g. HDFC Virat)")
-        ac = st.text_input("Account Number")
-    with col2:
-        ifsc = st.text_input("IFSC Code")
-        branch_loc = st.text_input("Bank Branch Location")
+        # --- Naya BANK Section ---
+        elif m_type == "Bank":
+            with col1:
+                name = st.text_input("Bank Name (e.g. HDFC Virat)")
+                ac = st.text_input("Account Number")
+            with col2:
+                ifsc = st.text_input("IFSC Code")
+                addr = st.text_input("Bank Branch Location")
 
-    if st.form_submit_button("Save Bank Details"):
-        if name:
-            # Order: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name, Driver_No
-            new_row = ["Bank", name, "", branch_loc, "", ac, ifsc, "", ""]
-            if save("masters", new_row):
-                st.success(f"Bank {name} Saved!"); st.rerun()
+        # --- UNIVERSAL SAVE BUTTON ---
+        submit_m = st.form_submit_button(f"Save {m_type}")
+        
+        if submit_m:
+            if name or d_name:
+                # Order match karein: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name, Driver_No
+                new_row = [m_type, name, gst, addr, cont, ac, ifsc, d_name, d_no]
+                if save("masters", new_row):
+                    st.success(f"{m_type} Saved Successfully!"); st.rerun()
             else:
-                st.error("Please enter Name!")
+                st.error("Please enter a Name!")
 
     st.divider()
     # Display existing masters
