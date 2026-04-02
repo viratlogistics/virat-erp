@@ -315,31 +315,35 @@ if menu == "0. Dashboard":
     total_op_payable = 0
     
     if not df_p.empty:
+        # Pura 'Amount' column pehle hi numeric kar lo taaki loop mein error na aaye
+        df_p['Amount'] = pd.to_numeric(df_p['Amount'], errors='coerce').fillna(0)
+        
         op_entries = df_p[df_p['Type'] == 'OP_BAL']
+        
         if not op_entries.empty:
-            # 1. Banks ka Total (Multiple Bank Logic AS IT IS)
+            # 1. Banks ka Total (Multiple Bank Logic)
             cash_bank_op = op_entries[op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
-            total_opening_cash = pd.to_numeric(cash_bank_op['Amount'], errors='coerce').fillna(0).sum()
+            total_opening_cash = cash_bank_op['Amount'].sum()
             
             # 2. Parties & Brokers (Minus Logic)
-            # Jo Bank nahi hain, unhe filter karo
             other_op = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
             
             for _, r in other_op.iterrows():
-                amt = pd.to_numeric(r['Amount'], errors='coerce').fillna(0)
+                amt = r['Amount'] # Ab ye pehle se numeric hai
                 
                 # Agar amount minus (-) hai toh Payable (Dena hai)
                 if amt < 0:
-                    total_op_payable += abs(amt) # Minus sign hata kar Payable mein jodo
+                    total_op_payable += abs(amt) 
                 # Agar plus (+) hai toh Receivable (Lena hai)
                 else:
                     total_op_receivable += amt
 
     # --- Metrics ke liye Final Calculation ---
-    # Net Outstanding = (Lena hai - Dena hai) + (Is saal ka Freight - Mili hui Receipt)
-    # cash_in mein sirf Receipts honi chahiye (OP_BAL nahi)
     current_year_pending = (total_rev - cash_in) 
     final_net_outstanding = (total_op_receivable - total_op_payable) + current_year_pending
+    
+    # Cash in Hand ka final formula (Hamesha same rahega)
+    cash_hand_balance = (total_opening_cash + cash_in) - (cash_out + trip_outflow)
     
     # B. CURRENT YEAR CASH FLOW
     cash_in = 0; cash_out = 0
