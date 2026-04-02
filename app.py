@@ -442,6 +442,11 @@ if menu == "1. Masters Setup":
                 ac = st.text_input("Bank A/C No")
                 ifsc = st.text_input("Bank IFSC")
                 cont = st.text_input("Branch Contact No")
+            
+            if st.form_submit_button("Save Branch Details"):
+                if name:
+                    new_row = [m_type, name, gst, addr, cont, ac, ifsc, "", ""]
+                    if save("masters", new_row): st.success("Branch Saved!"); st.rerun()
 
         elif m_type in ["Party", "Broker"]:
             with col1:
@@ -450,44 +455,40 @@ if menu == "1. Masters Setup":
             with col2:
                 addr = st.text_area("Full Address")
                 cont = st.text_input("Contact Number")
+            
+            if st.form_submit_button(f"Save {m_type}"):
+                if name:
+                    new_row = [m_type, name, gst, addr, cont, "", "", "", ""]
+                    if save("masters", new_row): st.success(f"{m_type} Saved!"); st.rerun()
 
         elif m_type == "Driver":
-            with col1:
-                d_name = st.text_input("Driver Full Name")
-            with col2:
-                d_no = st.text_input("License Number / Mobile")
+            with col1: d_name = st.text_input("Driver Full Name")
+            with col2: d_no = st.text_input("License Number / Mobile")
+            
+            if st.form_submit_button("Save Driver"):
+                if d_name:
+                    new_row = [m_type, "", "", "", "", "", "", d_name, d_no]
+                    if save("masters", new_row): st.success("Driver Saved!"); st.rerun()
 
         elif m_type == "Vehicle":
             name = st.text_input("Vehicle Number (e.g. GJ05BX1234)")
+            if st.form_submit_button("Save Vehicle"):
+                if name:
+                    new_row = [m_type, name, "", "", "", "", "", "", ""]
+                    if save("masters", new_row): st.success("Vehicle Saved!"); st.rerun()
 
         elif m_type == "Opening Balance":
             with col1:
-                # Sabhi accounts ki list (Party + Broker + Driver)
                 all_accs = sorted(gl("Party") + gl("Broker") + gl("Driver"))
                 name = st.selectbox("Select Account", ["Select"] + all_accs)
             with col2:
-                # Agar paisa lena hai toh positive (+), dena hai toh negative (-)
-                op_bal = st.number_input("Opening Balance (₹)", help="Paisa Lena hai (+) | Paisa Dena hai (-)")
+                op_bal = st.number_input("Opening Balance (₹)", help="Lena hai (+) | Dena hai (-)")
                 op_date = st.date_input("F.Y. Start Date", date(2026, 4, 1))
 
-            # Manual override for save logic specifically for Opening Balance
-            if st.form_submit_button("Save Opening Balance"):
+            if st.form_submit_button("Submit Opening Balance"): # Key unique ho gayi
                 if name != "Select":
-                    # Order: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name(Amount), Driver_No(Date)
-                    # Hum Driver_Name aur Driver_No wale column ko temporary balance aur date ke liye use kar rahe hain
                     new_row = ["OP_BAL", name, "", "", "", "", "", str(op_bal), str(op_date)]
-                    if save("masters", new_row):
-                        st.success(f"Opening Balance for {name} Saved!"); st.rerun()
-                else:
-                    st.error("Please select an account!")
-
-        # Save Button
-        if st.form_submit_button(f"Save {m_type}"):
-            if name or d_name:
-                # Order: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name, Driver_No
-                new_row = [m_type, name, gst, addr, cont, ac, ifsc, d_name, d_no]
-                if save("masters", new_row):
-                    st.success(f"{m_type} Saved!"); st.rerun()
+                    if save("masters", new_row): st.success("Opening Balance Saved!"); st.rerun()
             else:
                 st.error("Please enter Name!")
 
