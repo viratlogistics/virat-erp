@@ -304,15 +304,29 @@ if menu == "0. Dashboard":
         df_oef['FY'] = df_oef['Date'].apply(get_fy)
         df_oef = df_oef[df_oef['FY'] == selected_fy]
 
-    # --- 3. CALCULATIONS ---
-    op_cash = 0
-    op_party_receivable = 0
-    if not df_m.empty:
-        op_df = df_m[df_m['Type'] == 'OP_BAL']
-        if not op_df.empty:
-            op_cash = pd.to_numeric(op_df[op_df['Name'].str.contains('CASH|BANK', case=False, na=False)].iloc[:, 7], errors='coerce').sum()
-            op_party_receivable = pd.to_numeric(op_df[~op_df['Name'].str.contains('CASH|BANK', case=False, na=False)].iloc[:, 7], errors='coerce').sum()
+    # --- 3. CALCULATIONS (Updated for Multiple Banks) ---
 
+    # A. OPENING CASH (Saari Banks ka Total)
+    total_opening_cash = 0
+    if not df_p.empty:
+        # 1. 'OP_BAL' type filter karein
+        op_entries = df_p[df_p['Type'] == 'OP_BAL']
+        
+        if not op_entries.empty:
+            # 2. Filter: Sirf wo accounts jinke naam mein BANK ya CASH hai
+            # Ye logic aapke BoB, HDFC, SBI sabko pakad lega
+            cash_bank_op = op_entries[op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
+            
+            # 3. AUTO SUM: Saare bank accounts ka total karein
+            total_opening_cash = pd.to_numeric(cash_bank_op['Amount'], errors='coerce').fillna(0).sum()
+
+    # B. RECEIVABLES (Parties ka Opening Balance)
+    op_party_receivable = 0
+    if not df_p.empty:
+        # Woh OP_BAL jo Bank/Cash nahi hain (yaani Parties hain)
+        op_party_op = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
+        op_party_receivable = pd.to_numeric(op_party_op['Amount'], errors='coerce').fillna(0).sum()
+        
     cash_in = 0; cash_out = 0
     if not df_pf.empty:
         df_pf['Amount'] = pd.to_numeric(df_pf['Amount'], errors='coerce').fillna(0)
