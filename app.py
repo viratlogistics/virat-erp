@@ -442,32 +442,47 @@ if menu == "0. Dashboard":
         else:
             st.info("No trip data found.")
 
-    # --- 6. RECEIVABLES TABLE (Styled for Visibility) ---
+    # --- 6. RECEIVABLES TABLE (Updated for Visibility & Accuracy) ---
     st.divider()
     st.subheader("⏳ Party-wise Pending Balance")
-    if not df_tf.empty or op_party_receivable > 0:
+    
+    # Check karein agar data available hai (Naya variable name use kiya hai)
+    if not df_tf.empty or total_op_receivable > 0 or total_op_payable > 0:
+        # 1. Current FY Billed Freight
         p_due = df_tf.groupby('Party')['Freight'].sum().reset_index() if not df_tf.empty else pd.DataFrame(columns=['Party', 'Freight'])
         
+        # 2. Opening Balance (Old Dues)
         if not op_entries.empty:
+            # Sirf Parties aur Brokers uthao (Bank nahi)
             party_op_list = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)][['Account_Name', 'Amount']]
-            party_op_list.columns = ['Party', 'Opening']
+            party_op_list.columns = ['Party', 'Opening_Bal']
+            # Dono ko merge karo
             p_due = pd.merge(p_due, party_op_list, on='Party', how='outer').fillna(0)
-            p_due['Total_Billed'] = p_due['Freight'] + p_due['Opening']
+            p_due['Total_Billed'] = p_due['Freight'] + p_due['Opening_Bal']
         else:
             p_due['Total_Billed'] = p_due['Freight']
+            p_due['Opening_Bal'] = 0
         
+        # 3. Total Received (Actual Receipts)
         p_rec = df_p[df_p['Type'].str.contains('Receipt', case=False, na=False)].groupby('Account_Name')['Amount'].sum().reset_index()
         p_rec.columns = ['Party', 'Received']
         
+        # Final Merge
         final_due = pd.merge(p_due, p_rec, on='Party', how='left').fillna(0)
         final_due['Pending'] = final_due['Total_Billed'] - final_due['Received']
         
-        display_due = final_due[final_due['Pending'] > 1].sort_values('Pending', ascending=False)
+        # Sirf wahi dikhao jinka balance 1 Rs se zyada hai
+        display_due = final_due[abs(final_due['Pending']) > 1].sort_values('Pending', ascending=False)
         
-        # Table Styling for better font visibility
-        st.dataframe(display_due[['Party', 'Total_Billed', 'Received', 'Pending']].style.format({
-            "Total_Billed": "₹{:,.0f}", "Received": "₹{:,.0f}", "Pending": "₹{:,.0f}"
-        }).set_properties(**{'color': '#00d4ff', 'font-weight': 'bold'}), use_container_width=True)
+        if not display_due.empty:
+            st.dataframe(display_due[['Party', 'Opening_Bal', 'Freight', 'Total_Billed', 'Received', 'Pending']].style.format({
+                "Opening_Bal": "₹{:,.0f}", "Freight": "₹{:,.0f}", "Total_Billed": "₹{:,.0f}", 
+                "Received": "₹{:,.0f}", "Pending": "₹{:,.0f}"
+            }).set_properties(**{'color': '#00d4ff', 'font-weight': 'bold'}), use_container_width=True)
+        else:
+            st.info("No pending balances found.")
+    else:
+        st.info("No transaction data available for receivables.")
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
