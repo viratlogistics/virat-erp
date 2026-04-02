@@ -384,22 +384,21 @@ if menu == "0. Dashboard":
         # Display only those who have pending balance
         display_due = final_due[final_due['Pending'] > 1].sort_values('Pending', ascending=False)
         st.dataframe(display_due.style.format({"Freight": "₹{:,.0f}", "Received": "₹{:,.0f}", "Pending": "₹{:,.0f}"}), use_container_width=True)
-elif menu == "1. Masters Setup":
+if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
     # 1. Category Selection
-    m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver", "Bank"])
+    m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver"])
     
-    # --- YAHAN SE DHYAN SE DEKHEIN ---
-    with st.form(key="m_form_new_fix"):
+    with st.form("m_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         
-        # Ye line 'with' ke thik niche sarki hui honi chahiye
-        name, gst, addr, cont, ac, ifsc, d_name, d_no = "", "", "", "", "", "", "", "", ""
+        # Default empty values
+        name, gst, addr, cont, ac, ifsc, d_name, d_no = "", "", "", "", "", "", "", ""
 
         if m_type == "Branch (Company)":
             with col1:
-                name = st.text_input("Branch Name")
+                name = st.text_input("Branch Name (e.g. Virat Kim)")
                 gst = st.text_input("Branch GST")
                 addr = st.text_area("Branch Address")
             with col2:
@@ -416,37 +415,28 @@ elif menu == "1. Masters Setup":
                 cont = st.text_input("Contact Number")
 
         elif m_type == "Driver":
-            with col1: d_name = st.text_input("Driver Full Name")
-            with col2: d_no = st.text_input("License Number / Mobile")
+            with col1:
+                d_name = st.text_input("Driver Full Name")
+            with col2:
+                d_no = st.text_input("License Number / Mobile")
 
         elif m_type == "Vehicle":
             name = st.text_input("Vehicle Number (e.g. GJ05BX1234)")
 
-        elif m_type == "Bank":
-            with col1:
-                name = st.text_input("Bank Name")
-                ac = st.text_input("Account Number")
-            with col2:
-                ifsc = st.text_input("IFSC Code")
-                addr = st.text_input("Bank Branch Location")
-
-        # --- SUBMIT BUTTON: ISKE AAGE 8 SPACES HONI CHAHIYE ---
-        submit_m = st.form_submit_button(label=f"🚀 Save {m_type}")
-        
-        if submit_m:
+        # Save Button
+        if st.form_submit_button(f"Save {m_type}"):
             if name or d_name:
-                # Sequence: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name, Driver_No
+                # Order: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name, Driver_No
                 new_row = [m_type, name, gst, addr, cont, ac, ifsc, d_name, d_no]
                 if save("masters", new_row):
-                    st.success(f"✅ {m_type} Saved Successfully!")
-                    st.rerun()
+                    st.success(f"{m_type} Saved!"); st.rerun()
             else:
-                st.error("⚠️ Please enter a Name!")
+                st.error("Please enter Name!")
 
-    # --- FORM KHATAM ---
     st.divider()
+    # Display existing masters
     if not df_m.empty:
-        st.write(f"### 📋 Current {m_type} List")
+        st.write(f"### Current {m_type} List")
         curr_m = df_m[df_m['Type'] == m_type]
         st.dataframe(curr_m.dropna(axis=1, how='all'), use_container_width=True)
 elif menu == "2. LR Entry":
