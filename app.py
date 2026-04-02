@@ -1192,7 +1192,8 @@ elif menu == "9. Cash & Bank":
 
             with f2:
                 from_acc = st.selectbox("Pay From (Bank/Cash Account)*", ["Select"] + sorted(gl("Bank") + ["CASH"]))
-                p_mode = st.selectbox("Mode", ["
+                p_mode = st.selectbox("Mode", ["Cash", "UPI", "NEFT", "Cheque", "Transfer"])
+                p_rem = st.text_input("Remarks", placeholder="Diesel, Toll, Maintenance etc.")
 
 
 
