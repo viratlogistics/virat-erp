@@ -387,13 +387,14 @@ if menu == "0. Dashboard":
 elif menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
-    # 1. Category Selection (Yahan 'Bank' add kiya hai)
+    # 1. Category Selection
     m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver", "Bank"])
     
-    with st.form("m_form_masters", clear_on_submit=True):
+    # Form shuru ho raha hai
+    with st.form("m_form_masters_final", clear_on_submit=True):
         col1, col2 = st.columns(2)
         
-        # Initialize variables
+        # Variables ko initialize karein (Indentation check karein)
         name, gst, addr, cont, ac, ifsc, d_name, d_no = "", "", "", "", "", "", "", "", ""
 
         if m_type == "Branch (Company)":
@@ -421,7 +422,6 @@ elif menu == "1. Masters Setup":
         elif m_type == "Vehicle":
             name = st.text_input("Vehicle Number (e.g. GJ05BX1234)")
 
-        # --- Naya BANK Section ---
         elif m_type == "Bank":
             with col1:
                 name = st.text_input("Bank Name (e.g. HDFC Virat)")
@@ -430,22 +430,22 @@ elif menu == "1. Masters Setup":
                 ifsc = st.text_input("IFSC Code")
                 addr = st.text_input("Bank Branch Location")
 
-        # --- UNIVERSAL SAVE BUTTON ---
-        submit_m = st.form_submit_button(f"Save {m_type}")
+        # --- YE SABSE ZAROORI HAI: Submit Button Form ke andar hona chahiye ---
+        submit_m = st.form_submit_button(f"🚀 Save {m_type}")
         
         if submit_m:
             if name or d_name:
-                # Order match karein: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name, Driver_No
+                # Sequence: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name, Driver_No
                 new_row = [m_type, name, gst, addr, cont, ac, ifsc, d_name, d_no]
                 if save("masters", new_row):
-                    st.success(f"{m_type} Saved Successfully!"); st.rerun()
+                    st.success(f"✅ {m_type} Saved Successfully!"); st.rerun()
             else:
-                st.error("Please enter a Name!")
+                st.error("⚠️ Please enter a Name!")
 
     st.divider()
-    # Display existing masters
+    # Niche ki table display logic
     if not df_m.empty:
-        st.write(f"### Current {m_type} List")
+        st.write(f"### 📋 Current {m_type} List")
         curr_m = df_m[df_m['Type'] == m_type]
         st.dataframe(curr_m.dropna(axis=1, how='all'), use_container_width=True)
 elif menu == "2. LR Entry":
