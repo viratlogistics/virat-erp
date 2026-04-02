@@ -679,29 +679,38 @@ elif menu == "4. Financials":
     all_accs = sorted(gl("Party") + gl("Broker"))
     t1, t2 = st.tabs(["💸 Add Transaction", "📖 Full Statement"])
     
-    # --- Financials -> Tab 1 (Add Transaction) Update ---
-    with t1:
-        
+   with t1:
+        # Form shuru ho raha hai, iske niche ki saari lines 4 space aage hongi
         with st.form("p_form", clear_on_submit=True):
-        f1, f2, f3 = st.columns(3)
-        with f1: 
-            p_d = st.date_input("Date", date(2026, 4, 1)) # Default 1st April
-            acc = st.selectbox("Account*", ["Select"] + all_accs)
-        with f2: 
-            # Yahan humne 'Opening Balance' add kar diya
-            p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)", "Opening Balance"])
-            p_a = st.number_input("Amount*", min_value=0.0)
-        with f3: 
-            p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque", "None"])
-            p_r = st.text_input("Ref/Remarks", value="FY 2026-27 Opening")
-        
-        if st.form_submit_button("Save Entry"):
-            if acc != "Select" and p_a > 0:
-                # Type ko check karke save karein
-                entry_type = "OP_BAL" if p_t == "Opening Balance" else p_t
-                if save("payments", [str(p_d), acc, entry_type, p_a, p_m, p_r]): 
-                    st.success("Balance Entry Saved!"); st.rerun()
-
+            f1, f2, f3 = st.columns(3)
+            
+            with f1: 
+                p_d = st.date_input("Date", date(2026, 4, 1), key="fin_date")
+                # Yahan all_accs pehle se define hona chahiye (Party + Broker + Driver + Bank)
+                all_accs = sorted(gl("Party") + gl("Broker") + gl("Driver") + gl("Bank"))
+                acc = st.selectbox("Account*", ["Select"] + all_accs, key="fin_acc")
+            
+            with f2: 
+                # 'Opening Balance' ko dropdown mein add kiya hai
+                p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)", "Opening Balance"], key="fin_type")
+                p_a = st.number_input("Amount*", min_value=0.0, key="fin_amt")
+            
+            with f3: 
+                p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque", "None"], key="fin_mode")
+                p_r = st.text_input("Ref/Remarks", value="FY 2026-27 Opening", key="fin_ref")
+            
+            # Button form ke andar hai
+            submit_p = st.form_submit_button("Save Entry")
+            
+            if submit_p:
+                if acc != "Select" and p_a > 0:
+                    # Agar Type 'Opening Balance' hai toh hum 'OP_BAL' save karenge
+                    entry_type = "OP_BAL" if p_t == "Opening Balance" else p_t
+                    if save("payments", [str(p_d), acc, entry_type, p_a, p_m, p_r]): 
+                        st.success(f"Successfully Saved: {p_t} for {acc}")
+                        st.rerun()
+                else:
+                    st.error("Please select an Account and enter Amount!")
     with t2:
         sel_a = st.selectbox("Select Account for Statement", ["Select"] + all_accs)
         if sel_a != "Select":
