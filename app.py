@@ -340,11 +340,15 @@ if menu == "0. Dashboard":
 
     # B. CASH & OUTSTANDING LOGIC
     if not df_p.empty:
-        # Opening Balances
+        # 1. Opening Balances (Bank vs Party/Broker)
         op_entries = df_p[df_p['Type'] == 'OP_BAL']
         if not op_entries.empty:
-            cash_Bank_op = op_entries[op_entries['Account_Name'].str.contains('Bank|CASH', case=False, na=False)]
-            total_opening_cash = cash_Bank_op['Amount'].sum()
+            # FIX: Masters se saari 'Bank' category ki list uthao
+            banks_from_masters = gl("Bank") + ["CASH"]
+            
+            # Ab hum unhi accounts ko lenge jo Masters mein 'Bank' category mein hain
+            cash_bank_op = op_entries[op_entries['Account_Name'].isin(banks_from_masters)]
+            total_opening_cash = cash_bank_op['Amount'].sum()
             
             other_op = op_entries[~op_entries['Account_Name'].str.contains('Bank|CASH', case=False, na=False)]
             for _, r in other_op.iterrows():
