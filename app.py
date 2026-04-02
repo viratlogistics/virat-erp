@@ -772,38 +772,41 @@ elif menu == "4. Financials":
     t1, t2 = st.tabs(["💸 Add Transaction", "📖 Full Statement"])
     
     with t1:
-        with st.form("p_form_final_v5", clear_on_submit=True):
+        st.subheader("📝 New Transaction")
+        # Form ka naam badal diya taaki cache refresh ho jaye
+        with st.form("p_form_v_final_fixed", clear_on_submit=True):
             f1, f2, f3 = st.columns(3)
             with f1: 
-                p_d = st.date_input("Date", date(2026, 4, 1), key="d_fin_v5")
-                acc = st.selectbox("Account*", ["Select"] + all_accs, key="s_acc_v5")
+                p_d = st.date_input("Date", date.today(), key="d_fin_fixed")
+                acc = st.selectbox("Account*", ["Select"] + all_accs, key="s_acc_fixed")
             with f2: 
-                p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)", "Opening Balance"], key="s_type_v5")
+                p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)", "Opening Balance"], key="s_type_fixed")
                 
-                # 1. Nature Select karne ka option (Sirf Opening Balance ke liye)
-                p_side = st.radio("Nature", ["Receivable (Lena Hai)", "Payable (Dena Hai)"], horizontal=True)
+                # --- YEH SECTION NAZAR AANA CHAHIYE ---
+                p_side = st.radio("Nature", ["Receivable (Lena Hai)", "Payable (Dena Hai)"], horizontal=True, key="nature_radio")
                 
-                # 2. IMPORTANT: min_value ko None kar do taaki system mana na kare
-                p_a = st.number_input("Amount*", min_value=None, step=1.0, key="n_amt_v5")
+                # min_value hata diya taaki minus allow ho
+                p_a = st.number_input("Amount*", min_value=None, step=1.0, key="n_amt_fixed")
                 
             with f3: 
-                p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque", "None"], key="s_mode_v5")
-                p_r = st.text_input("Ref/Remarks", value="FY 2026-27 Opening", key="t_ref_v5")
+                p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque", "None"], key="s_mode_fixed")
+                p_r = st.text_input("Ref/Remarks", value="Opening Balance", key="t_ref_fixed")
             
+            # --- SAVE BUTTON ---
             if st.form_submit_button("💾 Save Transaction"):
-                if acc != "Select" and abs(p_a) > 0:
-                    # 3. LOGIC: Agar 'Payable' select kiya hai toh amount ko minus mein convert karo
+                if acc != "Select" and p_a != 0:
+                    # Logic: Agar Payable hai toh Amount ko minus (-) kar do
                     final_amount = float(p_a)
                     if p_t == "Opening Balance" and p_side == "Payable (Dena Hai)":
-                        final_amount = -abs(float(p_a)) # abs() isliye taaki agar aapne khud minus lagaya ho toh bhi sahi rahe
+                        final_amount = -abs(float(p_a))
                     
                     entry_type = "OP_BAL" if p_t == "Opening Balance" else p_t
                     
                     if save("payments", [str(p_d), acc, entry_type, final_amount, p_m, p_r]): 
-                        st.success(f"✅ Saved! Entry saved as: {final_amount}")
+                        st.success(f"✅ Saved! Amount recorded as: {final_amount}")
                         st.rerun()
                 else:
-                    st.error("Please select Account and enter Amount!")
+                    st.error("⚠️ Please select Account and enter Amount!")
     with t2:
         sel_a = st.selectbox("Select Account for Statement", ["Select"] + all_accs, key="s4_final")
         
