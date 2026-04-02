@@ -676,45 +676,36 @@ elif menu == "4. Financials":
     if not df_t.empty: df_t.columns = [str(c).strip() for c in df_t.columns]
     if not df_p.empty: df_p.columns = [str(c).strip() for c in df_p.columns]
         
-    all_accs = sorted(gl("Party") + gl("Broker"))
+    all_accs = sorted(gl("Party") + gl("Broker") + gl("Driver") + gl("Bank"))
     t1, t2 = st.tabs(["💸 Add Transaction", "📖 Full Statement"])
     
-   with t1:
-        # Form shuru ho raha hai, iske niche ki saari lines 4 space aage hongi
-        with st.form("p_form", clear_on_submit=True):
+    with t1:
+        with st.form("p_form_new", clear_on_submit=True):
             f1, f2, f3 = st.columns(3)
-            
             with f1: 
-                p_d = st.date_input("Date", date(2026, 4, 1), key="fin_date")
-                # Yahan all_accs pehle se define hona chahiye (Party + Broker + Driver + Bank)
-                all_accs = sorted(gl("Party") + gl("Broker") + gl("Driver") + gl("Bank"))
-                acc = st.selectbox("Account*", ["Select"] + all_accs, key="fin_acc")
-            
+                p_d = st.date_input("Date", date(2026, 4, 1), key="d1")
+                acc = st.selectbox("Account*", ["Select"] + all_accs, key="s1")
             with f2: 
-                # 'Opening Balance' ko dropdown mein add kiya hai
-                p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)", "Opening Balance"], key="fin_type")
-                p_a = st.number_input("Amount*", min_value=0.0, key="fin_amt")
-            
+                p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)", "Opening Balance"], key="s2")
+                p_a = st.number_input("Amount*", min_value=0.0, key="n1")
             with f3: 
-                p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque", "None"], key="fin_mode")
-                p_r = st.text_input("Ref/Remarks", value="FY 2026-27 Opening", key="fin_ref")
+                p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque", "None"], key="s3")
+                p_r = st.text_input("Ref/Remarks", value="FY 2026-27 Opening", key="t1_ref")
             
-            # Button form ke andar hai
-            submit_p = st.form_submit_button("Save Entry")
-            
-            if submit_p:
+            if st.form_submit_button("Save Transaction"):
                 if acc != "Select" and p_a > 0:
-                    # Agar Type 'Opening Balance' hai toh hum 'OP_BAL' save karenge
                     entry_type = "OP_BAL" if p_t == "Opening Balance" else p_t
+                    # List order: Date, Account_Name, Type, Amount, Mode, Ref_No
                     if save("payments", [str(p_d), acc, entry_type, p_a, p_m, p_r]): 
-                        st.success(f"Successfully Saved: {p_t} for {acc}")
-                        st.rerun()
+                        st.success("Entry Saved Successfully!"); st.rerun()
                 else:
-                    st.error("Please select an Account and enter Amount!")
+                    st.error("Select Account & Amount!")
+
     with t2:
-        sel_a = st.selectbox("Select Account for Statement", ["Select"] + all_accs)
+        sel_a = st.selectbox("Select Account for Statement", ["Select"] + all_accs, key="s4")
         if sel_a != "Select":
-            ledger_entries = []
+            # Statement ka logic yahan aayega...
+            st.write(f"Showing Statement for: {sel_a}")
             
             # --- 1. SABSE PEHLE OPENING BALANCE (Masters se) ---
             if not df_m.empty:
