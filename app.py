@@ -387,8 +387,13 @@ if menu == "0. Dashboard":
     
     m2.metric("Net Outstanding", f"₹{final_net_outstanding:,.0f}", 
               help=f"Old Rec: {total_op_receivable} | Old Pay: {total_op_payable} | New Pending: {current_year_pending}")
-              
-    m3.metric("Yearly Revenue", f"₹{total_rev:,.0f}", delta="Billed Amount")
+    # Total Payables (Brokers/Vendors ko kitna dena hai)
+    # Formula: Old Payable + Current Year Hired (Agar koi pending ho)
+    total_to_pay = total_op_payable              
+    m3.metric("Total Payable", f"₹{total_to_pay:,.0f}", delta="Paisa Dena Hai", delta_color="inverse")
+    
+    # Yearly Revenue
+    m4.metric("Yearly Revenue", f"₹{total_rev:,.0f}", delta="Billed")
     st.divider()
     st.write("### 🚛 Business Performance")
     p1, p2, p3, p4 = st.columns(4)
