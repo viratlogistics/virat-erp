@@ -1171,29 +1171,44 @@ elif menu == "9. Cash & Bank":
     with t1:
         st.subheader("💸 Record Expense / Payment", divider="orange")
         
-        # Latest LR list fetch karna (Naye se purane)
+        # Latest LR list fetch karna
         df_t_live = load("trips")
         lr_options = ["General / No LR"] + (df_t_live['LR No'].unique().tolist()[::-1] if not df_t_live.empty else [])
         
-        # --- DYNAMIC DROPBOX OPTIONS ---
-        # Isme aapke dale huye saare Expenses + Partners + Drivers + Party/Broker sab aayenge
+        # Dynamic Options
         all_to_options = sorted(gl("Expense") + ["Indrajit Personal", "Vishal Personal"] + gl("Driver") + gl("Broker") + gl("Party"))
 
-        with st.form("cash_bank_expense_v1", clear_on_submit=True):
+        # --- FORM STARTS ---
+        with st.form("cash_bank_expense_final_v2", clear_on_submit=True):
             f1, f2 = st.columns(2)
             with f1:
                 p_date = st.date_input("Date", date.today())
-                # Yahan Diesel, Toll, TA/DA sab dikhega
                 to_acc = st.selectbox("Pay To (Expense/Account)*", ["Select"] + all_to_options)
-                
-                # LINKING DROPDOWN (Dashboard ke liye sabse zaruri)
-                linked_lr = st.selectbox("Link to LR No*", lr_options, help="Gadi ka kharcha hai toh LR No select karein, varna 'General' rakhein")
+                linked_lr = st.selectbox("Link to LR No*", lr_options)
                 p_amt = st.number_input("Amount (₹)*", min_value=0.0, step=1.0)
 
             with f2:
                 from_acc = st.selectbox("Pay From (Bank/Cash Account)*", ["Select"] + sorted(gl("Bank") + ["CASH"]))
                 p_mode = st.selectbox("Mode", ["Cash", "UPI", "NEFT", "Cheque", "Transfer"])
-                p_rem = st.text_input("Remarks", placeholder="Diesel, Toll, Maintenance etc.")
+                p_rem = st.text_input("Remarks", placeholder="Diesel, Toll, etc.")
+
+            # --- YEH BUTTON FORM KE ANDAR HONA CHAHIYE ---
+            submit_btn = st.form_submit_button("🚀 Confirm & Save Transaction")
+
+            if submit_btn:
+                if to_acc != "Select" and from_acc != "Select" and p_amt > 0:
+                    lr_tag = f"LR:{linked_lr}" if linked_lr != "General / No LR" else "General"
+                    final_remarks = f"{lr_tag} | {to_acc} | {p_rem}"
+                    
+                    # Double Entry Logic
+                    e1 = save("payments", [str(p_date), from_acc, "Payment (Out)", -p_amt, p_mode, final_remarks])
+                    e2 = save("payments", [str(p_date), to_acc, "Payment (Out)", p_amt, p_mode, final_remarks])
+                    
+                    if e1 and e2:
+                        st.success(f"✅ ₹{p_amt} Saved Successfully!")
+                        st.rerun()
+                else:
+                    st.error("⚠️ Please fill mandatory fields!")
 
 
 
