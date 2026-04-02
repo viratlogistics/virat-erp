@@ -378,18 +378,21 @@ if menu == "0. Dashboard":
     # Sab kuch minus hoga tabhi asli cash bachega
     cash_hand_balance = (total_opening_cash + cash_in) - (cash_out + trip_outflow + office_exp)
 
-    # --- 4. DISPLAY UI ---
+    # --- 4. DISPLAY UI (Receivable & Payable Separated) ---
     st.write("### 💰 Financial Status (Cash & Dues)")
-    m1, m2, m3 = st.columns(3)
+    m1, m2, m3, m4 = st.columns(4)
     
-    # Metrics with correct values
-    m1.metric("Cash In Hand", f"₹{cash_hand_balance:,.0f}", delta=f"Op Cash: ₹{total_opening_cash:,.0f}")
+    # Cash in Hand (Hath mein kitna hai)
+    m1.metric("Cash In Hand", f"₹{cash_hand_balance:,.0f}", delta=f"Op: ₹{total_opening_cash:,.0f}")
     
-    m2.metric("Net Outstanding", f"₹{final_net_outstanding:,.0f}", 
-              help=f"Old Rec: {total_op_receivable} | Old Pay: {total_op_payable} | New Pending: {current_year_pending}")
+    # Total Receivables (Parties se kitna lena hai)
+    # Formula: Old Receivable + Current Year Pending
+    total_to_receive = total_op_receivable + max(0, current_year_pending)
+    m2.metric("Total Receivable", f"₹{total_to_receive:,.0f}", delta="Paisa Lena Hai", delta_color="normal")
+    
     # Total Payables (Brokers/Vendors ko kitna dena hai)
     # Formula: Old Payable + Current Year Hired (Agar koi pending ho)
-    total_to_pay = total_op_payable              
+    total_to_pay = total_op_payable
     m3.metric("Total Payable", f"₹{total_to_pay:,.0f}", delta="Paisa Dena Hai", delta_color="inverse")
     
     # Yearly Revenue
