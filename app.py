@@ -1147,7 +1147,6 @@ elif menu == "9. Cash & Bank":
     # 1. DATA LOADING & CLEANING
     df_p = load("payments")
     if not df_p.empty:
-        # Brackets aur Comma fix karna taaki Calculation sahi ho
         df_p['Amount'] = df_p['Amount'].astype(str).str.replace(r'\(', '-', regex=True).str.replace(r'\)', '', regex=True).str.replace(',', '').str.replace('₹', '')
         df_p['Amount'] = pd.to_numeric(df_p['Amount'], errors='coerce').fillna(0)
 
@@ -1155,60 +1154,68 @@ elif menu == "9. Cash & Bank":
     st.subheader("📊 Live Account Balances", divider="blue")
     banks_list = gl("Bank")
     cols = st.columns(len(banks_list) + 1)
-    
     cash_bal = df_p[df_p['Account_Name'].str.contains('CASH', case=False, na=False)]['Amount'].sum()
     cols[0].metric("💵 Cash in Hand", f"₹{cash_bal:,.2f}")
-    
     for i, b in enumerate(banks_list):
         b_bal = df_p[df_p['Account_Name'] == b]['Amount'].sum()
         cols[i+1].metric(f"🏦 {b}", f"₹{b_bal:,.2f}")
 
     st.divider()
 
-    # 3. TRANSACTION TABS
+    # 3. TRANSACTION TABS (Yahan dhyan dein)
     t1, t2 = st.tabs(["💸 Record Payment / Expense", "📑 Digital Passbook"])
     
     with t1:
         st.subheader("💸 Record Expense / Payment", divider="orange")
-        
-        # Latest LR list fetch karna
         df_t_live = load("trips")
         lr_options = ["General / No LR"] + (df_t_live['LR No'].unique().tolist()[::-1] if not df_t_live.empty else [])
-        
-        # Dynamic Options
         all_to_options = sorted(gl("Expense") + ["Indrajit Personal", "Vishal Personal"] + gl("Driver") + gl("Broker") + gl("Party"))
 
-        # --- FORM STARTS ---
-        with st.form("cash_bank_expense_final_v2", clear_on_submit=True):
+        with st.form("cash_bank_expense_final_v3", clear_on_submit=True):
             f1, f2 = st.columns(2)
             with f1:
                 p_date = st.date_input("Date", date.today())
                 to_acc = st.selectbox("Pay To (Expense/Account)*", ["Select"] + all_to_options)
                 linked_lr = st.selectbox("Link to LR No*", lr_options)
                 p_amt = st.number_input("Amount (₹)*", min_value=0.0, step=1.0)
-
             with f2:
                 from_acc = st.selectbox("Pay From (Bank/Cash Account)*", ["Select"] + sorted(gl("Bank") + ["CASH"]))
                 p_mode = st.selectbox("Mode", ["Cash", "UPI", "NEFT", "Cheque", "Transfer"])
                 p_rem = st.text_input("Remarks", placeholder="Diesel, Toll, etc.")
 
-            # --- YEH BUTTON FORM KE ANDAR HONA CHAHIYE ---
-            submit_btn = st.form_submit_button("🚀 Confirm & Save Transaction")
-
-            if submit_btn:
+            if st.form_submit_button("🚀 Confirm & Save Transaction"):
                 if to_acc != "Select" and from_acc != "Select" and p_amt > 0:
                     lr_tag = f"LR:{linked_lr}" if linked_lr != "General / No LR" else "General"
                     final_remarks = f"{lr_tag} | {to_acc} | {p_rem}"
-                    
-                    # Double Entry Logic
                     e1 = save("payments", [str(p_date), from_acc, "Payment (Out)", -p_amt, p_mode, final_remarks])
                     e2 = save("payments", [str(p_date), to_acc, "Payment (Out)", p_amt, p_mode, final_remarks])
-                    
                     if e1 and e2:
-                        st.success(f"✅ ₹{p_amt} Saved Successfully!")
+                        st.success(f"✅ ₹{p_amt} Saved!")
                         st.rerun()
                 else:
                     st.error("⚠️ Please fill mandatory fields!")
+
+    # --- YE T2 TAB T1 KE BAHAR HONA CHAHIYE (SAME MARGIN) ---
+    with t2:
+        st.subheader("📑 Digital Passbook", divider="violet")
+        # List of all accounts for passbook
+        pb_options = sorted(gl("Bank") + ["CASH"] + gl("Expense") + ["Indrajit Personal", "Vishal Personal"] + gl("Driver"))
+        sel_acc = st.selectbox("Select Account to View Passbook", ["Select"] + pb_options, key="passbook_view_final")
+        
+        if sel_acc != "Select":
+            # Filter data from payments sheet
+            stmt_df = df_p[df_p['Account_Name'] == sel_acc].sort_values('Date', ascending=False)
+            if not stmt_df.empty:
+                # Sirf vahi columns dikhao jo sheet mein hain: Date, Type, Amount, Mode, Remarks
+                st.dataframe(
+                    stmt_df[['Date', 'Type', 'Amount', 'Mode', 'Remarks']].style.format({"Amount": "₹{:,.2f}"}),
+                    use_container_width=True,
+                    hide_index=True
+                )
+                total_current = stmt_df['Amount'].sum()
+                st.info(f"💰 Current Balance in **{sel_acc}**: **₹{total_current:,.2f}**")
+            else:
+                st.warning(f"No transactions found for {sel_acc}.")
 
 
 
