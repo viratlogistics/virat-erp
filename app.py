@@ -388,7 +388,7 @@ if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
     # 1. Category Selection
-    m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver"])
+    m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver", "BANK"])
     
     with st.form("m_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
@@ -422,6 +422,16 @@ if menu == "1. Masters Setup":
 
         elif m_type == "Vehicle":
             name = st.text_input("Vehicle Number (e.g. GJ05BX1234)")
+
+        if m_type == "BANK":
+            with col1:
+                name = st.text_input("BANK Name (e.g. BANK OF BARODA)")
+                gst = st.text_input("BANK GST")
+                addr = st.text_area("BANK Address")
+            with col2:
+                ac = st.text_input("Bank A/C No")
+                ifsc = st.text_input("Bank IFSC")
+                cont = st.text_input("BANK Contact No")
 
         # Save Button
         if st.form_submit_button(f"Save {m_type}"):
