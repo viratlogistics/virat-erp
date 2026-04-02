@@ -248,7 +248,7 @@ with st.sidebar:
         options=[
             "0. Dashboard", "1. Masters Setup", "2. LR Entry", "3. LR Register", 
             "4. Financials", "5. Business Insights", "6. Expense Manager", 
-            "7. Driver Khata", "8. Monthly Bill", "Cash & Bank"
+            "7. Driver Khata", "8. Monthly Bill", "9. Cash & Bank"
         ], 
         icons=[
             "speedometer2", "person-gear", "file-earmark-plus", "table", 
@@ -1257,6 +1257,38 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+elif menu == "9. Cash & Bank":
+    st.header("🏦 Cash & Bank Management")
+    df_p = load("payments")
+    
+    # 1. CLEANING DATA (Brackets/Minus Fix)
+    if not df_p.empty:
+        df_p['Amount'] = df_p['Amount'].astype(str).str.replace(r'\(', '-', regex=True).str.replace(r'\)', '', regex=True).str.replace(',', '').str.replace('₹', '')
+        df_p['Amount'] = pd.to_numeric(df_p['Amount'], errors='coerce').fillna(0)
+
+    # 2. BANK-WISE BALANCES (Metrics)
+    st.subheader("📊 Live Balances")
+    banks = gl("Bank") # Maan lete hain ki aapne 'Bank' category banayi hai
+    cols = st.columns(len(banks) + 1)
+    
+    # Cash Balance
+    cash_data = df_p[df_p['Account_Name'].str.contains('CASH', case=False, na=False)]
+    cash_bal = cash_data['Amount'].sum()
+    cols[0].metric("Cash in Hand", f"₹{cash_bal:,.0f}")
+    
+    # Bank Balances
+    for i, b in enumerate(banks):
+        b_data = df_p[df_p['Account_Name'] == b]
+        b_bal = b_data['Amount'].sum()
+        cols[i+1].metric(b, f"₹{b_bal:,.0f}")
+
+    st.divider()
+
+    # 3. ADD TRANSACTION WITH BANK SELECTION (Dropbox)
+    t1, t2 = st.tabs(["💸 New Payment/Expense", "📝 Bank Statement"])
+    
+    with t1:
+        st.subheader
 
 
 
