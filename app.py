@@ -248,7 +248,7 @@ with st.sidebar:
         options=[
             "0. Dashboard", "1. Masters Setup", "2. LR Entry", "3. LR Register", 
             "4. Financials", "5. Business Insights", "6. Expense Manager", 
-            "7. Driver Khata", "8. Monthly Bill"
+            "7. Driver Khata", "8. Monthly Bill", "Cash & Bank"
         ], 
         icons=[
             "speedometer2", "person-gear", "file-earmark-plus", "table", 
