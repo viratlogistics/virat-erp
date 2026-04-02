@@ -308,23 +308,39 @@ if menu == "0. Dashboard":
         df_oef['FY'] = df_oef['Date'].apply(get_fy)
         df_oef = df_oef[df_oef['FY'] == selected_fy]
 
-    # --- 3. CALCULATIONS (Fixed for Multiple Banks) ---
+    # --- 3. CALCULATIONS (Fixed for Multiple Banks & Negative Payable) ---
 
-    # A. OPENING BALANCES (From All OP_BAL entries)
     total_opening_cash = 0
-    op_party_receivable = 0
+    total_op_receivable = 0
+    total_op_payable = 0
     
     if not df_p.empty:
         op_entries = df_p[df_p['Type'] == 'OP_BAL']
         if not op_entries.empty:
-            # 1. Banks ka Total (Jinke naam mein Bank/Cash hai)
+            # 1. Banks ka Total (Multiple Bank Logic AS IT IS)
             cash_bank_op = op_entries[op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
             total_opening_cash = pd.to_numeric(cash_bank_op['Amount'], errors='coerce').fillna(0).sum()
             
-            # 2. Parties ka Total (Jo Bank nahi hain)
-            party_op = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
-            op_party_receivable = pd.to_numeric(party_op['Amount'], errors='coerce').fillna(0).sum()
+            # 2. Parties & Brokers (Minus Logic)
+            # Jo Bank nahi hain, unhe filter karo
+            other_op = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
+            
+            for _, r in other_op.iterrows():
+                amt = pd.to_numeric(r['Amount'], errors='coerce').fillna(0)
+                
+                # Agar amount minus (-) hai toh Payable (Dena hai)
+                if amt < 0:
+                    total_op_payable += abs(amt) # Minus sign hata kar Payable mein jodo
+                # Agar plus (+) hai toh Receivable (Lena hai)
+                else:
+                    total_op_receivable += amt
 
+    # --- Metrics ke liye Final Calculation ---
+    # Net Outstanding = (Lena hai - Dena hai) + (Is saal ka Freight - Mili hui Receipt)
+    # cash_in mein sirf Receipts honi chahiye (OP_BAL nahi)
+    current_year_pending = (total_rev - cash_in) 
+    final_net_outstanding = (total_op_receivable - total_op_payable) + current_year_pending
+    
     # B. CURRENT YEAR CASH FLOW
     cash_in = 0; cash_out = 0
     if not df_pf.empty:
