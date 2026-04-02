@@ -302,42 +302,45 @@ if menu == "0. Dashboard":
         df_pf['FY'] = df_pf['Date'].apply(get_fy)
         df_pf = df_pf[df_pf['FY'] == selected_fy]
 
-    # --- 3. CORE CALCULATIONS (NEW LOGIC) ---
+    # --- 3. CORE CALCULATIONS (New Strategic Logic) ---
+
     total_rev = 0; own_profit = 0; hired_profit = 0; office_exp = 0
     total_opening_cash = 0; total_op_receivable = 0; total_op_payable = 0
-    cash_in = 0; cash_out = 0; trip_outflow = 0
+    cash_in = 0; cash_out_total = 0; trip_actual_exp = 0
 
-    # A. TRIP PERFORMANCE
+    # A. TRIP PERFORMANCE (Trips Sheet + Payments Sheet Linking)
     if not df_tf.empty:
+        # Numeric Clean-up
         for c in ['Freight', 'HiredCharges']:
             if c in df_tf.columns: df_tf[c] = pd.to_numeric(df_tf[c], errors='coerce').fillna(0)
         
         total_rev = df_tf['Freight'].sum()
         
-        # 1. Hired Gadi Profit (Freight - HiredCharges)
+        # 1. MARKET GADI PROFIT (Freight - Hired Charges)
         df_mkt = df_tf[df_tf['Type'].str.contains('Market|Hired', case=False, na=False)]
         hired_profit = df_mkt['Freight'].sum() - df_mkt['HiredCharges'].sum()
         
-        # 2. Own Fleet Revenue
+        # 2. OWN FLEET REVENUE
         df_own = df_tf[df_tf['Type'].str.contains('Own', case=False, na=False)]
         own_rev = df_own['Freight'].sum()
 
-        # 3. ACTUAL TRIP EXPENSES (From Payments Sheet with 'LR:' tag)
+        # 3. ACTUAL OWN FLEET EXPENSES (From Payments Sheet with 'LR:' tag)
         if not df_pf.empty:
             df_pf['Amount'] = pd.to_numeric(df_pf['Amount'], errors='coerce').fillna(0)
-            # Sirf wo kharche jo LR se link hain
-            trip_outflow = df_pf[df_pf['Remarks'].str.contains('LR:', na=False)]['Amount'].sum()
-            # Own Fleet Profit calculation
-            own_profit = own_rev - trip_outflow
+            # Sirf wo kharche jo kisi LR se link kiye gaye hain
+            trip_actual_exp = df_pf[df_pf['Remarks'].str.contains('LR:', na=False)]['Amount'].sum()
+            own_profit = own_rev - trip_actual_exp
             
-            # 4. OFFICE EXPENSES (Jo 'LR:' se link nahi hain aur Expense category mein hain)
-            exp_list = gl("Expense")
-            office_exp = df_pf[(df_pf['Account_Name'].isin(exp_list)) & (~df_pf['Remarks'].str.contains('LR:', na=False))]['Amount'].sum()
+            # 4. OFFICE/ADMIN EXPENSES (Expense category but No LR tag)
+            exp_categories = gl("Expense")
+            office_exp_mask = (df_pf['Account_Name'].isin(exp_categories)) & (~df_pf['Remarks'].str.contains('LR:', na=False))
+            office_exp = df_pf[office_exp_mask]['Amount'].sum()
         else:
             own_profit = own_rev
 
-    # B. CASH & OUTSTANDING (Actual Bank Flow)
+    # B. CASH & OUTSTANDING LOGIC
     if not df_p.empty:
+        # Opening Balances
         op_entries = df_p[df_p['Type'] == 'OP_BAL']
         if not op_entries.empty:
             cash_bank_op = op_entries[op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
@@ -349,17 +352,17 @@ if menu == "0. Dashboard":
                 if val < 0: total_op_payable += abs(val)
                 else: total_op_receivable += val
 
+        # Current FY Cash Flow
         if not df_pf.empty:
             cash_in = df_pf[(df_pf['Type'].str.contains('Receipt|In', case=False, na=False)) & (df_pf['Type'] != 'OP_BAL')]['Amount'].sum()
-            # Kul mila kar bank se gaya hua saara paisa
             cash_out_total = df_pf[(df_pf['Type'].str.contains('Payment|Out', case=False, na=False)) & (df_pf['Type'] != 'OP_BAL')]['Amount'].sum()
 
-    # D. FINAL AGGREGATED LOGIC
+    # C. FINAL TOTALS
     total_net_profit = (own_profit + hired_profit) - office_exp
     cash_hand_balance = (total_opening_cash + cash_in) - cash_out_total
     current_year_pending = total_rev - cash_in
     total_to_receive = total_op_receivable + max(0, current_year_pending)
-
+    
     # --- 4. DISPLAY UI ---
     st.write("### 💰 Financial Status (Cash & Dues)")
     m1, m2, m3, m4 = st.columns(4)
