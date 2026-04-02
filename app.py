@@ -772,26 +772,37 @@ elif menu == "4. Financials":
     t1, t2 = st.tabs(["💸 Add Transaction", "📖 Full Statement"])
     
     with t1:
-        with st.form("p_form_new", clear_on_submit=True):
+        with st.form("p_form_final_v4", clear_on_submit=True):
             f1, f2, f3 = st.columns(3)
             with f1: 
-                p_d = st.date_input("Date", date(2026, 4, 1), key="d1")
-                acc = st.selectbox("Account*", ["Select"] + all_accs, key="s1")
+                p_d = st.date_input("Date", date(2026, 4, 1), key="d_fin")
+                acc = st.selectbox("Account*", ["Select"] + all_accs, key="s_acc")
             with f2: 
-                p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)", "Opening Balance"], key="s2")
-                p_a = st.number_input("Amount*", min_value=0.0, key="n1")
+                p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)", "Opening Balance"], key="s_type")
+                
+                # NAYA LOGIC: Agar Opening Balance hai toh Side choose karo
+                p_side = "Plus"
+                if p_t == "Opening Balance":
+                    p_side = st.radio("Nature", ["Receivable (Lena Hai)", "Payable (Dena Hai)"], horizontal=True)
+                
+                p_a = st.number_input("Amount*", min_value=0.0, key="n_amt")
             with f3: 
-                p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque", "None"], key="s3")
-                p_r = st.text_input("Ref/Remarks", value="FY 2026-27 Opening", key="t1_ref")
+                p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque", "None"], key="s_mode")
+                p_r = st.text_input("Ref/Remarks", value="FY 2026-27 Opening", key="t_ref")
             
-            if st.form_submit_button("Save Transaction"):
+            if st.form_submit_button("💾 Save Transaction"):
                 if acc != "Select" and p_a > 0:
+                    # Final Amount logic: Payable hai toh minus (-) laga do
+                    final_amount = p_a
+                    if p_t == "Opening Balance" and p_side == "Payable (Dena Hai)":
+                        final_amount = -p_a
+                    
                     entry_type = "OP_BAL" if p_t == "Opening Balance" else p_t
-                    # List order: Date, Account_Name, Type, Amount, Mode, Ref_No
-                    if save("payments", [str(p_d), acc, entry_type, p_a, p_m, p_r]): 
-                        st.success("Entry Saved Successfully!"); st.rerun()
+                    
+                    if save("payments", [str(p_d), acc, entry_type, final_amount, p_m, p_r]): 
+                        st.success(f"✅ Saved! Amount: ₹{final_amount}"); st.rerun()
                 else:
-                    st.error("Select Account & Amount!")
+                    st.error("Please select Account and enter Amount!")
 
     with t2:
         sel_a = st.selectbox("Select Account for Statement", ["Select"] + all_accs, key="s4_final")
