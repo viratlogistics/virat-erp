@@ -1258,76 +1258,97 @@ elif menu == "8. Monthly Bill":
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
 elif menu == "9. Cash & Bank":
-    # Main Header with a Divider
     st.header("🏦 Cash & Bank Management", divider="rainbow")
     
+    # 1. DATA LOADING & CLEANING
     df_p = load("payments")
     
-    # 1. DATA CLEANING (Brackets/Minus Fix)
     if not df_p.empty:
+        # Sabse pehle Brackets ( ) ko Minus - mein badlo aur Numeric karo
         df_p['Amount'] = df_p['Amount'].astype(str).str.replace(r'\(', '-', regex=True).str.replace(r'\)', '', regex=True).str.replace(',', '').str.replace('₹', '')
         df_p['Amount'] = pd.to_numeric(df_p['Amount'], errors='coerce').fillna(0)
 
-    # 2. BANK BALANCES SECTION
-    # Yahan hum naya subheader style use kar rahe hain
-    st.subheader("📊 Live Account Balances", divider="blue", help="Yeh aapke saare Bank aur Cash accounts ka current balance hai.")
+    # 2. LIVE BALANCES (Metrics)
+    st.subheader("📊 Live Account Balances", divider="blue", help="Yeh aapke Cash aur saare Bank accounts ka real-time balance hai.")
     
-    banks = gl("Bank")
-    cols = st.columns(len(banks) + 1)
+    # Bank list masters se uthao
+    banks_list = gl("Bank")
+    cols = st.columns(len(banks_list) + 1)
     
-    # Cash Balance
+    # A. Cash Balance
     cash_bal = df_p[df_p['Account_Name'].str.contains('CASH', case=False, na=False)]['Amount'].sum()
-    cols[0].metric("💵 Cash in Hand", f"₹{cash_bal:,.0f}")
+    cols[0].metric("💵 Cash in Hand", f"₹{cash_bal:,.2f}")
     
-    # Bank Balances (Loop)
-    for i, b in enumerate(banks):
+    # B. Bank Balances (Loop)
+    for i, b in enumerate(banks_list):
         b_bal = df_p[df_p['Account_Name'] == b]['Amount'].sum()
-        cols[i+1].metric(f"🏦 {b}", f"₹{b_bal:,.0f}")
+        cols[i+1].metric(f"🏦 {b}", f"₹{b_bal:,.2f}")
 
     st.divider()
 
     # 3. TRANSACTION TABS
-    t1, t2 = st.tabs(["💸 Record Payment", "📑 Bank Passbook"])
+    t1, t2 = st.tabs(["💸 Record Payment / Expense", "📑 Digital Passbook"])
     
     with t1:
-        # Subheader with center alignment for the form
-        st.subheader("Add New Payment / Expense", text_alignment="center", divider="orange")
+        st.subheader("Add New Payment or Expense", divider="orange", text_alignment="center")
         
-        with st.form("cash_flow_pro_form", clear_on_submit=True):
+        with st.form("cash_bank_form_v1", clear_on_submit=True):
             f1, f2 = st.columns(2)
             with f1:
-                d = st.date_input("Date", date.today())
-                to_acc = st.selectbox("Pay To (Kise dena hai)*", ["Select"] + sorted(gl("Party") + gl("Broker") + gl("Expense") + gl("Driver")))
-                amt = st.number_input("Amount*", min_value=0.0)
+                p_date = st.date_input("Date", date.today())
+                # Kise pay kar rahe ho (Party/Broker/Expense/Driver)
+                to_acc = st.selectbox("Pay To (Kise Dena Hai)*", ["Select"] + sorted(gl("Party") + gl("Broker") + gl("Expense") + gl("Driver")))
+                p_amt = st.number_input("Amount*", min_value=0.0, step=1.0)
             
             with f2:
-                from_acc = st.selectbox("Pay From (Konsi Bank/Cash)*", ["Select"] + sorted(gl("Bank") + ["CASH"]))
-                p_m = st.selectbox("Mode", ["NEFT", "UPI", "Cash", "Cheque"])
-                rem = st.text_input("Remarks", placeholder="e.g. Office Rent, Diesel Payment...")
+                # Kahan se paisa ja raha hai
+                from_acc = st.selectbox("Pay From (Bank/Cash Account)*", ["Select"] + sorted(gl("Bank") + ["CASH"]))
+                p_mode = st.selectbox("Mode", ["NEFT", "UPI", "Cash", "Cheque", "Transfer"])
+                p_rem = st.text_input("Remarks / Ref No.", placeholder="e.g. Diesel for GJ05, Office Rent...")
 
-            # Save Button
-            if st.form_submit_button("🚀 Confirm & Save Payment"):
-                if to_acc != "Select" and from_acc != "Select" and amt > 0:
-                    # Double Entry Logic (Minus from Bank, Plus in Expense/Party)
-                    e1 = save("payments", [str(d), from_acc, "Payment (Out)", -amt, p_m, f"Paid to {to_acc} - {rem}"])
-                    e2 = save("payments", [str(d), to_acc, "Payment (Out)", amt, p_m, f"Paid from {from_acc} - {rem}"])
+            if st.form_submit_button("🚀 Confirm & Process Payment"):
+                if to_acc != "Select" and from_acc != "Select" and p_amt > 0:
+                    # DOUBLE ENTRY LOGIC:
+                    # 1. Bank/Cash se Paisa Gaya (Sheet mein MINUS entry)
+                    # Sequence: Date, Account_Name, Type, Amount, Mode, Remarks
+                    entry_from = [str(p_date), from_acc, "Payment (Out)", -p_amt, p_mode, f"Paid to {to_acc} | {p_rem}"]
                     
-                    if e1 and e2:
-                        st.success(f"✅ ₹{amt} successfully recorded from {from_acc}!")
+                    # 2. Party/Expense khate mein Payment Record (Sheet mein PLUS entry)
+                    entry_to = [str(p_date), to_acc, "Payment (Out)", p_amt, p_mode, f"Paid from {from_acc} | {p_rem}"]
+                    
+                    if save("payments", entry_from) and save("payments", entry_to):
+                        st.success(f"✅ ₹{p_amt} Payment successfully recorded from {from_acc} to {to_acc}!")
                         st.rerun()
                 else:
-                    st.error("⚠️ Please fill all mandatory fields!")
+                    st.error("⚠️ Please fill all mandatory (*) fields!")
 
     with t2:
         st.subheader("Digital Passbook", divider="violet")
-        sel_bank = st.selectbox("Select Account", ["Select"] + sorted(gl("Bank") + ["CASH"]))
         
-        if sel_bank != "Select":
-            bank_stmt = df_p[df_p['Account_Name'] == sel_bank].sort_values('Date', ascending=False)
-            if not bank_stmt.empty:
-                st.dataframe(bank_stmt[['Date', 'Type', 'Amount', 'Mode', 'Ref/Remarks']], use_container_width=True)
+        # Dropbox for account selection
+        sel_acc = st.selectbox("Select Account to View Statement", ["Select"] + sorted(gl("Bank") + ["CASH"]), key="passbook_acc")
+        
+        if sel_acc != "Select":
+            # Filter all entries for this account
+            stmt_df = df_p[df_p['Account_Name'] == sel_acc].sort_values('Date', ascending=False)
+            
+            if not stmt_df.empty:
+                # Sirf wahi columns jo aapki sheet mein hain
+                final_cols = ['Date', 'Type', 'Amount', 'Mode', 'Remarks']
+                available_cols = [c for c in final_cols if c in stmt_df.columns]
+                
+                # Table Display
+                st.dataframe(
+                    stmt_df[available_cols].style.format({"Amount": "₹{:,.2f}"}),
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+                # Summary Box
+                total_current = stmt_df['Amount'].sum()
+                st.info(f"💰 Total Current Balance in **{sel_acc}**: **₹{total_current:,.2f}**")
             else:
-                st.info(f"No transactions found for {sel_bank}")
+                st.warning(f"No transactions found for {sel_acc}.")
 
 
 
