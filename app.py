@@ -388,7 +388,7 @@ if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
     # 1. Category Selection
-    m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver" ,"Opening Balance"])
+    m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver" ,"Cash in hand"])
     
     with st.form("m_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
@@ -681,6 +681,7 @@ elif menu == "4. Financials":
     
     # --- Financials -> Tab 1 (Add Transaction) Update ---
     with t1:
+        
         with st.form("p_form", clear_on_submit=True):
         f1, f2, f3 = st.columns(3)
         with f1: 
