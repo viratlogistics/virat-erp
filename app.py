@@ -440,18 +440,21 @@ if menu == "1. Masters Setup":
                     new_row = [m_type, name, "", "", "", "", "", "", ""]
                     if save("masters", new_row): st.success("Vehicle Saved!"); st.rerun()
 
-        elif m_type == "Opening Balance":
-            with col1:
-                all_accs = sorted(gl("Party") + gl("Broker") + gl("Driver"))
-                name = st.selectbox("Select Account", ["Select"] + all_accs)
-            with col2:
-                op_bal = st.number_input("Opening Balance (₹)", help="Lena hai (+) | Dena hai (-)")
-                op_date = st.date_input("F.Y. Start Date", date(2026, 4, 1))
+        # --- Masters Setup Section ---
+elif m_type == "Bank":
+    with col1:
+        name = st.text_input("Bank Name (e.g. HDFC Virat)")
+        ac = st.text_input("Account Number")
+    with col2:
+        ifsc = st.text_input("IFSC Code")
+        branch_loc = st.text_input("Bank Branch Location")
 
-            if st.form_submit_button("Submit Opening Balance"): # Key unique ho gayi
-                if name != "Select":
-                    new_row = ["OP_BAL", name, "", "", "", "", "", str(op_bal), str(op_date)]
-                    if save("masters", new_row): st.success("Opening Balance Saved!"); st.rerun()
+    if st.form_submit_button("Save Bank Details"):
+        if name:
+            # Order: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name, Driver_No
+            new_row = ["Bank", name, "", branch_loc, "", ac, ifsc, "", ""]
+            if save("masters", new_row):
+                st.success(f"Bank {name} Saved!"); st.rerun()
             else:
                 st.error("Please enter Name!")
 
@@ -676,23 +679,27 @@ elif menu == "4. Financials":
     all_accs = sorted(gl("Party") + gl("Broker"))
     t1, t2 = st.tabs(["💸 Add Transaction", "📖 Full Statement"])
     
+    # --- Financials -> Tab 1 (Add Transaction) Update ---
     with t1:
         with st.form("p_form", clear_on_submit=True):
-            f1, f2, f3 = st.columns(3)
-            with f1: 
-                p_d = st.date_input("Date", date.today())
-                acc = st.selectbox("Account*", ["Select"] + all_accs)
-            with f2: 
-                p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)"])
-                p_a = st.number_input("Amount*", min_value=0.0)
-            with f3: 
-                p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque"])
-                p_r = st.text_input("Ref/Remarks")
-            
-            if st.form_submit_button("Save Entry"):
-                if acc != "Select" and p_a > 0:
-                    if save("payments", [str(p_d), acc, p_t, p_a, p_m, p_r]): 
-                        st.success("Entry Saved Successfully!"); st.rerun()
+        f1, f2, f3 = st.columns(3)
+        with f1: 
+            p_d = st.date_input("Date", date(2026, 4, 1)) # Default 1st April
+            acc = st.selectbox("Account*", ["Select"] + all_accs)
+        with f2: 
+            # Yahan humne 'Opening Balance' add kar diya
+            p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)", "Opening Balance"])
+            p_a = st.number_input("Amount*", min_value=0.0)
+        with f3: 
+            p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque", "None"])
+            p_r = st.text_input("Ref/Remarks", value="FY 2026-27 Opening")
+        
+        if st.form_submit_button("Save Entry"):
+            if acc != "Select" and p_a > 0:
+                # Type ko check karke save karein
+                entry_type = "OP_BAL" if p_t == "Opening Balance" else p_t
+                if save("payments", [str(p_d), acc, entry_type, p_a, p_m, p_r]): 
+                    st.success("Balance Entry Saved!"); st.rerun()
 
     with t2:
         sel_a = st.selectbox("Select Account for Statement", ["Select"] + all_accs)
