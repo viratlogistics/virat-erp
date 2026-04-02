@@ -1248,38 +1248,45 @@ elif menu == "9. Cash & Bank":
     # 3. TRANSACTION TABS
     t1, t2 = st.tabs(["💸 Record Payment / Expense", "📑 Digital Passbook"])
     
-    with t1:
-        st.subheader("Add New Payment or Expense", divider="orange", text_alignment="center")
-        
-        with st.form("cash_bank_form_v1", clear_on_submit=True):
-            f1, f2 = st.columns(2)
-            with f1:
-                p_date = st.date_input("Date", date.today())
-                # Kise pay kar rahe ho (Party/Broker/Expense/Driver)
-                to_acc = st.selectbox("Pay To (Kise Dena Hai)*", ["Select"] + sorted(gl("Party") + gl("Broker") + gl("Expense") + gl("Driver")))
-                p_amt = st.number_input("Amount*", min_value=0.0, step=1.0)
-            
-            with f2:
-                # Kahan se paisa ja raha hai
-                from_acc = st.selectbox("Pay From (Bank/Cash Account)*", ["Select"] + sorted(gl("Bank") + ["CASH"]))
-                p_mode = st.selectbox("Mode", ["NEFT", "UPI", "Cash", "Cheque", "Transfer"])
-                p_rem = st.text_input("Remarks / Ref No.", placeholder="e.g. Diesel for GJ05, Office Rent...")
+    # --- 9. Cash & Bank (Tab 1 Update) ---
+with t1:
+    st.subheader("💸 Record Expense / Payment", divider="orange")
+    
+    # 1. Trips load karo taaki LR list mil sake
+    df_t_live = load("trips")
+    # Latest LR list (Naye se purane ki taraf)
+    lr_options = ["General / No LR"] + (df_t_live['LR No'].unique().tolist()[::-1] if not df_t_live.empty else [])
 
-            if st.form_submit_button("🚀 Confirm & Process Payment"):
-                if to_acc != "Select" and from_acc != "Select" and p_amt > 0:
-                    # DOUBLE ENTRY LOGIC:
-                    # 1. Bank/Cash se Paisa Gaya (Sheet mein MINUS entry)
-                    # Sequence: Date, Account_Name, Type, Amount, Mode, Remarks
-                    entry_from = [str(p_date), from_acc, "Payment (Out)", -p_amt, p_mode, f"Paid to {to_acc} | {p_rem}"]
-                    
-                    # 2. Party/Expense khate mein Payment Record (Sheet mein PLUS entry)
-                    entry_to = [str(p_date), to_acc, "Payment (Out)", p_amt, p_mode, f"Paid from {from_acc} | {p_rem}"]
-                    
-                    if save("payments", entry_from) and save("payments", entry_to):
-                        st.success(f"✅ ₹{p_amt} Payment successfully recorded from {from_acc} to {to_acc}!")
-                        st.rerun()
-                else:
-                    st.error("⚠️ Please fill all mandatory (*) fields!")
+    with st.form("expense_form_v_final", clear_on_submit=True):
+        f1, f2 = st.columns(2)
+        with f1:
+            p_date = st.date_input("Date", date.today())
+            # Kise paisa diya (Category)
+            to_acc = st.selectbox("Category / Account*", ["Select"] + sorted(gl("Expense") + gl("Broker") + gl("Driver") + gl("Party")))
+            
+            # --- YEH HAI LR LINKING DROPDOWN ---
+            linked_lr = st.selectbox("Link to LR No*", lr_options, help="Own Fleet ka diesel/toll hai toh LR select karein")
+            
+            p_amt = st.number_input("Amount*", min_value=0.0)
+
+        with f2:
+            from_acc = st.selectbox("Pay From (Bank/Cash)*", ["Select"] + sorted(gl("Bank") + ["CASH"]))
+            p_mode = st.selectbox("Mode", ["Cash", "UPI", "NEFT", "Cheque"])
+            p_rem = st.text_input("Remarks", placeholder="Diesel, Toll, Maintenance etc.")
+
+        if st.form_submit_button("🚀 Save Expense"):
+            if to_acc != "Select" and from_acc != "Select" and p_amt > 0:
+                # Remarks mein hum "LR:Number" format save karenge taaki Dashboard ise pehchan sake
+                lr_tag = f"LR:{linked_lr}" if linked_lr != "General / No LR" else "General"
+                final_remarks = f"{lr_tag} | {p_rem}"
+                
+                # Double Entry: Bank se Minus, Expense mein Plus
+                e1 = save("payments", [str(p_date), from_acc, "Payment (Out)", -p_amt, p_mode, final_remarks])
+                e2 = save("payments", [str(p_date), to_acc, "Payment (Out)", p_amt, p_mode, final_remarks])
+                
+                if e1 and e2:
+                    st.success(f"✅ ₹{p_amt} linked to {linked_lr} and saved!")
+                    st.rerun()
 
     with t2:
         st.subheader("Digital Passbook", divider="violet")
