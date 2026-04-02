@@ -390,11 +390,11 @@ elif menu == "1. Masters Setup":
     # 1. Category Selection
     m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver", "Bank"])
     
-    # --- FORM SHURU ---
-    with st.form("m_form_final_v3", clear_on_submit=True):
+    # --- YAHAN SE DHYAN SE DEKHEIN ---
+    with st.form(key="m_form_new_fix"):
         col1, col2 = st.columns(2)
         
-        # Variables ko initialize karna (Indentation check karein - 8 spaces)
+        # Ye line 'with' ke thik niche sarki hui honi chahiye
         name, gst, addr, cont, ac, ifsc, d_name, d_no = "", "", "", "", "", "", "", "", ""
 
         if m_type == "Branch (Company)":
@@ -424,14 +424,14 @@ elif menu == "1. Masters Setup":
 
         elif m_type == "Bank":
             with col1:
-                name = st.text_input("Bank Name (e.g. HDFC Virat)")
+                name = st.text_input("Bank Name")
                 ac = st.text_input("Account Number")
             with col2:
                 ifsc = st.text_input("IFSC Code")
                 addr = st.text_input("Bank Branch Location")
 
-        # --- SUBMIT BUTTON (Iska Form ke andar hona MUST hai) ---
-        submit_m = st.form_submit_button(f"🚀 Save {m_type}")
+        # --- SUBMIT BUTTON: ISKE AAGE 8 SPACES HONI CHAHIYE ---
+        submit_m = st.form_submit_button(label=f"🚀 Save {m_type}")
         
         if submit_m:
             if name or d_name:
@@ -442,10 +442,9 @@ elif menu == "1. Masters Setup":
                     st.rerun()
             else:
                 st.error("⚠️ Please enter a Name!")
-    # --- FORM KHATAM ---
 
+    # --- FORM KHATAM ---
     st.divider()
-    # Display Table
     if not df_m.empty:
         st.write(f"### 📋 Current {m_type} List")
         curr_m = df_m[df_m['Type'] == m_type]
