@@ -308,83 +308,73 @@ if menu == "0. Dashboard":
         df_oef['FY'] = df_oef['Date'].apply(get_fy)
         df_oef = df_oef[df_oef['FY'] == selected_fy]
 
-    # --- 3. CALCULATIONS (Fixed for Multiple Banks & Negative Payable) ---
+    # --- 3. CORE CALCULATIONS (Sequence Fixed) ---
 
-    total_opening_cash = 0
-    total_op_receivable = 0
-    total_op_payable = 0
-    
-    if not df_p.empty:
-        # Pura 'Amount' column pehle hi numeric kar lo taaki loop mein error na aaye
-        df_p['Amount'] = pd.to_numeric(df_p['Amount'], errors='coerce').fillna(0)
-        
-        op_entries = df_p[df_p['Type'] == 'OP_BAL']
-        
-        if not op_entries.empty:
-            # 1. Banks ka Total (Multiple Bank Logic)
-            cash_bank_op = op_entries[op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
-            total_opening_cash = cash_bank_op['Amount'].sum()
-            
-            # 2. Parties & Brokers (Minus Logic)
-            other_op = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
-            
-            for _, r in other_op.iterrows():
-                amt = r['Amount'] # Ab ye pehle se numeric hai
-                
-                # Agar amount minus (-) hai toh Payable (Dena hai)
-                if amt < 0:
-                    total_op_payable += abs(amt) 
-                # Agar plus (+) hai toh Receivable (Lena hai)
-                else:
-                    total_op_receivable += amt
+    # Initialize variables to 0 (Starting point)
+    total_rev = 0; cash_in = 0; cash_out = 0; trip_outflow = 0
+    own_profit = 0; hired_profit = 0; office_exp = 0
+    total_opening_cash = 0; total_op_receivable = 0; total_op_payable = 0
 
-    # --- Metrics ke liye Final Calculation ---
-    current_year_pending = (total_rev - cash_in) 
-    final_net_outstanding = (total_op_receivable - total_op_payable) + current_year_pending
-    
-    # Cash in Hand ka final formula (Hamesha same rahega)
-    cash_hand_balance = (total_opening_cash + cash_in) - (cash_out + trip_outflow)
-    
-    # B. CURRENT YEAR CASH FLOW
-    cash_in = 0; cash_out = 0
-    if not df_pf.empty:
-        df_pf['Amount'] = pd.to_numeric(df_pf['Amount'], errors='coerce').fillna(0)
-        # Exclude OP_BAL from current year cash in to avoid double counting
-        cash_in = df_pf[(df_pf['Type'].str.contains('Receipt|In', case=False, na=False)) & (df_pf['Type'] != 'OP_BAL')]['Amount'].sum()
-        cash_out = df_pf[(df_pf['Type'].str.contains('Payment|Out', case=False, na=False)) & (df_pf['Type'] != 'OP_BAL')]['Amount'].sum()
-
-    # C. PROFIT & TRIP PERFORMANCE
-    own_profit = 0; hired_profit = 0; total_rev = 0; trip_outflow = 0
+    # A. TRIP PERFORMANCE (Pehle Revenue & Trip Outflow calculate karein)
     if not df_tf.empty:
         for c in ['Freight', 'Diesel', 'Toll', 'DriverExp', 'HiredCharges']:
             if c in df_tf.columns: df_tf[c] = pd.to_numeric(df_tf[c], errors='coerce').fillna(0)
         
         total_rev = df_tf['Freight'].sum()
-        # Own Fleet
+        
+        # Own Fleet Profit
         df_own = df_tf[df_tf['Type'].str.contains('Own', case=False, na=False)]
         own_profit = df_own['Freight'].sum() - (df_own['Diesel'].sum() + df_own['Toll'].sum() + df_own['DriverExp'].sum())
+        
         # Hired Commission
         df_hired = df_tf[df_tf['Type'].str.contains('Market|Hired', case=False, na=False)]
         hired_profit = df_hired['Freight'].sum() - df_hired['HiredCharges'].sum()
-        # Total Outflow from trips (For cash balance)
+        
+        # Total Cash Out from Trips
         trip_outflow = df_tf[['Diesel', 'Toll', 'DriverExp', 'HiredCharges']].sum().sum()
 
-    # D. FINAL SUMMARY VALUES
+    # B. PAYMENTS & OPENING BALANCES
+    if not df_p.empty:
+        df_p['Amount'] = pd.to_numeric(df_p['Amount'], errors='coerce').fillna(0)
+        
+        # 1. Opening Balances (Bank vs Party/Broker)
+        op_entries = df_p[df_p['Type'] == 'OP_BAL']
+        if not op_entries.empty:
+            # Banks ka total
+            cash_bank_op = op_entries[op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
+            total_opening_cash = cash_bank_op['Amount'].sum()
+            
+            # Parties (Minus logic for Payables)
+            other_op = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
+            for _, r in other_op.iterrows():
+                amt = r['Amount']
+                if amt < 0: total_op_payable += abs(amt)
+                else: total_op_receivable += amt
+
+        # 2. Current Year Cash In/Out (Filtered df_pf use karein)
+        if not df_pf.empty:
+            df_pf['Amount'] = pd.to_numeric(df_pf['Amount'], errors='coerce').fillna(0)
+            cash_in = df_pf[(df_pf['Type'].str.contains('Receipt|In', case=False, na=False)) & (df_pf['Type'] != 'OP_BAL')]['Amount'].sum()
+            cash_out = df_pf[(df_pf['Type'].str.contains('Payment|Out', case=False, na=False)) & (df_pf['Type'] != 'OP_BAL')]['Amount'].sum()
+
+    # C. OFFICE EXPENSES
     office_exp = pd.to_numeric(df_oef['Amount'], errors='coerce').sum() if not df_oef.empty else 0
+
+    # D. FINAL AGGREGATED VALUES (Final Logic)
+    current_year_pending = (total_rev - cash_in) 
+    final_net_outstanding = (total_op_receivable - total_op_payable) + current_year_pending
     total_net_profit = (own_profit + hired_profit) - office_exp
-    
-    # Cash in Hand = (Opening Cash + Receipts) - (Payments + Trip Expenses)
     cash_hand_balance = (total_opening_cash + cash_in) - (cash_out + trip_outflow)
-    
-    # Receivables = Old Dues + Current Pending (Total Billed - Total Received)
-    receivables = op_party_receivable + (total_rev - cash_in)
 
     # --- 4. DISPLAY UI ---
     st.write("### 💰 Financial Status (Cash & Dues)")
     m1, m2, m3 = st.columns(3)
-    # Ab yahan 'total_opening_cash' sahi se display hoga
+    
     m1.metric("Cash In Hand", f"₹{cash_hand_balance:,.0f}", delta=f"Op Cash: ₹{total_opening_cash:,.0f}")
-    m2.metric("Total Receivables", f"₹{receivables:,.0f}", help="Paisa jo market se lena baki hai")
+    
+    m2.metric("Net Outstanding", f"₹{final_net_outstanding:,.0f}", 
+              help=f"Old Receivable: {total_op_receivable} | Old Payable: {total_op_payable} | New Pending: {current_year_pending}")
+              
     m3.metric("Yearly Revenue", f"₹{total_rev:,.0f}", delta="Billed Amount")
 
     st.divider()
