@@ -390,11 +390,11 @@ elif menu == "1. Masters Setup":
     # 1. Category Selection
     m_type = st.selectbox("Category", ["Branch (Company)", "Party", "Broker", "Vehicle", "Driver", "Bank"])
     
-    # Form shuru ho raha hai
-    with st.form("m_form_masters_final", clear_on_submit=True):
+    # --- FORM SHURU ---
+    with st.form("m_form_final_v3", clear_on_submit=True):
         col1, col2 = st.columns(2)
         
-        # Variables ko initialize karein (Indentation check karein)
+        # Variables ko initialize karna (Indentation check karein - 8 spaces)
         name, gst, addr, cont, ac, ifsc, d_name, d_no = "", "", "", "", "", "", "", "", ""
 
         if m_type == "Branch (Company)":
@@ -430,7 +430,7 @@ elif menu == "1. Masters Setup":
                 ifsc = st.text_input("IFSC Code")
                 addr = st.text_input("Bank Branch Location")
 
-        # --- YE SABSE ZAROORI HAI: Submit Button Form ke andar hona chahiye ---
+        # --- SUBMIT BUTTON (Iska Form ke andar hona MUST hai) ---
         submit_m = st.form_submit_button(f"🚀 Save {m_type}")
         
         if submit_m:
@@ -438,12 +438,14 @@ elif menu == "1. Masters Setup":
                 # Sequence: Type, Name, GST, Address, Contact, A_C_No, IFSC, Driver_Name, Driver_No
                 new_row = [m_type, name, gst, addr, cont, ac, ifsc, d_name, d_no]
                 if save("masters", new_row):
-                    st.success(f"✅ {m_type} Saved Successfully!"); st.rerun()
+                    st.success(f"✅ {m_type} Saved Successfully!")
+                    st.rerun()
             else:
                 st.error("⚠️ Please enter a Name!")
+    # --- FORM KHATAM ---
 
     st.divider()
-    # Niche ki table display logic
+    # Display Table
     if not df_m.empty:
         st.write(f"### 📋 Current {m_type} List")
         curr_m = df_m[df_m['Type'] == m_type]
