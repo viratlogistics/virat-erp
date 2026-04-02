@@ -809,27 +809,26 @@ elif menu == "4. Financials":
                     st.error("⚠️ Please select Account and enter Amount!")
     with t2:
         sel_a = st.selectbox("Select Account for Statement", ["Select"] + all_accs, key="s4_final")
-        
-        # 1. Sabse pehle list ko khali (empty) define karein taaki NameError na aaye
         ledger_entries = []
         
         if sel_a != "Select":
-            # --- A. OPENING BALANCE FETCHING (From Payments Sheet) ---
+            # --- A. OPENING BALANCE (Fixed) ---
             if not df_p.empty:
-                # Humne ab 'OP_BAL' entries payments sheet mein dali hain
                 op_data = df_p[(df_p['Account_Name'] == sel_a) & (df_p['Type'] == 'OP_BAL')]
                 for _, r in op_data.iterrows():
-                    amt = pd.to_numeric(r.get('Amount', 0), errors='coerce')
+                    # Yahan hum brackets/minus handle karne ke liye pehle numeric convert karenge
+                    raw_val = str(r.get('Amount', 0)).replace('(', '-').replace(')', '').replace(',', '')
+                    amt = pd.to_numeric(raw_val, errors='coerce')
+                    
                     ledger_entries.append({
                         'Date': r.get('Date', date.today()), 
-                        'Particulars': '💰 OPENING BALANCE (F.Y. 2026-27)', 
-                        'Debit': amt if amt > 0 else 0, # Logistics mein receivable debit hota hai
-                        'Credit': 0
+                        'Particulars': '💰 OPENING BALANCE', 
+                        'Debit': amt if amt > 0 else 0,
+                        'Credit': abs(amt) if amt < 0 else 0 # Minus value yahan Credit mein jayegi
                     })
 
-            # --- B. TRIP DATA (Freight Bills & Hired Charges) ---
+            # --- B. TRIP DATA ---
             if not df_t.empty:
-                df_t.columns = [str(c).strip() for c in df_t.columns]
                 # Party Freight (Debit)
                 p_trips = df_t[df_t['Party'] == sel_a]
                 for _, r in p_trips.iterrows():
@@ -849,12 +848,14 @@ elif menu == "4. Financials":
                         'Credit': pd.to_numeric(r.get('HiredCharges', 0), errors='coerce')
                     })
 
-            # --- C. ACTUAL PAYMENTS (Receipts & Payments) ---
+            # --- C. PAYMENTS ---
             if not df_p.empty:
                 p_entries = df_p[(df_p['Account_Name'] == sel_a) & (df_p['Type'] != 'OP_BAL')]
                 for _, r in p_entries.iterrows():
-                    amt = pd.to_numeric(r.get('Amount', 0), errors='coerce')
+                    raw_p = str(r.get('Amount', 0)).replace('(', '-').replace(')', '').replace(',', '')
+                    amt = abs(pd.to_numeric(raw_p, errors='coerce'))
                     p_type = str(r.get('Type','')).lower()
+                    
                     if "receipt" in p_type or "in" in p_type:
                         ledger_entries.append({
                             'Date': r.get('Date', date.today()), 
@@ -868,11 +869,13 @@ elif menu == "4. Financials":
                             'Debit': amt, 'Credit': 0
                         })
 
-            # --- D. FINAL DISPLAY (Ab NameError nahi aayega) ---
+            # --- D. DISPLAY ---
             if ledger_entries:
                 full_df = pd.DataFrame(ledger_entries)
                 full_df['Date'] = pd.to_datetime(full_df['Date']).dt.date
                 full_df = full_df.sort_values(by=['Date'])
+                
+                # Balance calculation: Debit - Credit
                 full_df['Balance'] = (full_df['Debit'] - full_df['Credit']).cumsum()
                 
                 st.write(f"#### 📖 Ledger Statement: {sel_a}")
@@ -884,7 +887,7 @@ elif menu == "4. Financials":
                 else:
                     st.warning(f"Net Payable: ₹{abs(net_bal):,.0f}")
             else:
-                st.info("No transactions found for this account.")
+                st.info("No transactions found.")
 elif menu == "5. Business Insights":
     st.header(f"⚖️ Financial Insights & Fleet Ledgers")
 
