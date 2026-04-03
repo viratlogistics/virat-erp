@@ -276,7 +276,6 @@ def gl(t):
     # Baaki sab (Vehicle, Driver, Bank) ke liye normal logic
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist())
 if menu == "0. Dashboard":
-if menu == "0. Dashboard":
     st.markdown("<h1 style='text-align: center; color: #00d4ff;'>🚀 VIRAT LOGISTICS COMMAND CENTER</h1>", unsafe_allow_html=True)
 
     # --- 1. DATA PREP & CLEANING ---
@@ -393,7 +392,6 @@ if menu == "0. Dashboard":
 
     st.divider()
     st.caption("Virat Logistics ERP v3.0 | Real-Time Sync Enabled")
-
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
