@@ -276,153 +276,124 @@ def gl(t):
     # Baaki sab (Vehicle, Driver, Bank) ke liye normal logic
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist())
 if menu == "0. Dashboard":
-    st.markdown("<h2 style='text-align: center; color: #00d4ff;'>📊 VIRAT LOGISTICS STRATEGIC DASHBOARD</h2>", unsafe_allow_html=True)
+if menu == "0. Dashboard":
+    st.markdown("<h1 style='text-align: center; color: #00d4ff;'>🚀 VIRAT LOGISTICS COMMAND CENTER</h1>", unsafe_allow_html=True)
 
-    # --- 1. FY SELECTION ---
-    available_fy = ["2024-25", "2025-26", "2026-27"]
-    selected_fy = st.selectbox("📅 Select Financial Year", available_fy, index=2)
-
-    # --- 2. DATA LOADING & FILTERING ---
+    # --- 1. DATA PREP & CLEANING ---
     df_p = load("payments")
-    df_oe = load("office_expenses")
+    df_t = load("trips")
     
-    def get_fy(date_str):
-        try:
-            dt = pd.to_datetime(date_str)
-            return f"{dt.year}-{str(dt.year+1)[2:]}" if dt.month >= 4 else f"{dt.year-1}-{str(dt.year)[2:]}"
-        except: return "Unknown"
+    # Numeric conversion helper
+    def to_num(df, cols):
+        for c in cols:
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c].astype(str).replace(r'[\(₹,\)]', '', regex=True), errors='coerce').fillna(0)
+        return df
 
-    df_tf = df_t.copy()
-    if not df_tf.empty:
-        df_tf['FY'] = df_tf['Date'].apply(get_fy)
-        df_tf = df_tf[df_tf['FY'] == selected_fy]
+    if not df_t.empty: df_t = to_num(df_t, ['Freight', 'HiredCharges'])
+    if not df_p.empty: df_p = to_num(df_p, ['Amount'])
 
-    df_pf = df_p.copy()
-    if not df_pf.empty:
-        df_pf['FY'] = df_pf['Date'].apply(get_fy)
-        df_pf = df_pf[df_pf['FY'] == selected_fy]
-
-    # --- 3. CORE CALCULATIONS (New Strategic Logic) ---
-
-    total_rev = 0; own_profit = 0; hired_profit = 0; office_exp = 0
-    total_opening_cash = 0; total_op_receivable = 0; total_op_payable = 0
-    cash_in = 0; cash_out_total = 0; trip_actual_exp = 0
-
-    # A. TRIP PERFORMANCE (Trips Sheet + Payments Sheet Linking)
-    if not df_tf.empty:
-        # Numeric Clean-up
-        for c in ['Freight', 'HiredCharges']:
-            if c in df_tf.columns: df_tf[c] = pd.to_numeric(df_tf[c], errors='coerce').fillna(0)
-        
-        total_rev = df_tf['Freight'].sum()
-        
-        # 1. MARKET GADI PROFIT (Freight - Hired Charges)
-        df_mkt = df_tf[df_tf['Type'].str.contains('Market|Hired', case=False, na=False)]
-        hired_profit = df_mkt['Freight'].sum() - df_mkt['HiredCharges'].sum()
-        
-        # 2. OWN FLEET REVENUE
-        df_own = df_tf[df_tf['Type'].str.contains('Own', case=False, na=False)]
-        own_rev = df_own['Freight'].sum()
-
-        # 3. ACTUAL OWN FLEET EXPENSES (From Payments Sheet with 'LR:' tag)
-        if not df_pf.empty:
-            df_pf['Amount'] = pd.to_numeric(df_pf['Amount'], errors='coerce').fillna(0)
-            # Sirf wo kharche jo kisi LR se link kiye gaye hain
-            trip_actual_exp = df_pf[df_pf['Remarks'].str.contains('LR:', na=False)]['Amount'].sum()
-            own_profit = own_rev - trip_actual_exp
-            
-            # 4. OFFICE/ADMIN EXPENSES (Expense category but No LR tag)
-            exp_categories = gl("Expense")
-            office_exp_mask = (df_pf['Account_Name'].isin(exp_categories)) & (~df_pf['Remarks'].str.contains('LR:', na=False))
-            office_exp = df_pf[office_exp_mask]['Amount'].sum()
-        else:
-            own_profit = own_rev
-
-    # B. CASH & OUTSTANDING LOGIC
+    # --- 2. CALCULATIONS (THE ENGINE) ---
+    revenue = df_t['Freight'].sum() if not df_t.empty else 0
+    
+    # A. Direct Costs (Market Hired)
+    market_costs = df_t['HiredCharges'].sum() if not df_t.empty else 0
+    
+    # B. Direct Costs (Own Fleet - Fuel/Toll/Adv linked via LR_Ref)
+    banks_list = gl("Bank") + ["CASH"]
+    own_trip_costs = 0
+    office_indirect_exp = 0
+    
     if not df_p.empty:
-        # 1. Opening Balances (Bank vs Party/Broker)
-        op_entries = df_p[df_p['Type'] == 'OP_BAL']
-        if not op_entries.empty:
-            # FIX: Masters se saari 'Bank' category ki list uthao
-            banks_from_masters = gl("Bank") + ["CASH"]
-            
-            # Ab hum unhi accounts ko lenge jo Masters mein 'Bank' category mein hain
-            cash_bank_op = op_entries[op_entries['Account_Name'].isin(banks_from_masters)]
-            total_opening_cash = cash_bank_op['Amount'].sum()
-            
-            other_op = op_entries[~op_entries['Account_Name'].str.contains('Bank|CASH', case=False, na=False)]
-            for _, r in other_op.iterrows():
-                val = pd.to_numeric(r['Amount'], errors='coerce')
-                if val < 0: total_op_payable += abs(val)
-                else: total_op_receivable += val
+        # LR se linked kharche (Own Fleet Direct Exp)
+        own_trip_costs = abs(df_p[
+            (df_p['Account_Name'].isin(banks_list)) & 
+            (df_p['Amount'] < 0) & 
+            (df_p.get('LR_Ref', pd.Series(['']*len(df_p))).str.len() > 0)
+        ]['Amount'].sum())
+        
+        # General Office/Admin kharche (Indirect Exp - No LR Linked)
+        # Note: Personal withdrawls (Indrajit/Vishal) ko exclude kar rahe hain profit se
+        office_mask = (df_p['Account_Name'].isin(banks_list)) & \
+                      (df_p['Amount'] < 0) & \
+                      (df_p.get('LR_Ref', pd.Series(['']*len(df_p))) == "") & \
+                      (~df_p['Remarks'].str.contains('Personal|Withdraw', case=False, na=False))
+        office_indirect_exp = abs(df_p[office_mask]['Amount'].sum())
 
-        # Current FY Cash Flow
-        if not df_pf.empty:
-            cash_in = df_pf[(df_pf['Type'].str.contains('Receipt|In', case=False, na=False)) & (df_pf['Type'] != 'OP_BAL')]['Amount'].sum()
-            cash_out_total = df_pf[(df_pf['Type'].str.contains('Payment|Out', case=False, na=False)) & (df_pf['Type'] != 'OP_BAL')]['Amount'].sum()
-
-    # C. FINAL TOTALS
-    total_net_profit = (own_profit + hired_profit) - office_exp
-    cash_hand_balance = (total_opening_cash + cash_in) - cash_out_total
-    current_year_pending = total_rev - cash_in
-    total_to_receive = total_op_receivable + max(0, current_year_pending)
+    # C. FINAL PROFIT MARGINS
+    gross_profit = revenue - market_costs - own_trip_costs
+    net_profit = gross_profit - office_indirect_exp
     
-    # --- 4. DISPLAY UI ---
-    st.write("### 💰 Financial Status (Cash & Dues)")
+    # Cash in Hand (All Inflow - All Outflow)
+    cash_in = df_p[df_p['Amount'] > 0]['Amount'].sum() if not df_p.empty else 0
+    cash_out = abs(df_p[df_p['Amount'] < 0]['Amount'].sum()) if not df_p.empty else 0
+    cash_balance = cash_in - cash_out
+
+    # --- 3. TOP METRICS (Visual Impact) ---
+    st.write("### 💎 Financial Health Snapshot")
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Cash In Hand", f"₹{cash_hand_balance:,.0f}", delta=f"Op: ₹{total_opening_cash:,.0f}")
-    m2.metric("Total Receivable", f"₹{total_to_receive:,.0f}", delta="Paisa Lena Hai")
-    m3.metric("Total Payable", f"₹{total_op_payable:,.0f}", delta="Paisa Dena Hai", delta_color="inverse")
-    m4.metric("Yearly Revenue", f"₹{total_rev:,.0f}", delta="Billed")
+    m1.metric("Gross Revenue", f"₹{revenue:,.0f}", help="Total Billed Freight")
+    m2.metric("Net Business Profit", f"₹{net_profit:,.0f}", delta=f"{((net_profit/revenue)*100 if revenue else 0):.1f}% Margin")
+    m3.metric("Cash in Hand", f"₹{cash_balance:,.0f}", delta="Liquid Cash")
+    m4.metric("Direct Trip Exp", f"₹{(market_costs + own_trip_costs):,.0f}", delta_color="inverse", help="Market Bhada + Own Fleet Diesel/Toll")
+
+    st.divider()
+
+    # --- 4. ANALYTICS SECTION ---
+    col_left, col_right = st.columns([1.2, 1])
     
-    st.divider()
-    st.write("### 🚛 Business Performance")
-    p1, p2, p3, p4 = st.columns(4)
-    p1.metric("Net Profit", f"₹{total_net_profit:,.0f}", delta="Total")
-    p2.metric("Own Fleet Net", f"₹{own_profit:,.0f}", delta="After Exp")
-    p3.metric("Market Commission", f"₹{hired_profit:,.0f}", delta="Hired")
-    p4.metric("Admin/Office Exp", f"₹{office_exp:,.0f}", delta_color="inverse")
-
-    st.divider()
-
-    # --- 5. CHARTS & TABLES ---
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.subheader("💰 Cash Flow Breakdown")
-        cf_data = pd.DataFrame({'Category': ['Bank/Cash Bal', 'Receipts', 'Total Outflow'], 'Amount': [total_opening_cash, cash_in, cash_out_total]})
-        fig_pie = px.pie(cf_data, values='Amount', names='Category', hole=0.4, color_discrete_sequence=px.colors.qualitative.Bold)
+    with col_left:
+        st.subheader("📊 Expense Distribution (Direct vs Indirect)")
+        exp_pie_data = pd.DataFrame({
+            'Category': ['Market Hired Bhada', 'Own Fleet (Fuel/Toll)', 'Office/Admin Exp'],
+            'Amount': [market_costs, own_trip_costs, office_indirect_exp]
+        })
+        fig_pie = px.sunburst(exp_pie_data, path=['Category'], values='Amount', 
+                             color_discrete_sequence=px.colors.qualitative.Pastel)
         st.plotly_chart(fig_pie, use_container_width=True)
-    
-    with col_b:
-        st.subheader("🚛 Own Vehicle Income (Revenue)")
-        if not df_tf.empty:
-            df_v = df_tf[df_tf['Type'].str.contains('Own', case=False, na=False)]
-            if not df_v.empty:
-                v_perf = df_v.groupby('Vehicle')['Freight'].sum().reset_index()
-                fig_bar = px.bar(v_perf, x='Vehicle', y='Freight', text_auto='.2s', color_discrete_sequence=['#00d4ff'])
-                st.plotly_chart(fig_bar, use_container_width=True)
+
+    with col_right:
+        st.subheader("🚚 Fleet Performance")
+        if not df_t.empty:
+            v_perf = df_t.groupby('Vehicle')['Freight'].sum().reset_index().sort_values('Freight', ascending=False)
+            fig_bar = px.bar(v_perf, x='Vehicle', y='Freight', text_auto='.2s',
+                            title="Revenue by Vehicle", color='Freight', color_continuous_scale='GnBu')
+            st.plotly_chart(fig_bar, use_container_width=True)
 
     st.divider()
-    st.subheader("⏳ Party-wise Pending Balance")
-    if not df_tf.empty or total_op_receivable > 0:
-        p_due = df_tf.groupby('Party')['Freight'].sum().reset_index() if not df_tf.empty else pd.DataFrame(columns=['Party', 'Freight'])
-        if not op_entries.empty:
-            party_op_list = op_entries[~op_entries['Account_Name'].str.contains('Bank|CASH', case=False, na=False)][['Account_Name', 'Amount']]
-            party_op_list.columns = ['Party', 'Opening_Bal']
-            p_due = pd.merge(p_due, party_op_list, on='Party', how='outer').fillna(0)
-        else: p_due['Opening_Bal'] = 0
+
+    # --- 5. VEHICLE WISE PROFIT (THE SMART TABLE) ---
+    st.subheader("📋 Vehicle Wise Profitability (Trip Level)")
+    if not df_t.empty:
+        # Revenue by Vehicle
+        v_rev = df_t.groupby('Vehicle')['Freight'].sum().reset_index()
         
-        p_due['Total_Billed'] = p_due['Freight'] + p_due['Opening_Bal']
-        p_rec = df_p[df_p['Type'].str.contains('Receipt', case=False, na=False)].groupby('Account_Name')['Amount'].sum().reset_index()
-        p_rec.columns = ['Party', 'Received']
+        # Expenses by Vehicle (Linked via LR_Ref and LR No)
+        # Humein payments sheet ko trips se map karna hoga
+        v_exp_list = []
+        for veh in df_t['Vehicle'].unique():
+            # Is vehicle ke saare LR numbers nikalo
+            lrs = df_t[df_t['Vehicle'] == veh]['LR No'].unique().tolist()
+            # Payments sheet mein in LRs par kitna kharcha hua
+            v_cost = abs(df_p[df_p.get('LR_Ref', pd.Series([])).isin(lrs)]['Amount'].sum()) if not df_p.empty else 0
+            # Agar Market gadi hai to HiredCharges bhi add karo
+            mkt_cost = df_t[df_t['Vehicle'] == veh]['HiredCharges'].sum()
+            v_exp_list.append({'Vehicle': veh, 'Total_Exp': v_cost + mkt_cost})
         
-        final_due = pd.merge(p_due, p_rec, on='Party', how='left').fillna(0)
-        final_due['Pending'] = final_due['Total_Billed'] - final_due['Received']
-        display_due = final_due[abs(final_due['Pending']) > 1].sort_values('Pending', ascending=False)
-        
-        st.dataframe(display_due[['Party', 'Opening_Bal', 'Freight', 'Total_Billed', 'Received', 'Pending']].style.format({
-            "Opening_Bal": "₹{:,.0f}", "Freight": "₹{:,.0f}", "Total_Billed": "₹{:,.0f}", "Received": "₹{:,.0f}", "Pending": "₹{:,.0f}"
-        }).set_properties(**{'color': '#00d4ff', 'font-weight': 'bold'}), use_container_width=True)
+        v_exp_df = pd.DataFrame(v_exp_list)
+        v_final = pd.merge(v_rev, v_exp_df, on='Vehicle')
+        v_final['Net_Profit'] = v_final['Freight'] - v_final['Total_Exp']
+        v_final['Profit_%'] = (v_final['Net_Profit'] / v_final['Freight'] * 100).fillna(0)
+
+        st.dataframe(v_final.sort_values('Net_Profit', ascending=False).style.format({
+            "Freight": "₹{:,.0f}", "Total_Exp": "₹{:,.0f}", "Net_Profit": "₹{:,.0f}", "Profit_%": "{:.1f}%"
+        }).background_gradient(subset=['Net_Profit'], cmap='RdYlGn'), use_container_width=True)
+    else:
+        st.info("No Trip Data Available for Analytics.")
+
+    st.divider()
+    st.caption("Virat Logistics ERP v3.0 | Real-Time Sync Enabled")
+
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
