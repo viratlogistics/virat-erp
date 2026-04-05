@@ -589,8 +589,12 @@ elif menu == "2. LR Entry":
             fr_amt = st.number_input("Total Freight*", min_value=0.0)
             show_fr = st.checkbox("Show Freight in PDF?", value=True)
             if v_cat == "Own Fleet": 
-                dsl, toll, drv = st.number_input("Diesel"), st.number_input("Toll"), st.number_input("Driver Adv")
-                hc = 0.0
+                dsl = st.number_input("Diesel", min_value=0.0)
+                toll = st.number_input("Toll", min_value=0.0)
+                drv = st.number_input("Driver Adv", min_value=0.0)
+        
+                # Masters se Bank ki list uthayega
+                paid_via = st.selectbox("Kharcha Kis Bank Se Huva?*", ["Select"] + gl("Bank"), key=f"p_via_{k}")
             else: 
                 hc = st.number_input("Hired Charges")
                 dsl = toll = drv = 0.0
