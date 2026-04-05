@@ -276,283 +276,153 @@ def gl(t):
     # Baaki sab (Vehicle, Driver, Bank) ke liye normal logic
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist())
 if menu == "0. Dashboard":
-    st.markdown("<h1 style='text-align: center; color: #00d4ff;'>🚀 VIRAT LOGISTICS COMMAND CENTER</h1>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #00d4ff;'>📊 VIRAT LOGISTICS STRATEGIC DASHBOARD</h2>", unsafe_allow_html=True)
 
-    # --- 1. DATA PREP & CLEANING ---
+    # --- 1. FY SELECTION ---
+    available_fy = ["2024-25", "2025-26", "2026-27"]
+    selected_fy = st.selectbox("📅 Select Financial Year", available_fy, index=2)
+
+    # --- 2. DATA LOADING & FILTERING ---
     df_p = load("payments")
-    df_t = load("trips")
+    df_oe = load("office_expenses")
     
-    # Numeric conversion helper
-    def to_num(df, cols):
-        for c in cols:
-            if c in df.columns:
-                df[c] = pd.to_numeric(df[c].astype(str).replace(r'[\(₹,\)]', '', regex=True), errors='coerce').fillna(0)
-        return df
+    def get_fy(date_str):
+        try:
+            dt = pd.to_datetime(date_str)
+            return f"{dt.year}-{str(dt.year+1)[2:]}" if dt.month >= 4 else f"{dt.year-1}-{str(dt.year)[2:]}"
+        except: return "Unknown"
 
-    if not df_t.empty: df_t = to_num(df_t, ['Freight', 'HiredCharges'])
-    if not df_p.empty: df_p = to_num(df_p, ['Amount'])
+    df_tf = df_t.copy()
+    if not df_tf.empty:
+        df_tf['FY'] = df_tf['Date'].apply(get_fy)
+        df_tf = df_tf[df_tf['FY'] == selected_fy]
 
-    # --- 2. CALCULATIONS (THE ENGINE) ---
-    revenue = df_t['Freight'].sum() if not df_t.empty else 0
-    
-    # A. Direct Costs (Market Hired)
-    market_costs = df_t['HiredCharges'].sum() if not df_t.empty else 0
-    
-    # B. Direct Costs (Own Fleet - Fuel/Toll/Adv linked via LR_Ref)
-    banks_list = gl("Bank") + ["CASH"]
-    own_trip_costs = 0
-    office_indirect_exp = 0
-    
-    if not df_p.empty:
-        # LR se linked kharche (Own Fleet Direct Exp)
-        own_trip_costs = abs(df_p[
-            (df_p['Account_Name'].isin(banks_list)) & 
-            (df_p['Amount'] < 0) & 
-            (df_p.get('LR_Ref', pd.Series(['']*len(df_p))).str.len() > 0)
-        ]['Amount'].sum())
+    df_pf = df_p.copy()
+    if not df_pf.empty:
+        df_pf['FY'] = df_pf['Date'].apply(get_fy)
+        df_pf = df_pf[df_pf['FY'] == selected_fy]
+
+    # --- 3. CORE CALCULATIONS (New Strategic Logic) ---
+
+    total_rev = 0; own_profit = 0; hired_profit = 0; office_exp = 0
+    total_opening_cash = 0; total_op_receivable = 0; total_op_payable = 0
+    cash_in = 0; cash_out_total = 0; trip_actual_exp = 0
+
+    # A. TRIP PERFORMANCE (Trips Sheet + Payments Sheet Linking)
+    if not df_tf.empty:
+        # Numeric Clean-up
+        for c in ['Freight', 'HiredCharges']:
+            if c in df_tf.columns: df_tf[c] = pd.to_numeric(df_tf[c], errors='coerce').fillna(0)
         
-        # General Office/Admin kharche (Indirect Exp - No LR Linked)
-        # Note: Personal withdrawls (Indrajit/Vishal) ko exclude kar rahe hain profit se
-        office_mask = (df_p['Account_Name'].isin(banks_list)) & \
-                      (df_p['Amount'] < 0) & \
-                      (df_p.get('LR_Ref', pd.Series(['']*len(df_p))) == "") & \
-                      (~df_p['Remarks'].str.contains('Personal|Withdraw', case=False, na=False))
-        office_indirect_exp = abs(df_p[office_mask]['Amount'].sum())
+        total_rev = df_tf['Freight'].sum()
+        
+        # 1. MARKET GADI PROFIT (Freight - Hired Charges)
+        df_mkt = df_tf[df_tf['Type'].str.contains('Market|Hired', case=False, na=False)]
+        hired_profit = df_mkt['Freight'].sum() - df_mkt['HiredCharges'].sum()
+        
+        # 2. OWN FLEET REVENUE
+        df_own = df_tf[df_tf['Type'].str.contains('Own', case=False, na=False)]
+        own_rev = df_own['Freight'].sum()
 
-    # C. FINAL PROFIT MARGINS
-    gross_profit = revenue - market_costs - own_trip_costs
-    net_profit = gross_profit - office_indirect_exp
+        # 3. ACTUAL OWN FLEET EXPENSES (From Payments Sheet with 'LR:' tag)
+        if not df_pf.empty:
+            df_pf['Amount'] = pd.to_numeric(df_pf['Amount'], errors='coerce').fillna(0)
+            # Sirf wo kharche jo kisi LR se link kiye gaye hain
+            trip_actual_exp = df_pf[df_pf['Remarks'].str.contains('LR:', na=False)]['Amount'].sum()
+            own_profit = own_rev - trip_actual_exp
+            
+            # 4. OFFICE/ADMIN EXPENSES (Expense category but No LR tag)
+            exp_categories = gl("Expense")
+            office_exp_mask = (df_pf['Account_Name'].isin(exp_categories)) & (~df_pf['Remarks'].str.contains('LR:', na=False))
+            office_exp = df_pf[office_exp_mask]['Amount'].sum()
+        else:
+            own_profit = own_rev
+
+    # B. CASH & OUTSTANDING LOGIC
+    if not df_p.empty:
+        # 1. Opening Balances (Bank vs Party/Broker)
+        op_entries = df_p[df_p['Type'] == 'OP_BAL']
+        if not op_entries.empty:
+            # FIX: Masters se saari 'Bank' category ki list uthao
+            banks_from_masters = gl("Bank") + ["CASH"]
+            
+            # Ab hum unhi accounts ko lenge jo Masters mein 'Bank' category mein hain
+            cash_bank_op = op_entries[op_entries['Account_Name'].isin(banks_from_masters)]
+            total_opening_cash = cash_bank_op['Amount'].sum()
+            
+            other_op = op_entries[~op_entries['Account_Name'].str.contains('Bank|CASH', case=False, na=False)]
+            for _, r in other_op.iterrows():
+                val = pd.to_numeric(r['Amount'], errors='coerce')
+                if val < 0: total_op_payable += abs(val)
+                else: total_op_receivable += val
+
+        # Current FY Cash Flow
+        if not df_pf.empty:
+            cash_in = df_pf[(df_pf['Type'].str.contains('Receipt|In', case=False, na=False)) & (df_pf['Type'] != 'OP_BAL')]['Amount'].sum()
+            cash_out_total = df_pf[(df_pf['Type'].str.contains('Payment|Out', case=False, na=False)) & (df_pf['Type'] != 'OP_BAL')]['Amount'].sum()
+
+    # C. FINAL TOTALS
+    total_net_profit = (own_profit + hired_profit) - office_exp
+    cash_hand_balance = (total_opening_cash + cash_in) - cash_out_total
+    current_year_pending = total_rev - cash_in
+    total_to_receive = total_op_receivable + max(0, current_year_pending)
     
-    # Cash in Hand (All Inflow - All Outflow)
-    cash_in = df_p[df_p['Amount'] > 0]['Amount'].sum() if not df_p.empty else 0
-    cash_out = abs(df_p[df_p['Amount'] < 0]['Amount'].sum()) if not df_p.empty else 0
-    cash_balance = cash_in - cash_out
-
-    # --- 3. TOP METRICS (Visual Impact) ---
-    st.write("### 💎 Financial Health Snapshot")
+    # --- 4. DISPLAY UI ---
+    st.write("### 💰 Financial Status (Cash & Dues)")
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Gross Revenue", f"₹{revenue:,.0f}", help="Total Billed Freight")
-    m2.metric("Net Business Profit", f"₹{net_profit:,.0f}", delta=f"{((net_profit/revenue)*100 if revenue else 0):.1f}% Margin")
-    m3.metric("Cash in Hand", f"₹{cash_balance:,.0f}", delta="Liquid Cash")
-    m4.metric("Direct Trip Exp", f"₹{(market_costs + own_trip_costs):,.0f}", delta_color="inverse", help="Market Bhada + Own Fleet Diesel/Toll")
+    m1.metric("Cash In Hand", f"₹{cash_hand_balance:,.0f}", delta=f"Op: ₹{total_opening_cash:,.0f}")
+    m2.metric("Total Receivable", f"₹{total_to_receive:,.0f}", delta="Paisa Lena Hai")
+    m3.metric("Total Payable", f"₹{total_op_payable:,.0f}", delta="Paisa Dena Hai", delta_color="inverse")
+    m4.metric("Yearly Revenue", f"₹{total_rev:,.0f}", delta="Billed")
+    
+    st.divider()
+    st.write("### 🚛 Business Performance")
+    p1, p2, p3, p4 = st.columns(4)
+    p1.metric("Net Profit", f"₹{total_net_profit:,.0f}", delta="Total")
+    p2.metric("Own Fleet Net", f"₹{own_profit:,.0f}", delta="After Exp")
+    p3.metric("Market Commission", f"₹{hired_profit:,.0f}", delta="Hired")
+    p4.metric("Admin/Office Exp", f"₹{office_exp:,.0f}", delta_color="inverse")
 
     st.divider()
 
-    # --- 4. ANALYTICS SECTION ---
-    col_left, col_right = st.columns([1.2, 1])
-    import streamlit as st
-from streamlit_option_menu import option_menu
-import pandas as pd
-import plotly.express as px
-from datetime import date
-from fpdf import FPDF
-import gspread
-from google.oauth2.service_account import Credentials
-import json, io
-
-# --- 1. CONFIG & CONNECTION ---
-st.set_page_config(page_title="Virat Logistics ERP", layout="wide", initial_sidebar_state="expanded")
-
-@st.cache_resource
-def get_sh():
-    try:
-        info = json.loads(st.secrets["gcp_service_account"]["json_key"])
-        creds = Credentials.from_service_account_info(info, scopes=["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"])
-        return gspread.authorize(creds).open("Virat_Logistics_Data")
-    except Exception as e:
-        st.error(f"Google Sheet Connection Error: {e}")
-        return None
-
-sh = get_sh()
-
-def load(name):
-    try:
-        ws = sh.worksheet(name)
-        df = pd.DataFrame(ws.get_all_records())
-        df.columns = [str(c).strip() for c in df.columns]
-        return df
-    except:
-        return pd.DataFrame()
-
-def save(name, row):
-    try:
-        sh.worksheet(name).append_row(row, value_input_option='USER_ENTERED')
-        return True
-    except:
-        return False
-
-# --- 2. PDF GENERATION LOGIC (V.I.P Section) ---
-def generate_lr_pdf(lr_data, show_fr=True):
-    pdf = FPDF()
-    pdf.add_page()
+    # --- 5. CHARTS & TABLES ---
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.subheader("💰 Cash Flow Breakdown")
+        cf_data = pd.DataFrame({'Category': ['Bank/Cash Bal', 'Receipts', 'Total Outflow'], 'Amount': [total_opening_cash, cash_in, cash_out_total]})
+        fig_pie = px.pie(cf_data, values='Amount', names='Category', hole=0.4, color_discrete_sequence=px.colors.qualitative.Bold)
+        st.plotly_chart(fig_pie, use_container_width=True)
     
-    # Header
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, str(lr_data.get('BranchName', 'VIRAT LOGISTICS')).upper(), ln=1, align='C')
-    pdf.set_font("Arial", '', 8)
-    pdf.cell(0, 4, f"Address: {lr_data.get('BranchAddr', 'N/A')}", ln=1, align='C')
-    pdf.cell(0, 4, f"GSTIN: {lr_data.get('BranchGST', 'N/A')}", ln=1, align='C')
-    pdf.ln(5)
+    with col_b:
+        st.subheader("🚛 Own Vehicle Income (Revenue)")
+        if not df_tf.empty:
+            df_v = df_tf[df_tf['Type'].str.contains('Own', case=False, na=False)]
+            if not df_v.empty:
+                v_perf = df_v.groupby('Vehicle')['Freight'].sum().reset_index()
+                fig_bar = px.bar(v_perf, x='Vehicle', y='Freight', text_auto='.2s', color_discrete_sequence=['#00d4ff'])
+                st.plotly_chart(fig_bar, use_container_width=True)
 
-    # Basic Info Table
-    pdf.set_fill_color(230, 230, 230)
-    pdf.set_font("Arial", 'B', 9)
-    pdf.cell(47, 8, f" LR No: {lr_data.get('LR No', '')}", 1, 0, 'L', True)
-    pdf.cell(47, 8, f" Date: {lr_data.get('Date', '')}", 1, 0, 'L', True)
-    pdf.cell(48, 8, f" Vehicle: {lr_data.get('Vehicle', '')}", 1, 0, 'L', True)
-    pdf.cell(48, 8, f" Risk: {lr_data.get('Risk', 'Owner Risk')}", 1, 1, 'L', True)
-    pdf.ln(2)
-
-    # Party Details
-    pdf.set_font("Arial", 'B', 9)
-    pdf.cell(63, 6, " CONSIGNOR", 1, 0, 'L', True)
-    pdf.cell(63, 6, " CONSIGNEE", 1, 0, 'L', True)
-    pdf.cell(64, 6, " BILLING PARTY", 1, 1, 'L', True)
-    
-    pdf.set_font("Arial", '', 8)
-    y_start = pdf.get_y()
-    pdf.multi_cell(63, 5, f"{lr_data.get('Cnor', '')}\nGST: {lr_data.get('CnorGST', 'N/A')}", 1, 'L')
-    y_e1 = pdf.get_y()
-    
-    pdf.set_y(y_start); pdf.set_x(73)
-    pdf.multi_cell(63, 5, f"{lr_data.get('Cnee', '')}\nGST: {lr_data.get('CneeGST', 'N/A')}", 1, 'L')
-    y_e2 = pdf.get_y()
-    
-    pdf.set_y(y_start); pdf.set_x(136)
-    pdf.multi_cell(64, 5, f"{lr_data.get('BillP', '')}\nInv No: {lr_data.get('InvNo', 'N/A')}", 1, 'L')
-    y_e3 = pdf.get_y()
-    
-    pdf.set_y(max(y_e1, y_e2, y_e3)); pdf.ln(4)
-
-    # Material Info
-    pdf.set_font("Arial", 'B', 9)
-    pdf.cell(70, 8, " Description", 1, 0, 'C', True)
-    pdf.cell(30, 8, " Pkg", 1, 0, 'C', True)
-    pdf.cell(30, 8, " Wt (Net/Chg)", 1, 0, 'C', True)
-    pdf.cell(60, 8, " Freight Amount", 1, 1, 'C', True)
-    
-    pdf.set_font("Arial", '', 9)
-    amt_str = f"Rs. {lr_data.get('Freight', 0)}" if show_fr else "T.B.B."
-    pdf.cell(70, 10, f" {lr_data.get('Material', '')}", 1, 0, 'L')
-    pdf.cell(30, 10, f" {lr_data.get('Pkg', '')}", 1, 0, 'C')
-    pdf.cell(30, 10, f" {lr_data.get('NetWt', 0)} / {lr_data.get('ChgWt', 0)}", 1, 0, 'C')
-    pdf.cell(60, 10, amt_str, 1, 1, 'R')
-
-    # Footer Bank Details
-    pdf.set_y(-50)
-    pdf.set_font("Arial", 'B', 9)
-    pdf.cell(100, 5, "PAYMENT BANK DETAILS:", 0, 0, 'L')
-    pdf.cell(90, 5, f"FOR {lr_data.get('BranchName', 'VIRAT LOGISTICS')}", 0, 1, 'R')
-    pdf.set_font("Arial", '', 8)
-    pdf.multi_cell(100, 4, f"Bank: {lr_data.get('BankName', 'N/A')}\nA/C: {lr_data.get('BankAC', 'N/A')}\nIFSC: {lr_data.get('BankIFSC', 'N/A')}")
-    
-    pdf.set_font("Arial", 'I', 7)
-    pdf.cell(0, 10, "--- COMPUTER GENERATED DOCUMENT, NO SIGNATURE REQUIRED ---", 0, 0, 'C')
-
-    return pdf.output(dest='S').encode('latin-1')
-
-# --- 3. MASTER HELPERS ---
-df_m = load("masters")
-df_t = load("trips")
-
-def gl(t): 
-    if df_m.empty: return []
-    if t in ["Party", "Consignor", "Broker"]:
-        combined = df_m[df_m['Type'].isin(["Party", "Broker", "Consignor"])]['Name'].unique().tolist()
-        return sorted([str(x) for x in combined if x and str(x).strip() != ""])
-    return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist())
-
-# --- 4. SIDEBAR MENU ---
-with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/4090/4090434.png", width=80)
-    st.title("VIRAT LOGISTICS")
-    menu = option_menu("Main Menu", 
-        ["0. Dashboard", "1. Masters Setup", "2. LR Entry", "4. Financials", "9. Cash & Bank"], 
-        icons=["speedometer2", "person-gear", "file-earmark-plus", "currency-rupee", "receipt"], 
-        default_index=0)
-
-# --- 5. DASHBOARD (DHANSU LOGIC) ---
-if menu == "0. Dashboard":
-    st.markdown("<h1 style='text-align: center; color: #00d4ff;'>📊 STRATEGIC COMMAND CENTER</h1>", unsafe_allow_html=True)
-    df_p = load("payments")
-    
-    # 1. Revenue & Market Costs
-    revenue = pd.to_numeric(df_t['Freight'], errors='coerce').sum() if not df_t.empty else 0
-    mkt_costs = pd.to_numeric(df_t['HiredCharges'], errors='coerce').sum() if not df_t.empty else 0
-    
-    # 2. Banking & Expenses (Double Entry Handled)
-    banks = gl("Bank") + ["CASH"]
-    cash_bal = 0; own_trip_costs = 0; office_exp = 0
-    
-    if not df_p.empty:
-        df_p['Amount'] = pd.to_numeric(df_p['Amount'].astype(str).replace(r'[\(₹,\)]', '', regex=True), errors='coerce').fillna(0)
-        
-        # Cash In Hand (Sirf Real Accounts ka balance)
-        cash_bal = df_p[df_p['Account_Name'].isin(banks)]['Amount'].sum()
-        
-        # Own Fleet Expenses (Jo Bank se minus hua aur LR linked hai)
-        own_trip_costs = abs(df_p[(df_p['Account_Name'].isin(banks)) & (df_p['Amount'] < 0) & (df_p['Remarks'].str.contains('LR:', na=False))].sum()['Amount'])
-        
-        # Office Expenses (Jo Bank se minus hua aur LR linked nahi hai)
-        office_exp = abs(df_p[(df_p['Account_Name'].isin(banks)) & (df_p['Amount'] < 0) & (~df_p['Remarks'].str.contains('LR:', na=False)) & (~df_p['Account_Name'].str.contains('Personal', case=False, na=False))].sum()['Amount'])
-
-    net_profit = revenue - mkt_costs - own_trip_costs - office_exp
-
-    # Display Metrics
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Gross Revenue", f"₹{revenue:,.0f}")
-    c2.metric("Net Profit", f"₹{net_profit:,.0f}", delta=f"{((net_profit/revenue)*100 if revenue else 0):.1f}%")
-    c3.metric("Cash Balance", f"₹{cash_bal:,.0f}")
-    c4.metric("Total Expenses", f"₹{(mkt_costs + own_trip_costs + office_exp):,.0f}", delta_color="inverse")
-
-    # Vehicle Profit Table (Advanced Join)
     st.divider()
-    st.subheader("🚛 Vehicle Wise Performance")
-    if not df_t.empty:
-        v_data = []
-        for v in df_t['Vehicle'].unique():
-            v_rev = df_t[df_t['Vehicle'] == v]['Freight'].sum()
-            v_mkt = df_t[df_t['Vehicle'] == v]['HiredCharges'].sum()
-            
-            # LR-wise tracking from Payments
-            v_lrs = df_t[df_t['Vehicle'] == v]['LR No'].unique().tolist()
-            v_own_cost = 0
-            if not df_p.empty:
-                v_own_cost = abs(df_p[(df_p['Amount'] < 0) & (df_p['Remarks'].apply(lambda x: any(lr in str(x) for lr in v_lrs)))]['Amount'].sum())
-            
-            v_data.append({"Vehicle": v, "Revenue": v_rev, "Expenses": v_mkt + v_own_cost, "Net": v_rev - (v_mkt + v_own_cost)})
+    st.subheader("⏳ Party-wise Pending Balance")
+    if not df_tf.empty or total_op_receivable > 0:
+        p_due = df_tf.groupby('Party')['Freight'].sum().reset_index() if not df_tf.empty else pd.DataFrame(columns=['Party', 'Freight'])
+        if not op_entries.empty:
+            party_op_list = op_entries[~op_entries['Account_Name'].str.contains('Bank|CASH', case=False, na=False)][['Account_Name', 'Amount']]
+            party_op_list.columns = ['Party', 'Opening_Bal']
+            p_due = pd.merge(p_due, party_op_list, on='Party', how='outer').fillna(0)
+        else: p_due['Opening_Bal'] = 0
         
-        st.dataframe(pd.DataFrame(v_data).sort_values("Net", ascending=False), use_container_width=True)
-
-# --- 6. CASH & BANK (ACCURATE ENTRY) ---
-elif menu == "9. Cash & Bank":
-    st.header("🏦 Cash & Bank Management")
-    banks_cash = sorted(gl("Bank") + ["CASH"])
-    all_targets = sorted(gl("Expense") + ["Indrajit Personal", "Vishal Personal"] + gl("Driver") + gl("Broker") + gl("Party"))
-    
-    t1, t2 = st.tabs(["💸 Record Entry", "📑 Passbook"])
-    
-    with t1:
-        with st.form("cb_form", clear_on_submit=True):
-            col1, col2 = st.columns(2)
-            with col1:
-                p_date = st.date_input("Date", date.today())
-                from_acc = st.selectbox("From (Bank/Cash)*", ["Select"] + banks_cash)
-                p_amt = st.number_input("Amount (₹)*", min_value=0.0)
-            with col2:
-                to_acc = st.selectbox("To (Account/Expense)*", ["Select"] + all_targets)
-                linked_lr = st.selectbox("Link LR", ["None"] + (df_t['LR No'].tolist()[::-1] if not df_t.empty else []))
-                p_rem = st.text_input("Remarks")
-            
-            if st.form_submit_button("Confirm Transaction"):
-                if from_acc != "Select" and to_acc != "Select" and p_amt > 0:
-                    lr_tag = f"LR:{linked_lr}" if linked_lr != "None" else "General"
-                    final_rem = f"{lr_tag} | {to_acc} | {p_rem}"
-                    
-                    # Double Entry Save
-                    save("payments", [str(p_date), from_acc, "Payment (Out)", -p_amt, "UPI/Cash", final_rem])
-                    save("payments", [str(p_date), to_acc, "Payment (Out)", p_amt, "UPI/Cash", final_rem])
-                    st.success("Entry Saved!"); st.rerun()
+        p_due['Total_Billed'] = p_due['Freight'] + p_due['Opening_Bal']
+        p_rec = df_p[df_p['Type'].str.contains('Receipt', case=False, na=False)].groupby('Account_Name')['Amount'].sum().reset_index()
+        p_rec.columns = ['Party', 'Received']
+        
+        final_due = pd.merge(p_due, p_rec, on='Party', how='left').fillna(0)
+        final_due['Pending'] = final_due['Total_Billed'] - final_due['Received']
+        display_due = final_due[abs(final_due['Pending']) > 1].sort_values('Pending', ascending=False)
+        
+        st.dataframe(display_due[['Party', 'Opening_Bal', 'Freight', 'Total_Billed', 'Received', 'Pending']].style.format({
+            "Opening_Bal": "₹{:,.0f}", "Freight": "₹{:,.0f}", "Total_Billed": "₹{:,.0f}", "Received": "₹{:,.0f}", "Pending": "₹{:,.0f}"
+        }).set_properties(**{'color': '#00d4ff', 'font-weight': 'bold'}), use_container_width=True)
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
