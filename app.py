@@ -640,7 +640,23 @@ elif menu == "2. LR Entry":
                         save("masters", ["Party", bill_pty])
                     if is_nc and cnor_name not in gl("Consignor"):
                         save("masters", ["Consignor", cnor_name])
-
+                    if v_cat == "Own Fleet" and paid_via != "Select":
+                        total_trip_exp = dsl + toll + drv
+                        if total_trip_exp > 0:
+                            # Payments sheet mein auto-entry (Total 8 columns as per your CSV)
+                            # Date, Account_Name, Type, Amount, Mode, Remarks, LR_Ref, Bank_Used
+                            bank_payment_row = [
+                                str(d), 
+                                f"Trip Exp ({v_no})", 
+                                "Payment (Out)", 
+                                total_trip_exp, 
+                                "Cash/Bank", 
+                                f"Diesel/Toll for LR: {lr_no}", 
+                                lr_no,
+                                paid_via # Ye column aapki sheet mein Bank track karega
+                            ]
+                            save("payments", bank_payment_row)
+                    
                     # 3. PDF ke liye Branch/Company ka sara data bundle karna
                     st.session_state.pdf_ready = {
                         "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
@@ -657,7 +673,7 @@ elif menu == "2. LR Entry":
                         "BankAC": br_info.get('A_C_No', 'N/A'),
                         "BankIFSC": br_info.get('IFSC', 'N/A')
                     }
-                    st.success("LR Saved and Masters Updated!")
+                    st.success("LR Saved and Masters Updated! and Bank Balance Updated!")
                     st.rerun()
             else:
                 st.error("Please fill Party Name and Freight!")
