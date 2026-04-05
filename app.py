@@ -375,6 +375,24 @@ if menu == "0. Dashboard":
     p3.metric("Market Hired", f"₹{hired_profit:,.0f}", delta="Comm.")
     p4.metric("Office Exp", f"₹{office_exp:,.0f}", delta_color="inverse")
 
+    st.write("### 🏦 My Bank Accounts Balance")
+    my_banks = gl("Bank")
+    b_cols = st.columns(len(my_banks) if my_banks else 1)
+    
+    for i, b_name in enumerate(my_banks):
+        # 1. Opening Balance (Jo payments sheet mein OP_BAL hai)
+        op_amt = df_p[(df_p['Account_Name'] == b_name) & (df_p['Type'] == 'OP_BAL')]['Amount'].sum()
+        
+        # 2. Inflow (Paisa aaya - isme Bank_Used check karenge)
+        in_amt = df_p[(df_p.get('Bank_Used', 'Account_Name') == b_name) & (df_p['Type'].str.contains('Receipt|In', na=False))]['Amount'].sum()
+        
+        # 3. Outflow (Paisa gaya - Payments aur Trip kharche)
+        out_amt = df_p[(df_p.get('Bank_Used', 'Account_Name') == b_name) & (df_p['Type'].str.contains('Payment|Out', na=False))]['Amount'].sum()
+        
+        current_bal = op_amt + in_amt - out_amt
+        with b_cols[i]:
+            st.metric(b_name, f"₹{current_bal:,.0f}")
+
     st.divider()
 
     # --- 5. CHARTS (Updated for Visibility) ---
