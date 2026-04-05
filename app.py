@@ -347,7 +347,7 @@ if menu == "0. Dashboard":
         df_hired = df_tf[df_tf['Type'].str.contains('Market|Hired', case=False, na=False)]
         hired_profit = df_hired['Freight'].sum() - df_hired['HiredCharges'].sum()
         # Total Outflow from trips (For cash balance)
-        trip_outflow = df_tf[['Diesel', 'Toll', 'DriverExp', 'HiredCharges']].sum().sum()
+        trip_outflow = df_tf[['Diesel', 'Toll', 'DriverExp']].sum().sum()
 
     # D. FINAL SUMMARY VALUES
     office_exp = pd.to_numeric(df_oef['Amount'], errors='coerce').sum() if not df_oef.empty else 0
