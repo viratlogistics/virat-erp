@@ -1036,9 +1036,9 @@ elif menu == "6. Expense Manager":
 
     # --- DROP DOWN LISTS (From Masters) ---
     if not df_m_data.empty:
-        # Bank list loading
+        # Bank list loading (Type 'Bank' or 'BANK')
         b_list = sorted(df_m_data[df_m_data['Type'].str.contains('Bank', case=False, na=False)]['Name'].unique().tolist())
-        # Vehicle list loading
+        # Vehicle list loading (Type 'Vehicle' or 'VEHICLE')
         v_list = sorted(df_m_data[df_m_data['Type'].str.contains('Vehicle', case=False, na=False)]['Name'].unique().tolist())
     else:
         b_list = ["Cash"]
@@ -1049,11 +1049,11 @@ elif menu == "6. Expense Manager":
     ])
     
     with tab_add:
+        # Form shuru ho raha hai
         with st.form("office_exp_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
                 e_date = st.date_input("Date", date.today())
-                # Category List
                 e_cat = st.selectbox("Category", [
                     "Office Rent", "Electricity", "Staff Salary", 
                     "Stationery", "Tea/Coffee", "Maintenance", 
@@ -1061,47 +1061,50 @@ elif menu == "6. Expense Manager":
                     "Indrajit Personal", "Vishal Personal", "Others"
                 ])
                 
-                # FIX: Check for both cases (Maintenance, maintenance, Vehicle Maintenance, Driver Salary)
-                # Taki selectbox grey na rahe
-                target_cats = ["Maintenance", "maintenance", "Vehicle Maintenance", "Driver Salary"]
-                is_v_needed = any(x == e_cat for x in target_cats)
+                # VEHICLE LOGIC: Check for Maintenance, Driver Salary etc.
+                is_v_needed = e_cat in ["Maintenance", "maintenance", "Vehicle Maintenance", "Driver Salary"]
                 
-                # Agar vehicle ki zarurat hai to list dikhao
+                # FIX: Yahan v_list hi use kiya hai taaki NameError na aaye
                 sel_v_no = st.selectbox("Select Vehicle No", 
-                                        options=["N/A"] + v_options if v_list else ["N/A"], 
+                                        options=["N/A"] + v_list if v_list else ["N/A"], 
                                         disabled=not is_v_needed)
 
             with col2:
                 e_amt = st.number_input("Amount (₹)", min_value=0.0, step=1.0)
-                # Actual Banks from Master
                 e_bank = st.selectbox("Paid From (Bank/Cash)", b_list if b_list else ["Cash"])
             
             e_desc = st.text_input("Description / Remarks")
             
-            if st.form_submit_button("Save Expense"):
+            # CRITICAL: Form submit button hona hi chahiye
+            submitted = st.form_submit_button("🚀 Save Expense")
+            
+            if submitted:
                 if e_amt > 0:
-                    # Order as per your CSV: Date, Category, Description, Amount, Payment_Mode, Vehicle Number
+                    # Aapki sheet ke columns: Date, Category, Description, Amount, Payment_Mode, Vehicle Number
                     new_row = [str(e_date), e_cat, e_desc, e_amt, e_bank, sel_v_no]
                     
                     if save("office_expenses", new_row):
-                        st.success(f"Saved: {e_cat} for {sel_v_no}")
+                        st.success(f"Entry Saved Successfully!")
                         st.rerun()
                 else:
-                    st.error("Please enter Amount!")
+                    st.error("Paisa (Amount) to likho!")
 
-    # --- PERSONAL KHATA LOGIC (Indrajit & Vishal) ---
+    # --- VIEW LOGIC ---
+    with tab_view:
+        if not df_oe.empty:
+            office_df = df_oe[~df_oe['Category'].str.contains('Indrajit|Vishal', na=False)]
+            st.dataframe(office_df, use_container_width=True, hide_index=True)
+            
     with tab_indrajit:
         if not df_oe.empty:
             ind_df = df_oe[df_oe['Category'] == "Indrajit Personal"]
-            total_i = pd.to_numeric(ind_df['Amount'], errors='coerce').sum()
-            st.metric("Total Indrajit Personal", f"₹{total_i:,.0f}")
+            st.metric("Total Indrajit Personal", f"₹{pd.to_numeric(ind_df['Amount'], errors='coerce').sum():,.0f}")
             st.dataframe(ind_df, use_container_width=True)
 
     with tab_vishal:
         if not df_oe.empty:
             vis_df = df_oe[df_oe['Category'] == "Vishal Personal"]
-            total_v = pd.to_numeric(vis_df['Amount'], errors='coerce').sum()
-            st.metric("Total Vishal Personal", f"₹{total_v:,.0f}")
+            st.metric("Total Vishal Personal", f"₹{pd.to_numeric(vis_df['Amount'], errors='coerce').sum():,.0f}")
             st.dataframe(vis_df, use_container_width=True)                
 elif menu == "8. Monthly Bill":
     st.header("🧾 Monthly Billing & Invoice Generation")
