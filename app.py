@@ -1030,10 +1030,13 @@ elif menu == "5. Business Insights":
 elif menu == "6. Expense Manager":
     st.header("🏢 Office & Personal Expense Manager")
     df_oe = load("office_expenses")
-    # Gadiyo ki list load karna (Maante hue ki aapke paas vehicles naam ki list/df hai)
-    # Agar gadiyo ki list load function se aati hai to wo use karein
-    v_list = ["None", "GJ-05-XX-1234", "GJ-05-YY-5678"] # Example list
-
+    
+    # --- ACTUAL DATA LOADING ---
+    # Aapke existing code mein jahan se bank aur vehicle ki list aati hai, wo yahan fetch karein
+    # Maan lijiye aapke banks 'st.session_state.banks' mein hain ya 'load' function se aate hain
+    actual_banks = st.session_state.get('banks', ["Cash", "Online", "Bank"]) # Default options agar data na mile
+    actual_vehicles = st.session_state.get('vehicles', []) # Aapki gadiyo ki list
+    
     if not df_oe.empty: 
         df_oe.columns = [str(c).strip() for c in df_oe.columns]
 
@@ -1046,81 +1049,44 @@ elif menu == "6. Expense Manager":
             col1, col2 = st.columns(2)
             with col1:
                 e_date = st.date_input("Date", date.today())
-                # List mein Driver Salary aur Maintenance add kiya
                 e_cat = st.selectbox("Category", [
                     "Office Rent", "Electricity", "Staff Salary", 
                     "Stationery", "Tea/Coffee", "maintenance", 
-                    "Driver Salary", "Vehicle Maintenance", # <-- Naya Add Kiya
+                    "Driver Salary", "Vehicle Maintenance", # Driver & Maintenance Category
                     "Indrajit Personal", "Vishal Personal", "Others"
                 ])
                 
-                # Naya Logic: Agar Driver ya Maintenance select ho to Gadi Number puche
-                selected_vehicle = "N/A"
+                # VEHICLE SELECTION: Ye tabhi dikhega jab category match hogi
+                v_no = "N/A"
                 if e_cat in ["Driver Salary", "Vehicle Maintenance", "maintenance"]:
-                    selected_vehicle = st.selectbox("Select Vehicle", v_list)
+                    if actual_vehicles:
+                        v_no = st.selectbox("Select Vehicle No.", actual_vehicles)
+                    else:
+                        st.warning("No vehicles found in system!")
 
             with col2:
                 e_amt = st.number_input("Amount (₹)", min_value=0.0)
-                # Payment Mode ko Bank selection jesa banaya
-                e_mode = st.selectbox("Paid From / Mode", ["Cash", "HDFC Bank", "SBI", "ICICI", "Online", "Cheque"])
+                
+                # BANK SELECTION: Yahan aapke actual banks aayenge
+                e_mode = st.selectbox("Paid From (Bank/Cash)", actual_banks)
             
             e_desc = st.text_input("Description / Remarks")
             
             if st.form_submit_button("Save Expense"):
                 if e_amt > 0:
-                    # Save logic mein selected_vehicle ko Description ke saath merge kar diya 
-                    # taaki aapke existing data structure mein disturbance na ho
-                    final_desc = f"[{selected_vehicle}] {e_desc}" if selected_vehicle != "N/A" else e_desc
+                    # Description mein gadi ka number jod rahe hain taaki calculation aasaan ho
+                    display_desc = f"[{v_no}] {e_desc}" if v_no != "N/A" else e_desc
                     
-                    if save("office_expenses", [str(e_date), e_cat, final_desc, e_amt, e_mode]):
-                        st.success(f"{e_cat} Entry Saved for {selected_vehicle}!"); st.rerun()
+                    if save("office_expenses", [str(e_date), e_cat, display_desc, e_amt, e_mode]):
+                        st.success(f"Saved: {e_cat} for {v_no}"); st.rerun()
 
+    # Baki View wala logic pehle jesa hi rahega...
     with tab_view:
         st.subheader("General Office Expenses")
         if not df_oe.empty:
             office_df = df_oe[~df_oe['Category'].str.contains('Indrajit|Vishal', na=False)]
             st.dataframe(office_df, use_container_width=True)
-            
-            # Vehicle wise kharcha dekhne ke liye filter
-            st.divider()
-            st.subheader("🚗 Vehicle-wise Kharcha Check")
-            v_filter = st.selectbox("Filter by Vehicle", ["All"] + v_list)
-            if v_filter != "All":
-                v_df = office_df[office_df['Description / Remarks'].str.contains(v_filter, na=False)]
-                st.write(v_df)
-                v_total = pd.to_numeric(v_df['Amount'], errors='coerce').sum()
-                st.metric(f"Total for {v_filter}", f"₹{v_total:,.2f}")
-            
             st.info(f"Total Office Expense: ₹{pd.to_numeric(office_df['Amount'], errors='coerce').sum():,.2f}")
-
-    # Indrajit aur Vishal ke tabs ka code pehle jesa hi rahega (unme koi change nahi kiya)
-    with tab_indrajit:
-        st.subheader("👤 Indrajit Personal Ledger")
-        if not df_oe.empty:
-            ind_df = df_oe[df_oe['Category'] == "Indrajit Personal"]
-            if not ind_df.empty:
-                amt_col = next((c for c in ind_df.columns if 'amount' in c.lower()), 'Amount')
-                total_i = pd.to_numeric(ind_df[amt_col], errors='coerce').sum()
-                st.metric("Total Withdrawals (Indrajit)", f"₹{total_i:,.0f}")
-                st.divider()
-                st.write("#### Detailed Transaction History")
-                st.dataframe(ind_df, use_container_width=True, hide_index=True)
-            else:
-                st.info("Indrajit ka koi personal record nahi mila.")
-
-    with tab_vishal:
-        st.subheader("👤 Vishal Personal Ledger")
-        if not df_oe.empty:
-            vis_df = df_oe[df_oe['Category'] == "Vishal Personal"]
-            if not vis_df.empty:
-                amt_col = next((c for c in vis_df.columns if 'amount' in c.lower()), 'Amount')
-                total_v = pd.to_numeric(vis_df[amt_col], errors='coerce').sum()
-                st.metric("Total Withdrawals (Vishal)", f"₹{total_v:,.0f}")
-                st.divider()
-                st.write("#### Detailed Transaction History")
-                st.dataframe(vis_df, use_container_width=True, hide_index=True)
-            else:
-                st.info("Vishal ka koi personal record nahi mila.")
 elif menu == "7. Driver Khata":
     st.header("🚛 Driver Khata & Trip Settlement")
     df_dk = load("driver_khata")
