@@ -1028,6 +1028,7 @@ elif menu == "5. Business Insights":
         else:
             st.info("Market hiring ka koi data available nahi hai.")
 elif menu == "6. Expense Manager":
+elif menu == "6. Expense Manager":
     st.header("🏢 Office & Personal Expense Manager")
     
     # 1. DATA LOADING
@@ -1049,7 +1050,7 @@ elif menu == "6. Expense Manager":
     ])
     
     with tab_add:
-        # Form shuru ho raha hai
+        # Form shuru
         with st.form("office_exp_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
@@ -1061,50 +1062,51 @@ elif menu == "6. Expense Manager":
                     "Indrajit Personal", "Vishal Personal", "Others"
                 ])
                 
-                # VEHICLE LOGIC: Check for Maintenance, Driver Salary etc.
-                is_v_needed = e_cat in ["Maintenance", "maintenance", "Vehicle Maintenance", "Driver Salary"]
-                
-                # FIX: Yahan v_list hi use kiya hai taaki NameError na aaye
-                sel_v_no = st.selectbox("Select Vehicle No", 
-                                        options=["N/A"] + v_list if v_list else ["N/A"], 
-                                        disabled=not is_v_needed)
+                # LOGIC REMOVED: Ab dropdown hamesha enabled rahega
+                sel_v_no = st.selectbox("Select Vehicle No (If any)", 
+                                        options=["N/A"] + v_list if v_list else ["N/A"])
 
             with col2:
                 e_amt = st.number_input("Amount (₹)", min_value=0.0, step=1.0)
+                # Actual Banks from Master
                 e_bank = st.selectbox("Paid From (Bank/Cash)", b_list if b_list else ["Cash"])
             
             e_desc = st.text_input("Description / Remarks")
             
-            # CRITICAL: Form submit button hona hi chahiye
+            # Form Submit Button (Zaroori hai)
             submitted = st.form_submit_button("🚀 Save Expense")
             
             if submitted:
                 if e_amt > 0:
-                    # Aapki sheet ke columns: Date, Category, Description, Amount, Payment_Mode, Vehicle Number
+                    # Row data as per your CSV structure
                     new_row = [str(e_date), e_cat, e_desc, e_amt, e_bank, sel_v_no]
                     
                     if save("office_expenses", new_row):
                         st.success(f"Entry Saved Successfully!")
                         st.rerun()
                 else:
-                    st.error("Paisa (Amount) to likho!")
+                    st.error("Please enter a valid Amount!")
 
-    # --- VIEW LOGIC ---
+    # --- VIEW & LEDGERS ---
     with tab_view:
+        st.subheader("General Office Expenses")
         if not df_oe.empty:
             office_df = df_oe[~df_oe['Category'].str.contains('Indrajit|Vishal', na=False)]
             st.dataframe(office_df, use_container_width=True, hide_index=True)
-            
+            st.info(f"Total Office Exp: ₹{pd.to_numeric(office_df['Amount'], errors='coerce').sum():,.2f}")
+
     with tab_indrajit:
+        st.subheader("👤 Indrajit Personal Ledger")
         if not df_oe.empty:
             ind_df = df_oe[df_oe['Category'] == "Indrajit Personal"]
-            st.metric("Total Indrajit Personal", f"₹{pd.to_numeric(ind_df['Amount'], errors='coerce').sum():,.0f}")
+            st.metric("Total Withdrawal", f"₹{pd.to_numeric(ind_df['Amount'], errors='coerce').sum():,.0f}")
             st.dataframe(ind_df, use_container_width=True)
 
     with tab_vishal:
+        st.subheader("👤 Vishal Personal Ledger")
         if not df_oe.empty:
             vis_df = df_oe[df_oe['Category'] == "Vishal Personal"]
-            st.metric("Total Vishal Personal", f"₹{pd.to_numeric(vis_df['Amount'], errors='coerce').sum():,.0f}")
+            st.metric("Total Withdrawal", f"₹{pd.to_numeric(vis_df['Amount'], errors='coerce').sum():,.0f}")
             st.dataframe(vis_df, use_container_width=True)                
 elif menu == "8. Monthly Bill":
     st.header("🧾 Monthly Billing & Invoice Generation")
