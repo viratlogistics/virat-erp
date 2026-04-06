@@ -1028,7 +1028,6 @@ elif menu == "5. Business Insights":
         else:
             st.info("Market hiring ka koi data available nahi hai.")
 elif menu == "6. Expense Manager":
-elif menu == "6. Expense Manager":
     st.header("🏢 Office & Personal Expense Manager")
     
     # 1. DATA LOADING
