@@ -1029,14 +1029,29 @@ elif menu == "5. Business Insights":
             st.info("Market hiring ka koi data available nahi hai.")
 elif menu == "6. Expense Manager":
     st.header("🏢 Office & Personal Expense Manager")
+    
+    # 1. PEHLE DATA LOAD KAREIN (Taki dropdown khali na rahe)
     df_oe = load("office_expenses")
     
-    # --- ACTUAL DATA LOADING ---
-    # Aapke existing code mein jahan se bank aur vehicle ki list aati hai, wo yahan fetch karein
-    # Maan lijiye aapke banks 'st.session_state.banks' mein hain ya 'load' function se aate hain
-    actual_banks = st.session_state.get('banks', ["Cash", "Online", "Bank"]) # Default options agar data na mile
-    actual_vehicles = st.session_state.get('vehicles', []) # Aapki gadiyo ki list
-    
+    # --- VEHICLE LIST LOAD KARNA ---
+    # Agar aapki vehicle list 'vehicles' naam ki sheet se aati hai:
+    df_v_list = load("vehicles") 
+    if not df_v_list.empty:
+        # Maan lijiye column ka naam 'Vehicle No' hai, use apne hisab se badal lein
+        v_options = df_v_list.iloc[:, 0].tolist() 
+    else:
+        v_options = ["No Vehicles Found"]
+
+    # --- BANK LIST LOAD KARNA ---
+    # Agar aapki bank list 'banks' naam ki sheet se aati hai:
+    df_b_list = load("banks") 
+    if not df_b_list.empty:
+        # Maan lijiye bank ka naam pehle column mein hai
+        b_options = df_b_list.iloc[:, 0].tolist()
+    else:
+        # Agar sheet nahi mili to purane static options fallback ke liye
+        b_options = ["Cash", "HDFC", "SBI", "ICICI", "Online"]
+
     if not df_oe.empty: 
         df_oe.columns = [str(c).strip() for c in df_oe.columns]
 
@@ -1051,36 +1066,34 @@ elif menu == "6. Expense Manager":
                 e_date = st.date_input("Date", date.today())
                 e_cat = st.selectbox("Category", [
                     "Office Rent", "Electricity", "Staff Salary", 
-                    "Stationery", "Tea/Coffee", "maintenance", 
-                    "Driver Salary", "Vehicle Maintenance", # Driver & Maintenance Category
+                    "Stationery", "Tea/Coffee", "Maintenance", 
+                    "Driver Salary", "Vehicle Maintenance", 
                     "Indrajit Personal", "Vishal Personal", "Others"
                 ])
                 
-                # VEHICLE SELECTION: Ye tabhi dikhega jab category match hogi
-                v_no = "N/A"
-                if e_cat in ["Driver Salary", "Vehicle Maintenance", "maintenance"]:
-                    if actual_vehicles:
-                        v_no = st.selectbox("Select Vehicle No.", actual_vehicles)
-                    else:
-                        st.warning("No vehicles found in system!")
+                # VEHICLE SELECTION: Sirf Driver ya Maintenance pe dikhega
+                # Isko hamesha render kar rahe hain par disable rakhenge agar zarurat nahi hai
+                is_vehicle_exp = e_cat in ["Driver Salary", "Vehicle Maintenance", "Maintenance", "maintenance"]
+                v_no = st.selectbox("Select Vehicle (If applicable)", 
+                                    options=["N/A"] + v_options, 
+                                    disabled=not is_vehicle_exp)
 
             with col2:
                 e_amt = st.number_input("Amount (₹)", min_value=0.0)
-                
-                # BANK SELECTION: Yahan aapke actual banks aayenge
-                e_mode = st.selectbox("Paid From (Bank/Cash)", actual_banks)
+                # BANK DROPDOWN: Yahan ab b_options load honge
+                e_mode = st.selectbox("Payment Mode (Bank/Cash)", b_options)
             
             e_desc = st.text_input("Description / Remarks")
             
             if st.form_submit_button("Save Expense"):
                 if e_amt > 0:
-                    # Description mein gadi ka number jod rahe hain taaki calculation aasaan ho
-                    display_desc = f"[{v_no}] {e_desc}" if v_no != "N/A" else e_desc
+                    # Gadi ka number description ke saath save kar rahe hain
+                    final_desc = f"[{v_no}] {e_desc}" if v_no != "N/A" else e_desc
                     
-                    if save("office_expenses", [str(e_date), e_cat, display_desc, e_amt, e_mode]):
-                        st.success(f"Saved: {e_cat} for {v_no}"); st.rerun()
+                    if save("office_expenses", [str(e_date), e_cat, final_desc, e_amt, e_mode]):
+                        st.success(f"Entry Saved!"); st.rerun()
 
-    # Baki View wala logic pehle jesa hi rahega...
+    # --- BAKI VIEW KA CODE SAME RAHEGA ---
     with tab_view:
         st.subheader("General Office Expenses")
         if not df_oe.empty:
