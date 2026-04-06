@@ -1030,27 +1030,19 @@ elif menu == "5. Business Insights":
 elif menu == "6. Expense Manager":
     st.header("🏢 Office & Personal Expense Manager")
     
-    # 1. PEHLE DATA LOAD KAREIN (Taki dropdown khali na rahe)
+    # 1. DATA LOADING
     df_oe = load("office_expenses")
-    
-    # --- VEHICLE LIST LOAD KARNA ---
-    # Agar aapki vehicle list 'vehicles' naam ki sheet se aati hai:
-    df_v_list = load("vehicles") 
-    if not df_v_list.empty:
-        # Maan lijiye column ka naam 'Vehicle No' hai, use apne hisab se badal lein
-        v_options = df_v_list.iloc[:, 0].tolist() 
-    else:
-        v_options = ["No Vehicles Found"]
+    df_m_data = load("masters") # Masters se bank aur vehicle uthane ke liye
 
-    # --- BANK LIST LOAD KARNA ---
-    # Agar aapki bank list 'banks' naam ki sheet se aati hai:
-    df_b_list = load("banks") 
-    if not df_b_list.empty:
-        # Maan lijiye bank ka naam pehle column mein hai
-        b_options = df_b_list.iloc[:, 0].tolist()
+    # --- DROP DOWN LISTS (From Masters) ---
+    if not df_m_data.empty:
+        # Bank list: Type == 'Bank' (Ya aapki sheet mein 'BANK' capital ho sakta hai)
+        b_list = sorted(df_m_data[df_m_data['Type'].str.contains('Bank', case=False, na=False)]['Name'].unique().tolist())
+        # Vehicle list: Type == 'Vehicle'
+        v_list = sorted(df_m_data[df_m_data['Type'].str.contains('Vehicle', case=False, na=False)]['Name'].unique().tolist())
     else:
-        # Agar sheet nahi mili to purane static options fallback ke liye
-        b_options = ["Cash", "HDFC", "SBI", "ICICI", "Online"]
+        b_list = ["Cash"]
+        v_list = []
 
     if not df_oe.empty: 
         df_oe.columns = [str(c).strip() for c in df_oe.columns]
@@ -1071,89 +1063,67 @@ elif menu == "6. Expense Manager":
                     "Indrajit Personal", "Vishal Personal", "Others"
                 ])
                 
-                # VEHICLE SELECTION: Sirf Driver ya Maintenance pe dikhega
-                # Isko hamesha render kar rahe hain par disable rakhenge agar zarurat nahi hai
-                is_vehicle_exp = e_cat in ["Driver Salary", "Vehicle Maintenance", "Maintenance", "maintenance"]
-                v_no = st.selectbox("Select Vehicle (If applicable)", 
-                                    options=["N/A"] + v_options, 
-                                    disabled=not is_vehicle_exp)
+                # VEHICLE LOGIC: Sirf Driver ya Maintenance par dropdown khulega
+                is_v_needed = e_cat in ["Driver Salary", "Vehicle Maintenance", "Maintenance"]
+                sel_v_no = st.selectbox("Select Vehicle No", ["N/A"] + v_list if v_list else ["N/A"], 
+                                        disabled=not is_v_needed)
 
             with col2:
-                e_amt = st.number_input("Amount (₹)", min_value=0.0)
-                # BANK DROPDOWN: Yahan ab b_options load honge
-                e_mode = st.selectbox("Payment Mode (Bank/Cash)", b_options)
+                e_amt = st.number_input("Amount (₹)", min_value=0.0, step=1.0)
+                # BANK SELECTION: Masters wali banks yahan aayengi
+                e_bank = st.selectbox("Paid From (Bank/Cash)", ["Cash"] + b_list if b_list else ["Cash"])
             
             e_desc = st.text_input("Description / Remarks")
             
             if st.form_submit_button("Save Expense"):
                 if e_amt > 0:
-                    # Gadi ka number description ke saath save kar rahe hain
-                    final_desc = f"[{v_no}] {e_desc}" if v_no != "N/A" else e_desc
+                    # Aapki sheet ke columns: Date, Category, Description, Amount, Payment_Mode, Vehicle Number
+                    new_row = [str(e_date), e_cat, e_desc, e_amt, e_bank, sel_v_no]
                     
-                    if save("office_expenses", [str(e_date), e_cat, final_desc, e_amt, e_mode]):
-                        st.success(f"Entry Saved!"); st.rerun()
+                    if save("office_expenses", new_row):
+                        st.success(f"Entry Saved: {e_cat} via {e_bank}")
+                        st.rerun()
+                else:
+                    st.error("Please enter a valid amount.")
 
-    # --- BAKI VIEW KA CODE SAME RAHEGA ---
     with tab_view:
         st.subheader("General Office Expenses")
         if not df_oe.empty:
+            # Personal kharche filter karke hata rahe hain (Sirf Office ke liye)
             office_df = df_oe[~df_oe['Category'].str.contains('Indrajit|Vishal', na=False)]
-            st.dataframe(office_df, use_container_width=True)
-            st.info(f"Total Office Expense: ₹{pd.to_numeric(office_df['Amount'], errors='coerce').sum():,.2f}")
-elif menu == "7. Driver Khata":
-    st.header("🚛 Driver Khata & Trip Settlement")
-    df_dk = load("driver_khata")
-    df_t = load("trips")
-    drivers = gl("Driver")
-    tab_entry, tab_settle = st.tabs(["➕ Add Entry (Salary/Extra)", "📖 Driver Settlement & Ledger"])
-    
-    with tab_entry:
-        with st.form("driver_form", clear_on_submit=True):
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                d_date = st.date_input("Date", date.today())
-                d_name = st.selectbox("Select Driver*", ["Select"] + drivers)
-            with c2:
-                d_type = st.selectbox("Entry Type*", ["Salary Paid", "Personal Advance (Extra)", "Other Credit"])
-                d_amt = st.number_input("Amount (₹)*", min_value=0.0)
-            with c3:
-                d_note = st.text_input("Remarks")
-            if st.form_submit_button("Save Entry"):
-                if d_name != "Select" and d_amt > 0:
-                    if save("driver_khata", [str(d_date), d_name, "N/A", "Debit", d_amt, d_note]):
-                        st.success(f"Saved for {d_name}"); st.rerun()
+            st.dataframe(office_df, use_container_width=True, hide_index=True)
+            
+            # Vehicle wise summary button
+            if st.checkbox("Show Vehicle-wise Expense Summary"):
+                v_exp = office_df[office_df['Vehicle Number'] != "N/A"].groupby('Vehicle Number')['Amount'].sum()
+                st.table(v_exp)
 
-    with tab_settle:
-        sel_d = st.selectbox("Choose Driver for Final Settlement", ["Select"] + drivers)
-        if sel_d != "Select":
-            st.divider()
-            st.write(f"### 🔍 Trip Summary for {sel_d}")
-            if not df_t.empty:
-                df_t.columns = [str(c).strip() for c in df_t.columns]
-                d_trips = df_t[df_t['Driver'] == sel_d].copy()
-                if not d_trips.empty:
-                    for c in ['Diesel', 'DriverExp', 'Toll']:
-                        if c in d_trips.columns:
-                            d_trips[c] = pd.to_numeric(d_trips[c], errors='coerce').fillna(0)
-                    t_adv = d_trips['DriverExp'].sum()
-                    t_dsl = d_trips['Diesel'].sum()
-                    c1, c2 = st.columns(2)
-                    c1.metric("Trip Advance (Pending)", f"₹{t_adv:,.0f}")
-                    c2.metric("Trip Diesel (Total)", f"₹{t_dsl:,.0f}")
-                    if st.button(f"📥 Import ₹{t_adv} to Personal Ledger"):
-                        if save("driver_khata", [str(date.today()), sel_d, "Trips", "Debit", t_adv, "Auto-Import from Trips"]):
-                            st.success("Trip Advance Imported!"); st.rerun()
-                else:
-                    st.info("No trip history.")
+            total_oe = pd.to_numeric(office_df['Amount'], errors='coerce').sum()
+            st.info(f"Total Office Expense: ₹{total_oe:,.2f}")
 
-            st.write(f"### 📜 Personal Ledger")
-            if not df_dk.empty:
-                df_dk.columns = [str(c).strip() for c in df_dk.columns]
-                d_hist = df_dk[df_dk['Driver_Name'] == sel_d]
-                total_p = pd.to_numeric(d_hist['Amount'], errors='coerce').sum() if not d_hist.empty else 0
-                st.warning(f"Total Personal Dues: ₹{total_p:,.2f}")
-                st.dataframe(d_hist, use_container_width=True, hide_index=True)
-                
+    with tab_indrajit:
+        st.subheader("👤 Indrajit Personal Ledger")
+        if not df_oe.empty:
+            ind_df = df_oe[df_oe['Category'] == "Indrajit Personal"]
+            if not ind_df.empty:
+                total_i = pd.to_numeric(ind_df['Amount'], errors='coerce').sum()
+                st.metric("Total Personal Withdrawal", f"₹{total_i:,.0f}")
+                st.divider()
+                st.dataframe(ind_df[['Date', 'Description', 'Amount', 'Payment_Mode']], use_container_width=True, hide_index=True)
+            else:
+                st.info("No personal records found for Indrajit.")
+
+    with tab_vishal:
+        st.subheader("👤 Vishal Personal Ledger")
+        if not df_oe.empty:
+            vis_df = df_oe[df_oe['Category'] == "Vishal Personal"]
+            if not vis_df.empty:
+                total_v = pd.to_numeric(vis_df['Amount'], errors='coerce').sum()
+                st.metric("Total Personal Withdrawal", f"₹{total_v:,.0f}")
+                st.divider()
+                st.dataframe(vis_df[['Date', 'Description', 'Amount', 'Payment_Mode']], use_container_width=True, hide_index=True)
+            else:
+                st.info("No personal records found for Vishal.")                
 elif menu == "8. Monthly Bill":
     st.header("🧾 Monthly Billing & Invoice Generation")
     
