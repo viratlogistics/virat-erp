@@ -764,117 +764,96 @@ elif menu == "3. LR Register":
         
         st.dataframe(df_t)
         
-elif menu == "4. Financials":
-    st.header("⚖️ Party & Broker Full Statement")
-    df_p = load("payments")
-    df_t = load("trips")
+if menu == "4. Financials":
+    st.header("💰 Financial Manager (Vouchers & Ledgers)")
     
-    if not df_t.empty: df_t.columns = [str(c).strip() for c in df_t.columns]
-    if not df_p.empty: df_p.columns = [str(c).strip() for c in df_p.columns]
-        
-    all_accs = sorted(gl("Party") + gl("Broker") + gl("Driver") + gl("Bank"))
-    t1, t2 = st.tabs(["💸 Add Transaction", "📖 Full Statement"])
+    # --- TABS FOR BETTER ORGANIZATION ---
+    tab_entry, tab_history = st.tabs(["📝 New Voucher Entry", "📖 Transaction History & Ledger"])
     
-    with t1:
-        with st.form("p_form_new", clear_on_submit=True):
-            f1, f2, f3 = st.columns(3)
-            with f1: 
-                p_d = st.date_input("Date", date(2026, 4, 1), key="d1")
-                acc = st.selectbox("Account*", ["Select"] + all_accs, key="s1")
-            with f2: 
-                p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)", "Opening Balance"], key="s2")
-                p_a = st.number_input("Amount*", min_value=0.0, key="n1")
-            with f3: 
-                my_banks = gl("Bank")
-                f_bank = col2.selectbox("Payment Mode / Bank Used", ["CASH"] + my_banks)
+    with tab_entry:
+        st.subheader("Add New Receipt or Payment")
+        with st.form("financial_voucher_form", clear_on_submit=True):
+            col1, col2, col3 = st.columns(3)
             
-            if st.form_submit_button("Save Transaction"):
-                res = save("payments", [str(f_date), f_type, f_acc, f_amt, f_bank, f_rem])
-                if res: 
-                    st.success("Transaction Saved!")
-                    st.rerun()
-                    
+            v_date = col1.date_input("Voucher Date", date.today())
+            
+            # Voucher Types: Opening Balance is crucial for your Brokers/Parties
+            v_type = col2.selectbox("Voucher Type", [
+                "Receipt (Inward)", 
+                "Payment (Outward)", 
+                "OP_BAL (Opening Balance)"
+            ])
+            
+            # Combine all names for the dropdown
+            all_accounts = gl("Party") + gl("Broker") + gl("Bank")
+            v_party = col3.selectbox("Select Account / Party / Broker", all_accounts)
+            
+            v_amount = col1.number_input("Amount (₹)", min_value=0.0, step=100.0)
+            
+            # BANK DROPDOWN: Directly fetching from your Masters
+            # "CASH" is added by default, rest come from Master -> Type: BANK
+            my_master_banks = gl("Bank")
+            bank_options = ["CASH"] + my_master_banks
+            v_bank_used = col2.selectbox("Bank Account / Cash Mode", bank_options)
+            
+            v_remarks = col3.text_input("Narration / Remarks (e.g. Chq No, Ref)")
+            
+            submit_v = st.form_submit_button("💾 Save Transaction")
+            
+            if submit_v:
+                if v_amount <= 0 and "OP_BAL" not in v_type:
+                    st.error("Please enter a valid amount.")
                 else:
-                    st.error("Select Account & Amount!")
-
-    with t2:
-        sel_a = st.selectbox("Select Account for Statement", ["Select"] + all_accs, key="s4_final")
-        
-        # 1. Sabse pehle list ko khali (empty) define karein taaki NameError na aaye
-        ledger_entries = []
-        
-        if sel_a != "Select":
-            # --- A. OPENING BALANCE FETCHING (From Payments Sheet) ---
-            if not df_p.empty:
-                # Humne ab 'OP_BAL' entries payments sheet mein dali hain
-                op_data = df_p[(df_p['Account_Name'] == sel_a) & (df_p['Type'] == 'OP_BAL')]
-                for _, r in op_data.iterrows():
-                    amt = pd.to_numeric(r.get('Amount', 0), errors='coerce')
-                    ledger_entries.append({
-                        'Date': r.get('Date', date.today()), 
-                        'Particulars': '💰 OPENING BALANCE (F.Y. 2026-27)', 
-                        'Debit': amt if amt > 0 else 0, # Logistics mein receivable debit hota hai
-                        'Credit': 0
-                    })
-
-            # --- B. TRIP DATA (Freight Bills & Hired Charges) ---
-            if not df_t.empty:
-                df_t.columns = [str(c).strip() for c in df_t.columns]
-                # Party Freight (Debit)
-                p_trips = df_t[df_t['Party'] == sel_a]
-                for _, r in p_trips.iterrows():
-                    ledger_entries.append({
-                        'Date': r.get('Date', date.today()), 
-                        'Particulars': f"LR: {r.get('LR No','--')} (Freight Bill)", 
-                        'Debit': pd.to_numeric(r.get('Freight', 0), errors='coerce'), 
-                        'Credit': 0
-                    })
-                # Broker Hired (Credit)
-                b_trips = df_t[df_t['Broker'] == sel_a]
-                for _, r in b_trips.iterrows():
-                    ledger_entries.append({
-                        'Date': r.get('Date', date.today()), 
-                        'Particulars': f"LR: {r.get('LR No','--')} (Hired Charges)", 
-                        'Debit': 0, 
-                        'Credit': pd.to_numeric(r.get('HiredCharges', 0), errors='coerce')
-                    })
-
-            # --- C. ACTUAL PAYMENTS (Receipts & Payments) ---
-            if not df_p.empty:
-                p_entries = df_p[(df_p['Account_Name'] == sel_a) & (df_p['Type'] != 'OP_BAL')]
-                for _, r in p_entries.iterrows():
-                    amt = pd.to_numeric(r.get('Amount', 0), errors='coerce')
-                    p_type = str(r.get('Type','')).lower()
-                    if "receipt" in p_type or "in" in p_type:
-                        ledger_entries.append({
-                            'Date': r.get('Date', date.today()), 
-                            'Particulars': f"Payment Recd ({r.get('Mode','Cash')})", 
-                            'Debit': 0, 'Credit': amt
-                        })
+                    # Column Mapping for Google Sheet: 
+                    # Date | Type | Account_Name | Amount | Bank_Used | Remarks
+                    row = [str(v_date), v_type, v_party, v_amount, v_bank_used, v_remarks]
+                    success = save("payments", row)
+                    if success:
+                        st.success(f"Successfully recorded {v_type} for {v_party}")
+                        st.rerun()
                     else:
-                        ledger_entries.append({
-                            'Date': r.get('Date', date.today()), 
-                            'Particulars': f"Payment Paid ({r.get('Mode','Cash')})", 
-                            'Debit': amt, 'Credit': 0
-                        })
+                        st.error("Error saving to Google Sheets. Check connection.")
 
-            # --- D. FINAL DISPLAY (Ab NameError nahi aayega) ---
-            if ledger_entries:
-                full_df = pd.DataFrame(ledger_entries)
-                full_df['Date'] = pd.to_datetime(full_df['Date']).dt.date
-                full_df = full_df.sort_values(by=['Date'])
-                full_df['Balance'] = (full_df['Debit'] - full_df['Credit']).cumsum()
-                
-                st.write(f"#### 📖 Ledger Statement: {sel_a}")
-                st.dataframe(full_df, use_container_width=True, hide_index=True)
-                
-                net_bal = full_df['Debit'].sum() - full_df['Credit'].sum()
-                if net_bal > 0:
-                    st.success(f"Net Receivable: ₹{abs(net_bal):,.0f}")
-                else:
-                    st.warning(f"Net Payable: ₹{abs(net_bal):,.0f}")
-            else:
-                st.info("No transactions found for this account.")
+    with tab_history:
+        st.subheader("Transaction History")
+        df_history = load("payments")
+        
+        if not df_history.empty:
+            # --- FILTERS FOR ACCURACY ---
+            f_col1, f_col2 = st.columns(2)
+            search_name = f_col1.text_input("🔍 Search by Party/Broker Name")
+            filter_type = f_col2.multiselect("Filter by Type", df_history['Type'].unique())
+            
+            # Applying Filters
+            display_df = df_history.copy()
+            if search_name:
+                display_df = display_df[display_df['Account_Name'].str.contains(search_name, case=False, na=False)]
+            if filter_type:
+                display_df = display_df[display_df['Type'].isin(filter_type)]
+            
+            # Sorting by Date (Newest first)
+            display_df['Date'] = pd.to_datetime(display_df['Date'], errors='coerce')
+            display_df = display_df.sort_values(by="Date", ascending=False)
+            
+            # Display Table
+            st.dataframe(display_df.style.format({"Amount": "₹{:,.2f}"}), use_container_width=True)
+            
+            # --- SUMMARY STATS IN HISTORY ---
+            st.divider()
+            h_m1, h_m2, h_m3 = st.columns(3)
+            total_in = pd.to_numeric(display_df[display_df['Type'].str.contains('Receipt', na=False)]['Amount'], errors='coerce').sum()
+            total_out = pd.to_numeric(display_df[display_df['Type'].str.contains('Payment', na=False)]['Amount'], errors='coerce').sum()
+            
+            h_m1.metric("Total Receipts (Filtered)", f"₹{total_in:,.0f}")
+            h_m2.metric("Total Payments (Filtered)", f"₹{total_out:,.0f}")
+            h_m3.metric("Net Flow", f"₹{(total_in - total_out):,.0f}")
+            
+            # Export Option
+            csv_data = display_df.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Download Excel/CSV Report", csv_data, "financial_report.csv", "text/csv")
+            
+        else:
+            st.info("No transaction history found in 'payments' sheet.")
 elif menu == "5. Business Insights":
     st.header(f"⚖️ Financial Insights & Fleet Ledgers")
 
