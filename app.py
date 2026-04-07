@@ -760,15 +760,15 @@ elif menu == "4. Financials":
                 p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)", "Opening Balance"], key="s2")
                 p_a = st.number_input("Amount*", min_value=0.0, key="n1")
             with f3: 
-                p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque", "None"], key="s3")
-                p_r = st.text_input("Ref/Remarks", value="FY 2026-27 Opening", key="t1_ref")
+                my_banks = gl("Bank")
+                f_bank = col2.selectbox("Payment Mode / Bank Used", ["CASH"] + my_banks)
             
             if st.form_submit_button("Save Transaction"):
-                if acc != "Select" and p_a > 0:
-                    entry_type = "OP_BAL" if p_t == "Opening Balance" else p_t
-                    # List order: Date, Account_Name, Type, Amount, Mode, Ref_No
-                    if save("payments", [str(p_d), acc, entry_type, p_a, p_m, p_r]): 
-                        st.success("Entry Saved Successfully!"); st.rerun()
+                res = save("payments", [str(f_date), f_type, f_acc, f_amt, f_bank, f_rem])
+                if res: 
+                    st.success("Transaction Saved!")
+                    st.rerun()
+                    
                 else:
                     st.error("Select Account & Amount!")
 
