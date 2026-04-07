@@ -444,6 +444,33 @@ if menu == "0. Dashboard":
                 st.info("No Own Vehicle trips found for this FY.")
         else:
             st.info("No trip data found.")
+            
+    st.write("### 🚛 Actual Vehicle Profit (After Maintenance & Salary)")
+    if not df_tf.empty:
+        # A. Trip Profit (Freight - Diesel - Toll - DriverExp)
+        df_own_trips = df_tf[df_tf['Type'].str.contains('Own', case=False, na=False)].copy()
+        if not df_own_trips.empty:
+            # Trip Profit calculate karein
+            v_trip_profit = df_own_trips.groupby('Vehicle')['Profit'].sum().reset_index()
+        
+            # B. Expense Manager Se Gadi ka kharcha uthao
+            if not df_oe.empty:
+                # Sirf wahi kharche jo N/A nahi hain (Maintenance/Driver Salary)
+                v_extra_exp = df_oe[df_oe['Vehicle Number'] != "N/A"].groupby('Vehicle Number')['Amount'].sum().reset_index()
+                v_extra_exp.columns = ['Vehicle', 'Extra_Exp']
+            
+                # C. Merge both (Trip Profit - Extra Exp)
+                actual_v_perf = pd.merge(v_trip_profit, v_extra_exp, on='Vehicle', how='left').fillna(0)
+                actual_v_perf['Actual_Profit'] = actual_v_perf['Profit'] - actual_v_perf['Extra_Exp']
+            
+                # Display Chart
+                fig_actual = px.bar(actual_v_perf, x='Vehicle', y='Actual_Profit', 
+                               text_auto='.2s', title="Net Profit per Vehicle",
+                               color_discrete_sequence=['#00ffcc']) # Neon Green for actual profit
+                st.plotly_chart(fig_actual, use_container_width=True)
+            
+                # Detailed Table
+                st.dataframe(actual_v_perf.style.format({"Profit": "₹{:,.0f}", "Extra_Exp": "₹{:,.0f}", "Actual_Profit": "₹{:,.0f}"}), use_container_width=True)
 
     # --- 6. RECEIVABLES TABLE (Styled for Visibility) ---
     st.divider()
