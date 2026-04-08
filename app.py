@@ -361,12 +361,30 @@ if menu == "0. Dashboard":
         total_hired_amt = df_hired['HiredCharges'].sum() if not df_hired.empty else 0
         hired_profit = (df_hired['Freight'].sum() - total_hired_amt) if not df_hired.empty else 0
 
-    # D. PAYABLES CALCULATION
+    # D. PAYABLES CALCULATION (Double Checked & Error Proof)
+    total_broker_payable = 0
     broker_list = gl("Broker")
-    # Jo payments humne Broker ko ki (Debit side)
-    broker_paid = df_pf[df_pf['Account_Name'].isin(broker_list)]['Debit'].sum() if not df_pf.empty else 0
-    total_broker_payable = (op_broker + total_hired_amt) - broker_paid
+    
+    if not df_pf.empty:
+        # Zaroori: Calculation se pehle Debit/Credit ko number mein convert karein
+        df_pf['Debit'] = pd.to_numeric(df_pf['Debit'], errors='coerce').fillna(0)
+        df_pf['Credit'] = pd.to_numeric(df_pf['Credit'], errors='coerce').fillna(0)
+        
+        # 1. Jo payments humne Broker ko ki (Debit side)
+        broker_paid = df_pf[df_pf['Account_Name'].isin(broker_list)]['Debit'].sum()
+    else:
+        broker_paid = 0
 
+    if not op_entries.empty:
+        # 2. Brokers ka Opening Balance (Credit column se)
+        # Yahan bhi numeric conversion zaroori hai
+        op_entries['Credit'] = pd.to_numeric(op_entries['Credit'], errors='coerce').fillna(0)
+        op_broker = op_entries[op_entries['Account_Name'].isin(broker_list)]['Credit'].sum()
+    else:
+        op_broker = 0
+
+    # Final Payable Calculation
+    total_broker_payable = (op_broker + total_hired_amt) - broker_paid
     # E. FINAL SUMMARY (ACCRUAL BASIS)
     office_exp = pd.to_numeric(df_oef['Amount'], errors='coerce').sum() if not df_oef.empty else 0
     total_net_profit = (own_profit + hired_profit) - office_exp
