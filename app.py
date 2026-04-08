@@ -862,7 +862,8 @@ elif menu == "4. Financials":
                         'Debit': dr_val, 
                         'Credit': cr_val
                     })
-                    else:
+                    
+                else:
                         # Payment: Party badhta hai -> Debit | Broker kam hota hai -> Credit
                         ledger_entries.append({
                             'Date': r.get('Date', date.today()), 
