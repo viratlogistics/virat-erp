@@ -787,14 +787,22 @@ elif menu == "4. Financials":
                 p_r = st.text_input("Ref/Remarks", value="FY 2026-27 Opening", key="t1_ref")
             
             if st.form_submit_button("Save Transaction"):
-                if acc != "Select" and p_a > 0:
+                # Sabse pehle check karein ki account select kiya hai aur koi ek amount dala hai
+                if acc != "Select" and (p_dr > 0 or p_cr > 0):
                     entry_type = "OP_BAL" if p_t == "Opening Balance" else p_t
-                    # List order: Date, Account_Name, Type, Amount, Mode, Ref_No
-                    # Amount ki jagah p_dr aur p_cr pass karein
-                    save("payments", [str(p_d), acc, entry_type, p_dr, p_cr, p_m, p_r]) 
-                        st.success("Entry Saved Successfully!"); st.rerun()
+                    
+                    # Naye columns ke hisaab se data taiyar karein
+                    # Order: Date, Account_Name, Type, Debit, Credit, Mode, Remarks
+                    payment_data = [str(p_d), acc, entry_type, p_dr, p_cr, p_m, p_r]
+                    
+                    if save("payments", payment_data):
+                        st.cache_data.clear() # Data save hote hi cache clear karein taaki dashboard update ho
+                        st.success("Entry Saved Successfully!")
+                        st.rerun()
+                    else:
+                        st.error("Error: Google Sheet me save nahi ho paya!")
                 else:
-                    st.error("Select Account & Amount!")
+                    st.error("Kripya Account select karein aur Debit ya Credit me amount bharein!")
 
     with t2:
         sel_a = st.selectbox("Select Account for Statement", ["Select"] + all_accs, key="s4_final")
