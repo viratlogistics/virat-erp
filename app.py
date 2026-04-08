@@ -338,12 +338,16 @@ if menu == "0. Dashboard":
         
         total_broker_payable = (op_broker + total_hired_amt) - broker_paid
 
-        # B. CURRENT YEAR FLOW
+       # B. CURRENT YEAR FLOW (REPLACED LOGIC)
     cash_in = 0; cash_out = 0
     if not df_pf.empty:
-        df_pf['Amount'] = pd.to_numeric(df_pf['Amount'], errors='coerce').fillna(0)
-        cash_in = df_pf[(df_pf['Type'].str.contains('Receipt|In', case=False, na=False)) & (df_pf['Type'] != 'OP_BAL')]['Amount'].sum()
-        cash_out = df_pf[(df_pf['Type'].str.contains('Payment|Out', case=False, na=False)) & (df_pf['Type'] != 'OP_BAL')]['Amount'].sum()
+        # Amount column ki jagah ab hum Debit/Credit use karenge
+        df_pf['Debit'] = pd.to_numeric(df_pf['Debit'], errors='coerce').fillna(0)
+        df_pf['Credit'] = pd.to_numeric(df_pf['Credit'], errors='coerce').fillna(0)
+        
+        # Dashboard ke liye: Credit matlab bank/cash mein paisa aaya, Debit matlab gaya
+        cash_in = df_pf[df_pf['Type'] != 'OP_BAL']['Credit'].sum()
+        cash_out = df_pf[df_pf['Type'] != 'OP_BAL']['Debit'].sum()
 
     # C. TRIP PERFORMANCE
     own_profit = 0; hired_profit = 0; total_rev = 0; trip_outflow = 0
@@ -776,7 +780,8 @@ elif menu == "4. Financials":
                 acc = st.selectbox("Account*", ["Select"] + all_accs, key="s1")
             with f2: 
                 p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)", "Opening Balance"], key="s2")
-                p_a = st.number_input("Amount*", min_value=0.0, key="n1")
+                p_dr = st.number_input("Debit (Dene hain/Advance)", min_value=0.0)
+                p_cr = st.number_input("Credit (Mile hain/Income)", min_value=0.0)
             with f3: 
                 p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque", "None"], key="s3")
                 p_r = st.text_input("Ref/Remarks", value="FY 2026-27 Opening", key="t1_ref")
@@ -785,7 +790,8 @@ elif menu == "4. Financials":
                 if acc != "Select" and p_a > 0:
                     entry_type = "OP_BAL" if p_t == "Opening Balance" else p_t
                     # List order: Date, Account_Name, Type, Amount, Mode, Ref_No
-                    if save("payments", [str(p_d), acc, entry_type, p_a, p_m, p_r]): 
+                    # Amount ki jagah p_dr aur p_cr pass karein
+                    save("payments", [str(p_d), acc, entry_type, p_dr, p_cr, p_m, p_r]) 
                         st.success("Entry Saved Successfully!"); st.rerun()
                 else:
                     st.error("Select Account & Amount!")
@@ -832,25 +838,21 @@ elif menu == "4. Financials":
                         'Credit': pd.to_numeric(r.get('HiredCharges', 0), errors='coerce')
                     })
 
-           # --- C. ACTUAL PAYMENTS (Receipts & Payments) - REPLACED LOGIC ---
+           # --- C. ACTUAL PAYMENTS (Receipts & Payments) ---
             if not df_p.empty:
+                # Sirf wo entries lein jo Opening Balance nahi hain
                 p_entries = df_p[(df_p['Account_Name'] == sel_a) & (df_p['Type'] != 'OP_BAL')]
                 
-                # Check karein ki ye Broker hai ya nahi
-                is_broker = not df_m[(df_m['Name'] == sel_a) & (df_m['Type'] == 'Broker')].empty
-
                 for _, r in p_entries.iterrows():
-                    amt = pd.to_numeric(r.get('Amount', 0), errors='coerce')
-                    p_type = str(r.get('Type','')).lower()
+                    dr_val = pd.to_numeric(r.get('Debit', 0), errors='coerce')
+                    cr_val = pd.to_numeric(r.get('Credit', 0), errors='coerce')
                     
-                    if "receipt" in p_type or "in" in p_type:
-                        # Receipt: Party (Debtor) kam hota hai -> Credit | Broker (Creditor) badhta hai -> Debit
-                        ledger_entries.append({
-                            'Date': r.get('Date', date.today()), 
-                            'Particulars': f"Payment Recd ({r.get('Mode','Cash')})", 
-                            'Debit': amt if is_broker else 0, 
-                            'Credit': 0 if is_broker else amt
-                        })
+                    ledger_entries.append({
+                        'Date': r.get('Date', date.today()), 
+                        'Particulars': f"{r.get('Type','Entry')} ({r.get('Mode','Cash')})", 
+                        'Debit': dr_val, 
+                        'Credit': cr_val
+                    })
                     else:
                         # Payment: Party badhta hai -> Debit | Broker kam hota hai -> Credit
                         ledger_entries.append({
