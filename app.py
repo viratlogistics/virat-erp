@@ -787,7 +787,7 @@ elif menu == "4. Financials":
                 p_r = st.text_input("Ref/Remarks", value="FY 2026-27 Opening", key="t1_ref")
             
             if st.form_submit_button("Save Transaction"):
-                # Sabse pehle check karein ki account select kiya hai aur koi ek amount dala hai
+                # Check karein ki account select kiya hai aur koi ek amount dala hai
                 if acc != "Select" and (p_dr > 0 or p_cr > 0):
                     entry_type = "OP_BAL" if p_t == "Opening Balance" else p_t
                     
@@ -796,14 +796,14 @@ elif menu == "4. Financials":
                     payment_data = [str(p_d), acc, entry_type, p_dr, p_cr, p_m, p_r]
                     
                     if save("payments", payment_data):
-                        st.cache_data.clear() # Data save hote hi cache clear karein taaki dashboard update ho
+                        st.cache_data.clear() # Dashboard update karne ke liye cache clear
                         st.success("Entry Saved Successfully!")
                         st.rerun()
                     else:
                         st.error("Error: Google Sheet me save nahi ho paya!")
                 else:
+                    # Ye wo else hai jahan pehle syntax error aa raha tha
                     st.error("Kripya Account select karein aur Debit ya Credit me amount bharein!")
-
     with t2:
         sel_a = st.selectbox("Select Account for Statement", ["Select"] + all_accs, key="s4_final")
         
