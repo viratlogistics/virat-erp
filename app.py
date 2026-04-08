@@ -814,25 +814,34 @@ elif menu == "4. Financials":
                         'Credit': pd.to_numeric(r.get('HiredCharges', 0), errors='coerce')
                     })
 
-            # --- C. ACTUAL PAYMENTS (Receipts & Payments) ---
+           # --- C. ACTUAL PAYMENTS (Receipts & Payments) - REPLACED LOGIC ---
             if not df_p.empty:
                 p_entries = df_p[(df_p['Account_Name'] == sel_a) & (df_p['Type'] != 'OP_BAL')]
+                
+                # Check karein ki ye Broker hai ya nahi
+                is_broker = not df_m[(df_m['Name'] == sel_a) & (df_m['Type'] == 'Broker')].empty
+
                 for _, r in p_entries.iterrows():
                     amt = pd.to_numeric(r.get('Amount', 0), errors='coerce')
                     p_type = str(r.get('Type','')).lower()
+                    
                     if "receipt" in p_type or "in" in p_type:
+                        # Receipt: Party (Debtor) kam hota hai -> Credit | Broker (Creditor) badhta hai -> Debit
                         ledger_entries.append({
                             'Date': r.get('Date', date.today()), 
                             'Particulars': f"Payment Recd ({r.get('Mode','Cash')})", 
-                            'Debit': 0, 'Credit': amt
+                            'Debit': amt if is_broker else 0, 
+                            'Credit': 0 if is_broker else amt
                         })
                     else:
+                        # Payment: Party badhta hai -> Debit | Broker kam hota hai -> Credit
                         ledger_entries.append({
                             'Date': r.get('Date', date.today()), 
                             'Particulars': f"Payment Paid ({r.get('Mode','Cash')})", 
-                            'Debit': amt, 'Credit': 0
+                            'Debit': 0 if is_broker else amt, 
+                            'Credit': amt if is_broker else 0
                         })
-
+                        
             # --- D. FINAL DISPLAY (Ab NameError nahi aayega) ---
             if ledger_entries:
                 full_df = pd.DataFrame(ledger_entries)
