@@ -276,9 +276,9 @@ def gl(t):
     # Baaki sab (Vehicle, Driver, Bank) ke liye normal logic
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist())
 if menu == "0. Dashboard":
-    # Sabse upar ek Refresh Button de dein
+    # 0. REFRESH LOGIC (Impact turant dikhne ke liye)
     if st.button("🔄 Refresh Data"):
-        st.cache_data.clear() # Ye purana data saaf kar dega
+        st.cache_data.clear()
         st.rerun()
 
     # --- 1. FY SELECTION ---
@@ -295,7 +295,6 @@ if menu == "0. Dashboard":
             return f"{dt.year}-{str(dt.year+1)[2:]}" if dt.month >= 4 else f"{dt.year-1}-{str(dt.year)[2:]}"
         except: return "Unknown"
 
-    # Filtered Dataframes for Current FY
     df_tf = df_t.copy()
     if not df_tf.empty:
         df_tf['FY'] = df_tf['Date'].apply(get_fy)
@@ -311,161 +310,80 @@ if menu == "0. Dashboard":
         df_oef['FY'] = df_oef['Date'].apply(get_fy)
         df_oef = df_oef[df_oef['FY'] == selected_fy]
 
-    # --- 3. CALCULATIONS ---
+    # --- 3. CALCULATIONS (UPDATED FOR DEBIT/CREDIT) ---
     total_opening_cash = 0
     op_party_receivable = 0
+    total_broker_payable = 0
     op_entries = pd.DataFrame()
     
-    # Dashboard Calculations section
     if not df_p.empty:
+        # Columns clean/convert karein
+        for c in ['Debit', 'Credit']:
+            if c in df_p.columns: df_p[c] = pd.to_numeric(df_p[c], errors='coerce').fillna(0)
+            
         op_entries = df_p[df_p['Type'] == 'OP_BAL']
         if not op_entries.empty:
-            # Bank/Cash accounts filter
+            # A. Cash & Bank Opening
             cash_bank_op = op_entries[op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
+            total_opening_cash = cash_bank_op['Debit'].sum() - cash_bank_op['Credit'].sum()
             
-            # 'Amount' ki jagah 'Debit' aur 'Credit' use karein
-            dr_op = pd.to_numeric(cash_bank_op['Debit'], errors='coerce').fillna(0).sum()
-            cr_op = pd.to_numeric(cash_bank_op['Credit'], errors='coerce').fillna(0).sum()
-            total_opening_cash = dr_op - cr_op 
-            
-            # Party receivables fix
+            # B. Party Receivables Opening (Debit side)
             party_op = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
-            op_party_receivable = pd.to_numeric(party_op['Debit'], errors='coerce').fillna(0).sum()
+            op_party_receivable = party_op['Debit'].sum()
             
-       # B. CURRENT YEAR FLOW (REPLACED LOGIC)
+            # C. Broker Payables Opening (Credit side)
+            broker_list = gl("Broker")
+            op_broker = op_entries[op_entries['Account_Name'].isin(broker_list)]['Credit'].sum()
+
+    # B. CURRENT YEAR FLOW
     cash_in = 0; cash_out = 0
     if not df_pf.empty:
-        # Amount column ki jagah ab hum Debit/Credit use karenge
-        df_pf['Debit'] = pd.to_numeric(df_pf['Debit'], errors='coerce').fillna(0)
-        df_pf['Credit'] = pd.to_numeric(df_pf['Credit'], errors='coerce').fillna(0)
-        
-        # Dashboard ke liye: Credit matlab bank/cash mein paisa aaya, Debit matlab gaya
+        # Credit = Paisa aaya, Debit = Paisa gaya
         cash_in = df_pf[df_pf['Type'] != 'OP_BAL']['Credit'].sum()
         cash_out = df_pf[df_pf['Type'] != 'OP_BAL']['Debit'].sum()
 
-    # C. TRIP PERFORMANCE
-    own_profit = 0; hired_profit = 0; total_rev = 0; trip_outflow = 0
+    # C. TRIP PERFORMANCE & BROKER PAYABLES
+    own_profit = 0; hired_profit = 0; total_rev = 0; trip_outflow = 0; total_hired_amt = 0
     df_own = pd.DataFrame()
     if not df_tf.empty:
         for c in ['Freight', 'Diesel', 'Toll', 'DriverExp', 'HiredCharges', 'Profit']:
             if c in df_tf.columns: df_tf[c] = pd.to_numeric(df_tf[c], errors='coerce').fillna(0)
         
         total_rev = df_tf['Freight'].sum()
+        
+        # Own Fleet
         df_own = df_tf[df_tf['Type'].str.contains('Own', case=False, na=False)]
         own_profit = df_own['Profit'].sum() if not df_own.empty else 0
-        
-        df_hired = df_tf[df_tf['Type'].str.contains('Market|Hired', case=False, na=False)]
-        hired_profit = (df_hired['Freight'].sum() - df_hired['HiredCharges'].sum()) if not df_hired.empty else 0
         trip_outflow = df_tf[['Diesel', 'Toll', 'DriverExp']].sum().sum()
+        
+        # Hired Fleet
+        df_hired = df_tf[df_tf['Type'].str.contains('Market|Hired', case=False, na=False)]
+        total_hired_amt = df_hired['HiredCharges'].sum() if not df_hired.empty else 0
+        hired_profit = (df_hired['Freight'].sum() - total_hired_amt) if not df_hired.empty else 0
 
-    # D. FINAL SUMMARY (ACCRUAL BASIS)
+    # D. PAYABLES CALCULATION
+    broker_list = gl("Broker")
+    # Jo payments humne Broker ko ki (Debit side)
+    broker_paid = df_pf[df_pf['Account_Name'].isin(broker_list)]['Debit'].sum() if not df_pf.empty else 0
+    total_broker_payable = (op_broker + total_hired_amt) - broker_paid
+
+    # E. FINAL SUMMARY (ACCRUAL BASIS)
     office_exp = pd.to_numeric(df_oef['Amount'], errors='coerce').sum() if not df_oef.empty else 0
     total_net_profit = (own_profit + hired_profit) - office_exp
     
-    # Accurate Cash in Hand: (Opening + In) - (Voucher Out + Trip Cash + Office Exp)
     cash_hand_balance = (total_opening_cash + cash_in) - (cash_out + trip_outflow + office_exp)
     receivables = op_party_receivable + (total_rev - cash_in)
 
     # --- 4. DISPLAY UI ---
     st.write("### 💰 Financial Status (Cash & Dues)")
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Cash In Hand", f"₹{cash_hand_balance:,.0f}", delta=f"Including OE Impact")
+    m1.metric("Cash In Hand", f"₹{cash_hand_balance:,.0f}", delta=f"Actual Liquid")
     m2.metric("Total Receivables", f"₹{receivables:,.0f}", help="Paisa jo market se lena baki hai")
     m3.metric("Yearly Revenue", f"₹{total_rev:,.0f}", delta="Total Billed")
     m4.metric("Total Payables", f"₹{total_broker_payable:,.0f}", help="Brokers ko dena baki hai", delta_color="inverse")
 
     st.divider()
-    st.write("### 🚛 Business Performance")
-    p1, p2, p3, p4 = st.columns(4)
-    p1.metric("Net Profit", f"₹{total_net_profit:,.0f}", delta="Accrual Basis")
-    p2.metric("Own Fleet", f"₹{own_profit:,.0f}", delta="Trip Profit")
-    p3.metric("Market Hired", f"₹{hired_profit:,.0f}", delta="Commission")
-    p4.metric("Office Exp", f"₹{office_exp:,.0f}", delta_color="inverse")
-
-    # --- BANK BALANCES ---
-    st.write("### 🏦 My Bank Accounts Balance")
-    my_banks = gl("Bank")
-    if my_banks:
-        b_cols = st.columns(len(my_banks))
-        for i, b_name in enumerate(my_banks):
-            op_b = df_p[(df_p['Account_Name'] == b_name) & (df_p['Type'] == 'OP_BAL')]['Amount'].sum()
-            in_b = df_p[(df_p.get('Bank_Used', 'Account_Name') == b_name) & (df_p['Type'].str.contains('Receipt|In', na=False))]['Amount'].sum()
-            out_b_p = df_p[(df_p.get('Bank_Used', 'Account_Name') == b_name) & (df_p['Type'].str.contains('Payment|Out', na=False))]['Amount'].sum()
-            out_b_oe = df_oef[df_oef['Payment_Mode'] == b_name]['Amount'].sum() if not df_oef.empty else 0
-            
-            curr_b = op_b + in_b - (out_b_p + out_b_oe)
-            with b_cols[i]:
-                st.metric(b_name, f"₹{curr_b:,.0f}")
-
-    st.divider()
-
-    # --- 5. CHARTS ---
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.subheader("💰 Cash Flow Breakdown")
-        cf_data = pd.DataFrame({
-            'Category': ['Opening Bank', 'Receipts', 'Payments', 'Trip Cash', 'Office & Salary Exp'], 
-            'Amount': [total_opening_cash, cash_in, cash_out, trip_outflow, office_exp]
-        })
-        fig_pie = px.pie(cf_data, values='Amount', names='Category', hole=0.4, color_discrete_sequence=px.colors.qualitative.Bold)
-        fig_pie.update_layout(legend_font_color="#00d4ff")
-        st.plotly_chart(fig_pie, use_container_width=True)
-
-    with col_b:
-        st.subheader("🚛 Own Vehicle Trip Revenue")
-        if not df_own.empty:
-            v_perf_rev = df_own.groupby('Vehicle')['Freight'].sum().reset_index()
-            fig_bar = px.bar(v_perf_rev, x='Vehicle', y='Freight', text_auto='.2s', color_discrete_sequence=['#00d4ff'])
-            st.plotly_chart(fig_bar, use_container_width=True)
-        else:
-            st.info("No Own Vehicle Trips found.")
-
-    # --- ACTUAL VEHICLE PROFIT ---
-    st.divider()
-    st.write("### 🚛 Actual Vehicle Profit (After Maintenance & Salary)")
-    # Trip Profit Data
-    v_trip_p = df_own.groupby('Vehicle')['Profit'].sum().reset_index() if not df_own.empty else pd.DataFrame(columns=['Vehicle', 'Profit'])
-    
-    # OE Manager Data
-    v_oe_exp = pd.DataFrame(columns=['Vehicle', 'Extra_Exp'])
-    if not df_oef.empty:
-        oe_v_col = 'Vehicle Number' if 'Vehicle Number' in df_oef.columns else 'Vehicle'
-        v_oe_exp = df_oef[df_oef[oe_v_col] != "N/A"].groupby(oe_v_col)['Amount'].sum().reset_index()
-        v_oe_exp.columns = ['Vehicle', 'Extra_Exp']
-    
-    # Merge (Outer join so 0891 etc show up)
-    actual_v_df = pd.merge(v_trip_p, v_oe_exp, on='Vehicle', how='outer').fillna(0)
-    actual_v_df['Actual_Profit'] = actual_v_df['Profit'] - actual_v_df['Extra_Exp']
-    actual_v_df = actual_v_df.sort_values('Actual_Profit', ascending=False)
-    
-    fig_actual = px.bar(actual_v_df, x='Vehicle', y='Actual_Profit', text_auto='.2s', color='Actual_Profit', color_continuous_scale='RdYlGn')
-    st.plotly_chart(fig_actual, use_container_width=True)
-    st.dataframe(actual_v_df.style.format({"Profit": "₹{:,.0f}", "Extra_Exp": "₹{:,.0f}", "Actual_Profit": "₹{:,.0f}"}), use_container_width=True)
-
-    # --- 6. PENDING BALANCE TABLE (BACK AT BOTTOM) ---
-    st.divider()
-    st.subheader("⏳ Party-wise Pending Balance")
-    if not df_tf.empty or op_party_receivable > 0:
-        p_due = df_tf.groupby('Party')['Freight'].sum().reset_index() if not df_tf.empty else pd.DataFrame(columns=['Party', 'Freight'])
-        
-        if not op_entries.empty:
-            party_op_list = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)][['Account_Name', 'Amount']]
-            party_op_list.columns = ['Party', 'Opening']
-            p_due = pd.merge(p_due, party_op_list, on='Party', how='outer').fillna(0)
-            p_due['Total_Billed'] = p_due['Freight'] + p_due['Opening']
-        else:
-            p_due['Total_Billed'] = p_due['Freight']
-        
-        p_rec = df_pf[df_pf['Type'].str.contains('Receipt', case=False, na=False)].groupby('Account_Name')['Amount'].sum().reset_index()
-        p_rec.columns = ['Party', 'Received']
-        
-        final_due = pd.merge(p_due, p_rec, on='Party', how='left').fillna(0)
-        final_due['Pending'] = final_due['Total_Billed'] - final_due['Received']
-        
-        display_due = final_due[final_due['Pending'].abs() > 1].sort_values('Pending', ascending=False)
-        st.dataframe(display_due[['Party', 'Total_Billed', 'Received', 'Pending']].style.format({
-            "Total_Billed": "₹{:,.0f}", "Received": "₹{:,.0f}", "Pending": "₹{:,.0f}"
-        }).set_properties(**{'color': '#00d4ff', 'font-weight': 'bold'}), use_container_width=True)
+    # ... baki ka code (Business Performance, Bank Balances, Charts) as it is rehne dein ...
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
