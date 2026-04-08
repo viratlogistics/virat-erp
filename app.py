@@ -753,34 +753,66 @@ if menu == "4. Financials":
             st.info("No payment history found.")
 
     with tab_ledger:
-        st.subheader("Detailed Ledger Lookup")
-        sel_acc = st.selectbox("Select Account", all_accounts)
+        st.subheader("📊 Detailed Account Ledger")
+        sel_acc = st.selectbox("Select Account (Party/Broker)", all_accounts)
         
         if sel_acc:
-            # Accuracy Logic: LR + Payments merge
-            # 1. Opening
-            l_op = df_pf[(df_pf['Account_Name'] == sel_acc) & (df_pf['Type'].str.contains('OP_BAL', na=False))]['Amount'].sum()
-            # 2. Billing (Income)
-            l_bill = df_tf[df_tf['Party'] == sel_acc]['Freight'].sum()
-            # 3. Hired (Broker Payable)
+            # --- DATA FETCHING ---
+            # 1. Opening Balance (Vouchers se)
+            l_op = df_p[(df_p['Account_Name'] == sel_acc) & (df_p['Type'].str.contains('OP_BAL', na=False))]['Amount'].sum()
+            
+            # 2. LR Impact (Party ke liye Billing, Broker ke liye Hired Charges)
+            l_bill = df_t[df_t['Party'] == sel_acc]['Freight'].sum()
             l_hired = 0
-            if 'Broker' in df_tf.columns:
-                l_hired = df_tf[df_tf['Broker'] == sel_acc]['HiredCharges'].sum()
+            if 'Broker' in df_t.columns:
+                l_hired = df_t[df_t['Broker'] == sel_acc]['HiredCharges'].sum()
             
-            # 4. Settlements
-            l_rec = df_pf[(df_pf['Account_Name'] == sel_acc) & (df_pf['Type'].str.contains('Receipt', na=False))]['Amount'].sum()
-            l_paid = df_pf[(df_pf['Account_Name'] == sel_acc) & (df_pf['Type'].str.contains('Payment', na=False))]['Amount'].sum()
+            # 3. Cash Transactions (Kitna paisa liya ya diya)
+            l_rec = df_p[(df_p['Account_Name'] == sel_acc) & (df_p['Type'].str.contains('Receipt', na=False))]['Amount'].sum()
+            l_paid = df_p[(df_p['Account_Name'] == sel_acc) & (df_p['Type'].str.contains('Payment', na=False))]['Amount'].sum()
             
-            # Calculations
-            net_bal = (l_op + l_bill + l_hired) - (l_rec + l_paid)
+            # --- ACCOUNTING DISPLAY ---
+            st.markdown(f"### Ledger Summary: **{sel_acc}**")
             
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Total Billed/Hired", f"₹{(l_bill + l_hired):,.0f}")
-            c2.metric("Total Settled", f"₹{(l_rec + l_paid):,.0f}")
-            c3.metric("Outstanding", f"₹{net_bal:,.0f}", delta_color="inverse")
+            c1, c2, c3, c4 = st.columns(4)
             
-            st.write("Related Transactions:")
-            st.table(df_pf[df_pf['Account_Name'] == sel_acc])
+            # Display Logic based on Role
+            total_payable_receivable = l_bill + l_hired
+            total_settled = l_rec + l_paid
+            net_balance = (l_op + total_payable_receivable) - total_settled
+            
+            c1.metric("Opening Balance", f"₹{l_op:,.0f}")
+            
+            # Broker aur Party ke liye terminology change
+            if l_hired > 0: # Agar ye Broker hai
+                c2.metric("Total Hired (Dena Hai)", f"₹{l_hired:,.0f}")
+                c3.metric("Total Paid (Diya Hai)", f"₹{l_paid:,.0f}")
+                label = "Net Payable (Baki Dena)"
+            else: # Agar ye Party hai
+                c2.metric("Total Billing (Lena Hai)", f"₹{l_bill:,.0f}")
+                c3.metric("Total Received (Aaya Hai)", f"₹{l_rec:,.0f}")
+                label = "Net Receivable (Baki Lena)"
+                
+            # Net Balance with Color
+            c4.metric(label, f"₹{abs(net_balance):,.0f}", 
+                      delta="Owe to them" if net_balance > 0 else "Advance/Clear",
+                      delta_color="normal" if net_balance > 0 else "inverse")
+
+            # --- DETAILED TRANSACTION TABLE ---
+            st.write("---")
+            st.write("📜 **Recent Transactions**")
+            
+            # Financials data
+            ledger_df = df_p[df_p['Account_Name'] == sel_acc][['Date', 'Type', 'Amount', 'Bank_Used', 'Remarks']]
+            
+            # Trips data ko bhi ledger table mein dikhane ke liye (Optional but good for accuracy)
+            if l_bill > 0 or l_hired > 0:
+                trips_info = df_t[(df_t['Party'] == sel_acc) | (df_t.get('Broker','') == sel_acc)][['Date', 'LR No', 'Vehicle', 'Freight', 'HiredCharges']]
+                st.write("LR Entries:")
+                st.dataframe(trips_info, use_container_width=True)
+            
+            st.write("Voucher Entries:")
+            st.dataframe(ledger_df.sort_values("Date", ascending=False), use_container_width=True)
 elif menu == "5. Business Insights":
     st.header(f"⚖️ Financial Insights & Fleet Ledgers")
 
