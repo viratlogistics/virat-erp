@@ -435,46 +435,39 @@ if menu == "0. Dashboard":
     st.plotly_chart(fig_actual, use_container_width=True)
     st.dataframe(actual_v_df.style.format({"Profit": "₹{:,.0f}", "Extra_Exp": "₹{:,.0f}", "Actual_Profit": "₹{:,.0f}"}), use_container_width=True)
 
-    # --- 6. PENDING BALANCE TABLE (PARTIES & BROKERS) ---
-    st.divider()
-    st.subheader("⏳ Outstanding Balance (Parties & Brokers)")
+    # --- DASHBOARD ME PENDING BALANCE KA SAHI LOGIC ---
+if not df_tf.empty or not df_pf.empty:
+    # 1. Sabhi unique Parties aur Brokers ki list
+    all_names = list(set(gl("Party") + gl("Broker")))
     
-    # Combined List of Parties and Brokers from Masters
-    all_parties = gl("Party") + gl("Broker")
+    report = []
+    for name in all_names:
+        # A. Opening Balance (Payments sheet se 'OP_BAL' type)
+        op = df_p[(df_p['Account_Name'] == name) & (df_p['Type'].str.contains('OP_BAL', na=False))]['Amount'].sum()
+        
+        # B. Total Billing (Trips sheet se)
+        billing = df_tf[df_tf['Party'] == name]['Freight'].sum()
+        
+        # C. Total Received (Payments sheet se 'Receipt' type)
+        received = df_p[(df_p['Account_Name'] == name) & (df_p['Type'].str.contains('Receipt', na=False))]['Amount'].sum()
+        
+        # D. Total Paid (Brokers ko jo payment kiya)
+        paid = df_p[(df_p['Account_Name'] == name) & (df_p['Type'].str.contains('Payment', na=False))]['Amount'].sum()
+        
+        # Final Calculation: Opening + Bill - (Received + Paid)
+        current_pending = (op + billing) - (received + paid)
+        
+        if current_pending != 0:
+            report.append({
+                "Party/Broker": name,
+                "Opening": op,
+                "LR Billing": billing,
+                "Total Settled": received + paid,
+                "Net Balance": current_pending
+            })
     
-    if not df_tf.empty or op_party_receivable > 0:
-        # A. From Trips (LR Billing)
-        p_due = df_tf.groupby('Party')['Freight'].sum().reset_index() if not df_tf.empty else pd.DataFrame(columns=['Party', 'Freight'])
-        
-        # B. From Financials (Opening Balance)
-        if not op_entries.empty:
-            party_op_list = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)][['Account_Name', 'Amount']]
-            party_op_list.columns = ['Party', 'Opening']
-            p_due = pd.merge(p_due, party_op_list, on='Party', how='outer').fillna(0)
-        else:
-            p_due['Opening'] = 0
-            
-        p_due['Total_Billed'] = p_due['Freight'] + p_due['Opening']
-        
-        # C. From Financials (Receipts & Payments)
-        # We check both Receipts (for parties) and Payments (if we paid brokers)
-        p_rec = df_pf[df_pf['Type'].str.contains('Receipt', case=False, na=False)].groupby('Account_Name')['Amount'].sum().reset_index()
-        p_rec.columns = ['Party', 'Received']
-        
-        p_paid = df_pf[df_pf['Type'].str.contains('Payment', case=False, na=False)].groupby('Account_Name')['Amount'].sum().reset_index()
-        p_paid.columns = ['Party', 'Paid_Out']
-        
-        # D. FINAL MERGE
-        final_due = pd.merge(p_due, p_rec, on='Party', how='left').fillna(0)
-        final_due = pd.merge(final_due, p_paid, on='Party', how='left').fillna(0)
-        
-        # Accurate Pending: (Opening + LR Bill) - (Paisa Aaya + Paisa Diya)
-        final_due['Pending'] = final_due['Total_Billed'] - (final_due['Received'] + final_due['Paid_Out'])
-        
-        display_due = final_due[final_due['Pending'].abs() > 1].sort_values('Pending', ascending=False)
-        st.dataframe(display_due[['Party', 'Total_Billed', 'Received', 'Paid_Out', 'Pending']].style.format({
-            "Total_Billed": "₹{:,.0f}", "Received": "₹{:,.0f}", "Paid_Out": "₹{:,.0f}", "Pending": "₹{:,.0f}"
-        }).set_properties(**{'color': '#00d4ff', 'font-weight': 'bold'}), use_container_width=True)
+    if report:
+        st.table(pd.DataFrame(report))
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
