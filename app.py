@@ -316,28 +316,22 @@ if menu == "0. Dashboard":
     op_party_receivable = 0
     op_entries = pd.DataFrame()
     
+    # Dashboard Calculations section
     if not df_p.empty:
         op_entries = df_p[df_p['Type'] == 'OP_BAL']
         if not op_entries.empty:
+            # Bank/Cash accounts filter
             cash_bank_op = op_entries[op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
-            total_opening_cash = pd.to_numeric(cash_bank_op['Amount'], errors='coerce').fillna(0).sum()
+            
+            # 'Amount' ki jagah 'Debit' aur 'Credit' use karein
+            dr_op = pd.to_numeric(cash_bank_op['Debit'], errors='coerce').fillna(0).sum()
+            cr_op = pd.to_numeric(cash_bank_op['Credit'], errors='coerce').fillna(0).sum()
+            total_opening_cash = dr_op - cr_op 
+            
+            # Party receivables fix
             party_op = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
-            op_party_receivable = pd.to_numeric(party_op['Amount'], errors='coerce').fillna(0).sum()
-    # Dashboard calculations ke andar:
-    total_broker_payable = 0
-    if not df_tf.empty:
-        # Market Hired trips se total hired charges
-        hired_trips = df_tf[df_tf['Type'].str.contains('Market|Hired', case=False, na=False)]
-        total_hired_amt = hired_trips['HiredCharges'].sum()
-        
-        # Brokers ko kitna pay kar diya
-        broker_paid = df_pf[df_pf['Account_Name'].isin(gl("Broker"))]['Amount'].sum()
-        
-        # Broker ka Opening Balance (Liability side)
-        op_broker = op_entries[op_entries['Account_Name'].isin(gl("Broker"))]['Amount'].sum()
-        
-        total_broker_payable = (op_broker + total_hired_amt) - broker_paid
-
+            op_party_receivable = pd.to_numeric(party_op['Debit'], errors='coerce').fillna(0).sum()
+            
        # B. CURRENT YEAR FLOW (REPLACED LOGIC)
     cash_in = 0; cash_out = 0
     if not df_pf.empty:
