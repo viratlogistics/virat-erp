@@ -276,7 +276,10 @@ def gl(t):
     # Baaki sab (Vehicle, Driver, Bank) ke liye normal logic
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist())
 if menu == "0. Dashboard":
-    st.markdown("<h2 style='text-align: center; color: #00d4ff;'>📊 VIRAT LOGISTICS STRATEGIC DASHBOARD</h2>", unsafe_allow_html=True)
+    # Sabse upar ek Refresh Button de dein
+    if st.button("🔄 Refresh Data"):
+        st.cache_data.clear() # Ye purana data saaf kar dega
+        st.rerun()
 
     # --- 1. FY SELECTION ---
     available_fy = ["2024-25", "2025-26", "2026-27"]
@@ -320,8 +323,22 @@ if menu == "0. Dashboard":
             total_opening_cash = pd.to_numeric(cash_bank_op['Amount'], errors='coerce').fillna(0).sum()
             party_op = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
             op_party_receivable = pd.to_numeric(party_op['Amount'], errors='coerce').fillna(0).sum()
+    # Dashboard calculations ke andar:
+    total_broker_payable = 0
+    if not df_tf.empty:
+        # Market Hired trips se total hired charges
+        hired_trips = df_tf[df_tf['Type'].str.contains('Market|Hired', case=False, na=False)]
+        total_hired_amt = hired_trips['HiredCharges'].sum()
+        
+        # Brokers ko kitna pay kar diya
+        broker_paid = df_pf[df_pf['Account_Name'].isin(gl("Broker"))]['Amount'].sum()
+        
+        # Broker ka Opening Balance (Liability side)
+        op_broker = op_entries[op_entries['Account_Name'].isin(gl("Broker"))]['Amount'].sum()
+        
+        total_broker_payable = (op_broker + total_hired_amt) - broker_paid
 
-    # B. CURRENT YEAR FLOW
+        # B. CURRENT YEAR FLOW
     cash_in = 0; cash_out = 0
     if not df_pf.empty:
         df_pf['Amount'] = pd.to_numeric(df_pf['Amount'], errors='coerce').fillna(0)
@@ -365,6 +382,7 @@ if menu == "0. Dashboard":
     p2.metric("Own Fleet", f"₹{own_profit:,.0f}", delta="Trip Profit")
     p3.metric("Market Hired", f"₹{hired_profit:,.0f}", delta="Commission")
     p4.metric("Office Exp", f"₹{office_exp:,.0f}", delta_color="inverse")
+    m4.metric("Total Payables", f"₹{total_broker_payable:,.0f}", help="Brokers ko dena baki hai", delta_color="inverse")
 
     # --- BANK BALANCES ---
     st.write("### 🏦 My Bank Accounts Balance")
