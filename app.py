@@ -760,31 +760,43 @@ elif menu == "3. LR Register":
 if menu == "4. Financials":
     st.header("💰 Financial Manager (Vouchers & Ledgers)")
     
+    # --- Sabse Pehle Data Load Karein taaki NameError na aaye ---
+    df_p_raw = load("payments")
+    df_t_raw = load("trips")
+    
+    # Data Cleaning: Strings ko Numbers mein convert karein
+    def clean_fin_data(df):
+        if df.empty: return df
+        cols_to_fix = ['Amount', 'Freight', 'HiredCharges', 'Profit']
+        for col in cols_to_fix:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        return df
+
+    df_p = clean_fin_data(df_p_raw)
+    df_t = clean_fin_data(df_t_raw)
+
     # --- TABS FOR BETTER ORGANIZATION ---
-    tab_entry, tab_history = st.tabs(["📝 New Voucher Entry", "📖 Transaction History & Ledger"])
+    tab_entry, tab_history, tab_ledger = st.tabs(["📝 New Voucher Entry", "📖 Transaction History", "📊 Account Ledger"])
     
     with tab_entry:
         st.subheader("Add New Receipt or Payment")
         with st.form("financial_voucher_form", clear_on_submit=True):
             col1, col2, col3 = st.columns(3)
-            
             v_date = col1.date_input("Voucher Date", date.today())
-            
-            # Voucher Types: Opening Balance is crucial for your Brokers/Parties
             v_type = col2.selectbox("Voucher Type", [
                 "Receipt (Inward)", 
                 "Payment (Outward)", 
                 "OP_BAL (Opening Balance)"
             ])
             
-            # Combine all names for the dropdown
-            all_accounts = gl("Party") + gl("Broker") + gl("Bank")
+            # Combine all names for the dropdown (Parties + Brokers + Banks)
+            all_accounts = sorted(list(set(gl("Party") + gl("Broker") + gl("Bank"))))
             v_party = col3.selectbox("Select Account / Party / Broker", all_accounts)
             
             v_amount = col1.number_input("Amount (₹)", min_value=0.0, step=100.0)
             
             # BANK DROPDOWN: Directly fetching from your Masters
-            # "CASH" is added by default, rest come from Master -> Type: BANK
             my_master_banks = gl("Bank")
             bank_options = ["CASH"] + my_master_banks
             v_bank_used = col2.selectbox("Bank Account / Cash Mode", bank_options)
@@ -797,8 +809,6 @@ if menu == "4. Financials":
                 if v_amount <= 0 and "OP_BAL" not in v_type:
                     st.error("Please enter a valid amount.")
                 else:
-                    # Column Mapping for Google Sheet: 
-                    # Date | Type | Account_Name | Amount | Bank_Used | Remarks
                     row = [str(v_date), v_type, v_party, v_amount, v_bank_used, v_remarks]
                     success = save("payments", row)
                     if success:
@@ -809,44 +819,66 @@ if menu == "4. Financials":
 
     with tab_history:
         st.subheader("Transaction History")
-        df_history = load("payments")
-        
-        if not df_history.empty:
-            # --- FILTERS FOR ACCURACY ---
+        if not df_p.empty:
             f_col1, f_col2 = st.columns(2)
             search_name = f_col1.text_input("🔍 Search by Party/Broker Name")
-            filter_type = f_col2.multiselect("Filter by Type", df_history['Type'].unique())
+            filter_type = f_col2.multiselect("Filter by Type", df_p['Type'].unique())
             
-            # Applying Filters
-            display_df = df_history.copy()
+            display_df = df_p.copy()
             if search_name:
                 display_df = display_df[display_df['Account_Name'].str.contains(search_name, case=False, na=False)]
             if filter_type:
                 display_df = display_df[display_df['Type'].isin(filter_type)]
             
-            # Sorting by Date (Newest first)
             display_df['Date'] = pd.to_datetime(display_df['Date'], errors='coerce')
             display_df = display_df.sort_values(by="Date", ascending=False)
             
-            # Display Table
             st.dataframe(display_df.style.format({"Amount": "₹{:,.2f}"}), use_container_width=True)
             
-            # --- SUMMARY STATS IN HISTORY ---
             st.divider()
             h_m1, h_m2, h_m3 = st.columns(3)
-            total_in = pd.to_numeric(display_df[display_df['Type'].str.contains('Receipt', na=False)]['Amount'], errors='coerce').sum()
-            total_out = pd.to_numeric(display_df[display_df['Type'].str.contains('Payment', na=False)]['Amount'], errors='coerce').sum()
+            total_in = display_df[display_df['Type'].str.contains('Receipt', na=False)]['Amount'].sum()
+            total_out = display_df[display_df['Type'].str.contains('Payment', na=False)]['Amount'].sum()
             
-            h_m1.metric("Total Receipts (Filtered)", f"₹{total_in:,.0f}")
-            h_m2.metric("Total Payments (Filtered)", f"₹{total_out:,.0f}")
+            h_m1.metric("Total Receipts", f"₹{total_in:,.0f}")
+            h_m2.metric("Total Payments", f"₹{total_out:,.0f}")
             h_m3.metric("Net Flow", f"₹{(total_in - total_out):,.0f}")
-            
-            # Export Option
-            csv_data = display_df.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Excel/CSV Report", csv_data, "financial_report.csv", "text/csv")
-            
         else:
-            st.info("No transaction history found in 'payments' sheet.")
+            st.info("No transaction history found.")
+
+    with tab_ledger:
+        st.subheader("Detailed Party/Broker Ledger")
+        sel_acc = st.selectbox("Select Account to view Ledger", all_accounts)
+        
+        if sel_acc:
+            # 1. Opening from Payments
+            l_op = df_p[(df_p['Account_Name'] == sel_acc) & (df_p['Type'].str.contains('OP_BAL', na=False))]['Amount'].sum()
+            
+            # 2. LR Billing (Income)
+            l_bill = df_t[df_t['Party'] == sel_acc]['Freight'].sum()
+            
+            # 3. LR Hired (Broker Payable)
+            l_hired = 0
+            if 'Broker' in df_t.columns:
+                l_hired = df_t[df_t['Broker'] == sel_acc]['HiredCharges'].sum()
+            
+            # 4. Actual Cash Transactions
+            l_rec = df_p[(df_p['Account_Name'] == sel_acc) & (df_p['Type'].str.contains('Receipt', na=False))]['Amount'].sum()
+            l_paid = df_p[(df_p['Account_Name'] == sel_acc) & (df_p['Type'].str.contains('Payment', na=False))]['Amount'].sum()
+            
+            # Display Calculations
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Opening", f"₹{l_op:,.0f}")
+            c2.metric("Total Billing/Hired", f"₹{(l_bill + l_hired):,.0f}")
+            c3.metric("Settled (Paid/Rec)", f"₹{(l_rec + l_paid):,.0f}")
+            
+            net_bal = (l_op + l_bill + l_hired) - (l_rec + l_paid)
+            c4.metric("Net Outstanding", f"₹{net_bal:,.0f}", delta_color="inverse")
+            
+            # Combined View of Transactions
+            st.write(f"Recent Transactions for {sel_acc}")
+            combined_ledger = df_p[df_p['Account_Name'] == sel_acc].sort_values("Date", ascending=False)
+            st.table(combined_ledger)
 elif menu == "5. Business Insights":
     st.header(f"⚖️ Financial Insights & Fleet Ledgers")
 
