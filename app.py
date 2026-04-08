@@ -278,133 +278,91 @@ def gl(t):
 if menu == "0. Dashboard":
     st.markdown("<h2 style='text-align: center; color: #00d4ff;'>📊 VIRAT LOGISTICS STRATEGIC DASHBOARD</h2>", unsafe_allow_html=True)
 
-    # --- 1. FY SELECTION ---
-    available_fy = ["2024-25", "2025-26", "2026-27"]
-    selected_fy = st.selectbox("📅 Select Financial Year", available_fy, index=2)
-
-    # --- 2. DATA LOADING & CLEANING ---
+    # --- 1. DATA LOADING ---
     df_p = load("payments") 
     df_oe = load("office_expenses")
-    df_t = load("trips") # Ensure trips is loaded here
+    df_t = load("trips")
     
-    # Helper for numbers
-    def to_num(df, cols):
+    # Numbers Cleaning
+    def clean(df, cols):
         for c in cols:
             if c in df.columns: df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         return df
 
-    df_p = to_num(df_p, ['Amount'])
-    df_t = to_num(df_t, ['Freight', 'Diesel', 'Toll', 'DriverExp', 'HiredCharges', 'Profit'])
-    if not df_oe.empty: df_oe = to_num(df_oe, ['Amount'])
+    df_p = clean(df_p, ['Amount'])
+    df_t = clean(df_t, ['Freight', 'Diesel', 'Toll', 'DriverExp', 'HiredCharges', 'Profit'])
+    df_oe = clean(df_oe, ['Amount']) if not df_oe.empty else pd.DataFrame()
 
-    def get_fy(date_str):
-        try:
-            dt = pd.to_datetime(date_str)
-            return f"{dt.year}-{str(dt.year+1)[2:]}" if dt.month >= 4 else f"{dt.year-1}-{str(dt.year)[2:]}"
-        except: return "Unknown"
-
-    # FY Filtering
-    df_tf = df_t.copy()
-    if not df_tf.empty:
-        df_tf['FY'] = df_tf['Date'].apply(get_fy)
-        df_tf = df_tf[df_tf['FY'] == selected_fy]
-
-    df_pf = df_p.copy()
-    if not df_pf.empty:
-        df_pf['FY'] = df_pf['Date'].apply(get_fy)
-        df_pf = df_pf[df_pf['FY'] == selected_fy]
-
-    df_oef = df_oe.copy() if not df_oe.empty else pd.DataFrame()
-    if not df_oef.empty:
-        df_oef['FY'] = df_oef['Date'].apply(get_fy)
-        df_oef = df_oef[df_oef['FY'] == selected_fy]
-
-    # --- 3. CALCULATIONS ---
-    # Opening Balances
-    op_entries = df_p[df_p['Type'].str.contains('OP_BAL', case=False, na=False)]
-    total_opening_cash = op_entries[op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]['Amount'].sum()
-    op_party_receivable = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]['Amount'].sum()
-
-    # Cash Flow
-    cash_in = df_pf[df_pf['Type'].str.contains('Receipt|In', case=False, na=False) & ~df_pf['Type'].str.contains('OP_BAL')]['Amount'].sum()
-    cash_out = df_pf[df_pf['Type'].str.contains('Payment|Out', case=False, na=False) & ~df_pf['Type'].str.contains('OP_BAL')]['Amount'].sum()
-
-    # Performance
-    total_rev = df_tf['Freight'].sum()
-    df_own = df_tf[df_tf['Type'].str.contains('Own', case=False, na=False)]
-    own_profit = df_own['Profit'].sum()
+    # --- 2. ACCURATE CASH & BANK CALCULATION ---
+    # Formula: (Opening Bank/Cash) + (All Receipts) - (All Payments + Trip Outflows + Office Exp)
     
-    df_hired_trips = df_tf[df_tf['Type'].str.contains('Market|Hired', case=False, na=False)]
-    hired_profit = (df_hired_trips['Freight'].sum() - df_hired_trips['HiredCharges'].sum())
-    
-    trip_outflow = df_tf[['Diesel', 'Toll', 'DriverExp']].sum().sum()
-    office_exp = df_oef['Amount'].sum() if not df_oef.empty else 0
-    
-    total_net_profit = (own_profit + hired_profit) - office_exp
-    cash_hand_balance = (total_opening_cash + cash_in) - (cash_out + trip_outflow + office_exp)
-    receivables = op_party_receivable + (total_rev - cash_in)
+    def get_accurate_balance(acc_name):
+        # A. Opening Balance (Vouchers se) - handles minus entry
+        raw_op = df_p[(df_p['Account_Name'] == acc_name) & (df_p['Type'].str.contains('OP_BAL', na=False))]['Amount'].sum()
+        # Agar aapne minus mein dala hai toh use positive balance maan ke start karenge
+        b_op = abs(raw_op) 
+        
+        # B. Inflow (Receipts/Inward)
+        b_in = df_p[(df_p['Bank_Used'] == acc_name) & (df_p['Type'].str.contains('Receipt|In', na=False))]['Amount'].sum()
+        
+        # C. Outflow 1: Direct Payments/Vouchers
+        b_out_v = df_p[(df_p['Bank_Used'] == acc_name) & (df_p['Type'].str.contains('Payment|Out', na=False))]['Amount'].sum()
+        
+        # D. Outflow 2: Office Expenses
+        b_out_oe = df_oe[df_oe['Payment_Mode'] == acc_name]['Amount'].sum() if not df_oe.empty else 0
+        
+        # E. Outflow 3: Trip Expenses (Diesel/Toll/Driver)
+        # Note: Iske liye trips sheet mein 'Cash/Bank Used' ka column hona zaruri hai, 
+        # filhal hum assume kar rahe hain ki ye Cash/Bank se minus hota hai.
+        b_out_trip = 0
+        if acc_name == "CASH": # Example: Agar trip ka kharcha cash se hota hai
+            b_out_trip = df_t[['Diesel', 'Toll', 'DriverExp']].sum().sum()
 
-    # --- 4. DISPLAY METRICS ---
-    st.write("### 💰 Financial Status")
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Cash In Hand", f"₹{cash_hand_balance:,.0f}")
-    m2.metric("Total Receivables", f"₹{receivables:,.0f}")
-    m3.metric("Yearly Revenue", f"₹{total_rev:,.0f}")
+        return (b_op + b_in) - (b_out_v + b_out_oe + b_out_trip)
+
+    # --- 3. DISPLAY BANK CARDS ---
+    st.write("### 🏦 Live Cash & Bank Balance")
+    banks = ["CASH"] + gl("Bank")
+    b_cols = st.columns(len(banks))
+    for i, b in enumerate(banks):
+        current_val = get_accurate_balance(b)
+        b_cols[i].metric(b, f"₹{current_val:,.0f}")
 
     st.divider()
-    st.write("### 🏦 Bank Balances")
-    my_banks = ["CASH"] + gl("Bank")
-    b_cols = st.columns(len(my_banks))
-    for i, b_name in enumerate(my_banks):
-        b_op = df_p[(df_p['Account_Name'] == b_name) & (df_p['Type'].str.contains('OP_BAL'))]['Amount'].sum()
-        b_in = df_p[(df_p['Bank_Used'] == b_name) & (df_p['Type'].str.contains('Receipt|In'))]['Amount'].sum()
-        b_out = df_p[(df_p['Bank_Used'] == b_name) & (df_p['Type'].str.contains('Payment|Out'))]['Amount'].sum()
-        b_oe = df_oe[df_oe['Payment_Mode'] == b_name]['Amount'].sum() if not df_oe.empty else 0
-        curr_b = b_op + b_in - (b_out + b_oe)
-        b_cols[i].metric(b_name, f"₹{curr_b:,.0f}")
 
-    # --- 5. PENDING BALANCE (ACURATE BROKER + PARTY) ---
-    st.divider()
-    st.subheader("⏳ Party & Broker Outstanding")
+    # --- 4. BROKER & PARTY OUTSTANDING (PENDING) ---
+    st.subheader("⏳ Outstanding Ledger (Party & Broker)")
     
     all_names = list(set(gl("Party") + gl("Broker")))
-    report = []
-    
+    summary_data = []
+
     for name in all_names:
-        # 1. Opening from Financials
-        op = df_p[(df_p['Account_Name'] == name) & (df_p['Type'].str.contains('OP_BAL'))]['Amount'].sum()
+        # 1. Opening (Handling your minus entry logic)
+        raw_op = df_p[(df_p['Account_Name'] == name) & (df_p['Type'].str.contains('OP_BAL', na=False))]['Amount'].sum()
+        op_bal = abs(raw_op) # Liability treat kar rahe hain
         
-        # 2. As Party (Billing)
-        billing = df_tf[df_tf['Party'] == name]['Freight'].sum()
+        # 2. LR Impact
+        billing = df_t[df_t['Party'] == name]['Freight'].sum()
+        hired = df_t[df_t['Broker'] == name]['HiredCharges'].sum() if 'Broker' in df_t.columns else 0
         
-        # 3. As Broker (Hired Charges) - Hum broker ko paise dete hain
-        hired = 0
-        if 'Broker' in df_tf.columns:
-            hired = df_tf[df_tf['Broker'] == name]['HiredCharges'].sum()
-            
-        # 4. Settlements (Receipts/Payments)
-        received = df_p[(df_p['Account_Name'] == name) & (df_p['Type'].str.contains('Receipt|In'))]['Amount'].sum()
-        paid = df_p[(df_p['Account_Name'] == name) & (df_p['Type'].str.contains('Payment|Out'))]['Amount'].sum()
+        # 3. Cash Flow
+        rec = df_p[(df_p['Account_Name'] == name) & (df_p['Type'].str.contains('Receipt', na=False))]['Amount'].sum()
+        paid = df_p[(df_p['Account_Name'] == name) & (df_p['Type'].str.contains('Payment', na=False))]['Amount'].sum()
         
-        # Balance Calculation: (Opening + What they owe us + What we owe broker) - (What we got + What we paid)
-        net_bal = (op + billing + hired) - (received + paid)
+        # Total Dena (Opening + New Hired/Bill) - Total Diya (Payments)
+        net = (op_bal + billing + hired) - (rec + paid)
         
-        if abs(net_bal) > 1:
-            report.append({
-                "Name": name,
-                "Opening": op,
-                "LR Impact (Bill/Hired)": billing + hired,
-                "Total Settled": received + paid,
-                "Net Balance": net_bal
+        if abs(net) > 1:
+            summary_data.append({
+                "Account": name,
+                "Opening": op_bal,
+                "Total Work (Bill/Hired)": billing + hired,
+                "Settled (Paid/Rec)": rec + paid,
+                "Net Balance": net
             })
 
-    if report:
-        st.dataframe(pd.DataFrame(report).sort_values("Net Balance", ascending=False), use_container_width=True)
-    else:
-        st.info("No outstanding balance.")
-
-    # --- 6. CHARTS & PROFIT ---
-    # (Yahan aapka purana Charts wala code continue hoga...)
+    if summary_data:
+        st.dataframe(pd.DataFrame(summary_data).sort_values("Net Balance", ascending=False), use_container_width=True)
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
@@ -757,62 +715,71 @@ if menu == "4. Financials":
         sel_acc = st.selectbox("Select Account (Party/Broker)", all_accounts)
         
         if sel_acc:
-            # --- DATA FETCHING ---
-            # 1. Opening Balance (Vouchers se)
-            l_op = df_p[(df_p['Account_Name'] == sel_acc) & (df_p['Type'].str.contains('OP_BAL', na=False))]['Amount'].sum()
+            # --- 1. DATA FETCHING & CLEANING ---
+            # Opening Balance: Agar minus mein hai toh use liability maan ke positive treat karenge calculation ke liye
+            raw_op = df_p[(df_p['Account_Name'] == sel_acc) & (df_p['Type'].str.contains('OP_BAL', na=False))]['Amount'].sum()
             
-            # 2. LR Impact (Party ke liye Billing, Broker ke liye Hired Charges)
-            l_bill = df_t[df_t['Party'] == sel_acc]['Freight'].sum()
+            # Agar aapne minus mein entry ki hai (-5000), toh hum use absolute (5000) le rahe hain calculation ke liye
+            l_op = abs(raw_op) if raw_op < 0 else raw_op
+            
+            # 2. LR Impact (Broker ke liye Hired Charges hi uska 'Paisa Lena' hai)
             l_hired = 0
             if 'Broker' in df_t.columns:
                 l_hired = df_t[df_t['Broker'] == sel_acc]['HiredCharges'].sum()
             
-            # 3. Cash Transactions (Kitna paisa liya ya diya)
-            l_rec = df_p[(df_p['Account_Name'] == sel_acc) & (df_p['Type'].str.contains('Receipt', na=False))]['Amount'].sum()
+            # Party Billing (Agar wahi banda party bhi hai)
+            l_bill = df_t[df_t['Party'] == sel_acc]['Freight'].sum()
+            
+            # 3. Cash Transactions (Payments given to Broker)
+            # Yahan hum check kar rahe hain ki 'Bank_Used' ya 'Account_Name' mein uska naam hai ya nahi
             l_paid = df_p[(df_p['Account_Name'] == sel_acc) & (df_p['Type'].str.contains('Payment', na=False))]['Amount'].sum()
+            l_rec = df_p[(df_p['Account_Name'] == sel_acc) & (df_p['Type'].str.contains('Receipt', na=False))]['Amount'].sum()
             
-            # --- ACCOUNTING DISPLAY ---
-            st.markdown(f"### Ledger Summary: **{sel_acc}**")
+            # --- 4. TERMINOLOGY LOGIC ---
+            # Broker ke liye: Opening (Dena tha) + Hired Charges (Aur dena hua) - Paid (Jo de diya)
+            total_payable = l_op + l_hired + l_bill
+            total_settled = l_paid + l_rec
+            net_balance = total_payable - total_settled
             
+            # --- 5. UI DISPLAY ---
+            st.markdown(f"### Ledger: **{sel_acc}**")
             c1, c2, c3, c4 = st.columns(4)
-            
-            # Display Logic based on Role
-            total_payable_receivable = l_bill + l_hired
-            total_settled = l_rec + l_paid
-            net_balance = (l_op + total_payable_receivable) - total_settled
             
             c1.metric("Opening Balance", f"₹{l_op:,.0f}")
             
-            # Broker aur Party ke liye terminology change
             if l_hired > 0: # Agar ye Broker hai
-                c2.metric("Total Hired (Dena Hai)", f"₹{l_hired:,.0f}")
-                c3.metric("Total Paid (Diya Hai)", f"₹{l_paid:,.0f}")
-                label = "Net Payable (Baki Dena)"
+                c2.metric("Paisa Dena Hai (LR)", f"₹{l_hired:,.0f}", help="Hired Charges from Trips")
+                c3.metric("Paisa Diya (Paid)", f"₹{l_paid:,.0f}", help="Total Payments made to Broker")
+                label = "Net Payable (Total Dena)"
             else: # Agar ye Party hai
-                c2.metric("Total Billing (Lena Hai)", f"₹{l_bill:,.0f}")
-                c3.metric("Total Received (Aaya Hai)", f"₹{l_rec:,.0f}")
-                label = "Net Receivable (Baki Lena)"
+                c2.metric("Paisa Lena Hai (LR)", f"₹{l_bill:,.0f}")
+                c3.metric("Paisa Aaya (Recv)", f"₹{l_rec:,.0f}")
+                label = "Net Receivable (Total Lena)"
                 
-            # Net Balance with Color
-            c4.metric(label, f"₹{abs(net_balance):,.0f}", 
-                      delta="Owe to them" if net_balance > 0 else "Advance/Clear",
+            # Final Net Balance
+            c4.metric(label, f"₹{net_balance:,.0f}", 
+                      delta="Pending" if net_balance > 0 else "Cleared/Adv",
                       delta_color="normal" if net_balance > 0 else "inverse")
 
-            # --- DETAILED TRANSACTION TABLE ---
-            st.write("---")
-            st.write("📜 **Recent Transactions**")
+            # --- 6. TRANSACTION FEED ---
+            st.divider()
+            col_l, col_r = st.columns(2)
             
-            # Financials data
-            ledger_df = df_p[df_p['Account_Name'] == sel_acc][['Date', 'Type', 'Amount', 'Bank_Used', 'Remarks']]
-            
-            # Trips data ko bhi ledger table mein dikhane ke liye (Optional but good for accuracy)
-            if l_bill > 0 or l_hired > 0:
-                trips_info = df_t[(df_t['Party'] == sel_acc) | (df_t.get('Broker','') == sel_acc)][['Date', 'LR No', 'Vehicle', 'Freight', 'HiredCharges']]
-                st.write("LR Entries:")
-                st.dataframe(trips_info, use_container_width=True)
-            
-            st.write("Voucher Entries:")
-            st.dataframe(ledger_df.sort_values("Date", ascending=False), use_container_width=True)
+            with col_l:
+                st.write("🚚 **LR Entries (Hired/Freight)**")
+                broker_trips = df_t[(df_t['Broker'] == sel_acc) | (df_t['Party'] == sel_acc)]
+                if not broker_trips.empty:
+                    st.dataframe(broker_trips[['Date', 'LR No', 'Vehicle', 'HiredCharges', 'Freight']], use_container_width=True)
+                else:
+                    st.info("No LR entries found.")
+
+            with col_r:
+                st.write("💸 **Payment/Receipt Entries**")
+                broker_vouchers = df_p[df_p['Account_Name'] == sel_acc]
+                if not broker_vouchers.empty:
+                    st.dataframe(broker_vouchers[['Date', 'Type', 'Amount', 'Bank_Used']], use_container_width=True)
+                else:
+                    st.info("No voucher entries found.")
 elif menu == "5. Business Insights":
     st.header(f"⚖️ Financial Insights & Fleet Ledgers")
 
