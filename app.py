@@ -370,10 +370,11 @@ if menu == "0. Dashboard":
 
     # --- 4. DISPLAY UI ---
     st.write("### 💰 Financial Status (Cash & Dues)")
-    m1, m2, m3 = st.columns(3)
+    m1, m2, m3, m4 = st.columns(4)
     m1.metric("Cash In Hand", f"₹{cash_hand_balance:,.0f}", delta=f"Including OE Impact")
     m2.metric("Total Receivables", f"₹{receivables:,.0f}", help="Paisa jo market se lena baki hai")
     m3.metric("Yearly Revenue", f"₹{total_rev:,.0f}", delta="Total Billed")
+    m4.metric("Total Payables", f"₹{total_broker_payable:,.0f}", help="Brokers ko dena baki hai", delta_color="inverse")
 
     st.divider()
     st.write("### 🚛 Business Performance")
@@ -382,7 +383,6 @@ if menu == "0. Dashboard":
     p2.metric("Own Fleet", f"₹{own_profit:,.0f}", delta="Trip Profit")
     p3.metric("Market Hired", f"₹{hired_profit:,.0f}", delta="Commission")
     p4.metric("Office Exp", f"₹{office_exp:,.0f}", delta_color="inverse")
-    m4.metric("Total Payables", f"₹{total_broker_payable:,.0f}", help="Brokers ko dena baki hai", delta_color="inverse")
 
     # --- BANK BALANCES ---
     st.write("### 🏦 My Bank Accounts Balance")
