@@ -804,6 +804,7 @@ elif menu == "4. Financials":
                 else:
                     # Ye wo else hai jahan pehle syntax error aa raha tha
                     st.error("Kripya Account select karein aur Debit ya Credit me amount bharein!")
+                    
     with t2:
         sel_a = st.selectbox("Select Account for Statement", ["Select"] + all_accs, key="s4_final")
         
