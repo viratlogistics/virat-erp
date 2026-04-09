@@ -276,17 +276,14 @@ def gl(t):
     # Baaki sab (Vehicle, Driver, Bank) ke liye normal logic
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist())
 if menu == "0. Dashboard":
-    # Sabse upar ek Refresh Button de dein
-    if st.button("🔄 Refresh Data"):
-        st.cache_data.clear() # Ye purana data saaf kar dega
-        st.rerun()
+    st.markdown("<h2 style='text-align: center; color: #00d4ff;'>📊 VIRAT LOGISTICS STRATEGIC DASHBOARD</h2>", unsafe_allow_html=True)
 
     # --- 1. FY SELECTION ---
     available_fy = ["2024-25", "2025-26", "2026-27"]
     selected_fy = st.selectbox("📅 Select Financial Year", available_fy, index=2)
 
     # --- 2. DATA LOADING & FILTERING ---
-    df_p = load("payments") 
+    df_p = load("payments") # Original data for Opening Balances
     df_oe = load("office_expenses")
     
     def get_fy(date_str):
@@ -311,144 +308,137 @@ if menu == "0. Dashboard":
         df_oef['FY'] = df_oef['Date'].apply(get_fy)
         df_oef = df_oef[df_oef['FY'] == selected_fy]
 
-    # --- 3. CALCULATIONS ---
+    # --- 3. CALCULATIONS (Fixed for Multiple Banks) ---
+
+    # A. OPENING BALANCES (From All OP_BAL entries)
     total_opening_cash = 0
     op_party_receivable = 0
-    op_entries = pd.DataFrame()
     
     if not df_p.empty:
         op_entries = df_p[df_p['Type'] == 'OP_BAL']
         if not op_entries.empty:
+            # 1. Banks ka Total (Jinke naam mein Bank/Cash hai)
             cash_bank_op = op_entries[op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
             total_opening_cash = pd.to_numeric(cash_bank_op['Amount'], errors='coerce').fillna(0).sum()
+            
+            # 2. Parties ka Total (Jo Bank nahi hain)
             party_op = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
             op_party_receivable = pd.to_numeric(party_op['Amount'], errors='coerce').fillna(0).sum()
-    # Dashboard calculations ke andar:
-    total_broker_payable = 0
-    if not df_tf.empty:
-        # Market Hired trips se total hired charges
-        hired_trips = df_tf[df_tf['Type'].str.contains('Market|Hired', case=False, na=False)]
-        total_hired_amt = hired_trips['HiredCharges'].sum()
-        
-        # Brokers ko kitna pay kar diya
-        broker_paid = df_pf[df_pf['Account_Name'].isin(gl("Broker"))]['Amount'].sum()
-        
-        # Broker ka Opening Balance (Liability side)
-        op_broker = op_entries[op_entries['Account_Name'].isin(gl("Broker"))]['Amount'].sum()
-        
-        total_broker_payable = (op_broker + total_hired_amt) - broker_paid
 
-       # B. CURRENT YEAR FLOW (REPLACED LOGIC)
+    # B. CURRENT YEAR CASH FLOW
     cash_in = 0; cash_out = 0
     if not df_pf.empty:
-        # Amount column ki jagah ab hum Debit/Credit use karenge
-        df_pf['Debit'] = pd.to_numeric(df_pf['Debit'], errors='coerce').fillna(0)
-        df_pf['Credit'] = pd.to_numeric(df_pf['Credit'], errors='coerce').fillna(0)
-        
-        # Dashboard ke liye: Credit matlab bank/cash mein paisa aaya, Debit matlab gaya
-        cash_in = df_pf[df_pf['Type'] != 'OP_BAL']['Credit'].sum()
-        cash_out = df_pf[df_pf['Type'] != 'OP_BAL']['Debit'].sum()
+        df_pf['Amount'] = pd.to_numeric(df_pf['Amount'], errors='coerce').fillna(0)
+        # Exclude OP_BAL from current year cash in to avoid double counting
+        cash_in = df_pf[(df_pf['Type'].str.contains('Receipt|In', case=False, na=False)) & (df_pf['Type'] != 'OP_BAL')]['Amount'].sum()
+        cash_out = df_pf[(df_pf['Type'].str.contains('Payment|Out', case=False, na=False)) & (df_pf['Type'] != 'OP_BAL')]['Amount'].sum()
 
-    # C. TRIP PERFORMANCE
+    # C. PROFIT & TRIP PERFORMANCE
     own_profit = 0; hired_profit = 0; total_rev = 0; trip_outflow = 0
-    df_own = pd.DataFrame()
     if not df_tf.empty:
-        for c in ['Freight', 'Diesel', 'Toll', 'DriverExp', 'HiredCharges', 'Profit']:
+        for c in ['Freight', 'Diesel', 'Toll', 'DriverExp', 'HiredCharges']:
             if c in df_tf.columns: df_tf[c] = pd.to_numeric(df_tf[c], errors='coerce').fillna(0)
         
         total_rev = df_tf['Freight'].sum()
+        # Own Fleet
         df_own = df_tf[df_tf['Type'].str.contains('Own', case=False, na=False)]
-        own_profit = df_own['Profit'].sum() if not df_own.empty else 0
-        
+        own_profit = df_own['Freight'].sum() - (df_own['Diesel'].sum() + df_own['Toll'].sum() + df_own['DriverExp'].sum())
+        # Hired Commission
         df_hired = df_tf[df_tf['Type'].str.contains('Market|Hired', case=False, na=False)]
-        hired_profit = (df_hired['Freight'].sum() - df_hired['HiredCharges'].sum()) if not df_hired.empty else 0
+        hired_profit = df_hired['Freight'].sum() - df_hired['HiredCharges'].sum()
+        # Total Outflow from trips (For cash balance)
         trip_outflow = df_tf[['Diesel', 'Toll', 'DriverExp']].sum().sum()
 
-    # D. FINAL SUMMARY (ACCRUAL BASIS)
+    # D. FINAL SUMMARY VALUES
     office_exp = pd.to_numeric(df_oef['Amount'], errors='coerce').sum() if not df_oef.empty else 0
     total_net_profit = (own_profit + hired_profit) - office_exp
     
-    # Accurate Cash in Hand: (Opening + In) - (Voucher Out + Trip Cash + Office Exp)
-    cash_hand_balance = (total_opening_cash + cash_in) - (cash_out + trip_outflow + office_exp)
+    # Cash in Hand = (Opening Cash + Receipts) - (Payments + Trip Expenses)
+    cash_hand_balance = (total_opening_cash + cash_in) - (cash_out + trip_outflow)
+    
+    # Receivables = Old Dues + Current Pending (Total Billed - Total Received)
     receivables = op_party_receivable + (total_rev - cash_in)
 
     # --- 4. DISPLAY UI ---
     st.write("### 💰 Financial Status (Cash & Dues)")
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Cash In Hand", f"₹{cash_hand_balance:,.0f}", delta=f"Including OE Impact")
+    m1, m2, m3 = st.columns(3)
+    # Ab yahan 'total_opening_cash' sahi se display hoga
+    m1.metric("Cash In Hand", f"₹{cash_hand_balance:,.0f}", delta=f"Op Cash: ₹{total_opening_cash:,.0f}")
     m2.metric("Total Receivables", f"₹{receivables:,.0f}", help="Paisa jo market se lena baki hai")
-    m3.metric("Yearly Revenue", f"₹{total_rev:,.0f}", delta="Total Billed")
-    m4.metric("Total Payables", f"₹{total_broker_payable:,.0f}", help="Brokers ko dena baki hai", delta_color="inverse")
+    m3.metric("Yearly Revenue", f"₹{total_rev:,.0f}", delta="Billed Amount")
 
     st.divider()
     st.write("### 🚛 Business Performance")
     p1, p2, p3, p4 = st.columns(4)
-    p1.metric("Net Profit", f"₹{total_net_profit:,.0f}", delta="Accrual Basis")
-    p2.metric("Own Fleet", f"₹{own_profit:,.0f}", delta="Trip Profit")
-    p3.metric("Market Hired", f"₹{hired_profit:,.0f}", delta="Commission")
+    p1.metric("Net Profit", f"₹{total_net_profit:,.0f}", delta="Total")
+    p2.metric("Own Fleet", f"₹{own_profit:,.0f}", delta="Vehicle")
+    p3.metric("Market Hired", f"₹{hired_profit:,.0f}", delta="Comm.")
     p4.metric("Office Exp", f"₹{office_exp:,.0f}", delta_color="inverse")
 
-    # --- BANK BALANCES ---
     st.write("### 🏦 My Bank Accounts Balance")
     my_banks = gl("Bank")
-    if my_banks:
-        b_cols = st.columns(len(my_banks))
-        for i, b_name in enumerate(my_banks):
-            op_b = df_p[(df_p['Account_Name'] == b_name) & (df_p['Type'] == 'OP_BAL')]['Amount'].sum()
-            in_b = df_p[(df_p.get('Bank_Used', 'Account_Name') == b_name) & (df_p['Type'].str.contains('Receipt|In', na=False))]['Amount'].sum()
-            out_b_p = df_p[(df_p.get('Bank_Used', 'Account_Name') == b_name) & (df_p['Type'].str.contains('Payment|Out', na=False))]['Amount'].sum()
-            out_b_oe = df_oef[df_oef['Payment_Mode'] == b_name]['Amount'].sum() if not df_oef.empty else 0
-            
-            curr_b = op_b + in_b - (out_b_p + out_b_oe)
-            with b_cols[i]:
-                st.metric(b_name, f"₹{curr_b:,.0f}")
+    b_cols = st.columns(len(my_banks) if my_banks else 1)
+    
+    for i, b_name in enumerate(my_banks):
+        # 1. Opening Balance (Jo payments sheet mein OP_BAL hai)
+        op_amt = df_p[(df_p['Account_Name'] == b_name) & (df_p['Type'] == 'OP_BAL')]['Amount'].sum()
+        
+        # 2. Inflow (Paisa aaya - isme Bank_Used check karenge)
+        in_amt = df_p[(df_p.get('Bank_Used', 'Account_Name') == b_name) & (df_p['Type'].str.contains('Receipt|In', na=False))]['Amount'].sum()
+        
+        # 3. Outflow (Paisa gaya - Payments aur Trip kharche)
+        out_amt = df_p[(df_p.get('Bank_Used', 'Account_Name') == b_name) & (df_p['Type'].str.contains('Payment|Out', na=False))]['Amount'].sum()
+        
+        current_bal = op_amt + in_amt - out_amt
+        with b_cols[i]:
+            st.metric(b_name, f"₹{current_bal:,.0f}")
 
     st.divider()
 
-    # --- 5. CHARTS ---
+    # --- 5. CHARTS (Updated for Visibility) ---
     col_a, col_b = st.columns(2)
+    
     with col_a:
         st.subheader("💰 Cash Flow Breakdown")
-        cf_data = pd.DataFrame({
-            'Category': ['Opening Bank', 'Receipts', 'Payments', 'Trip Cash', 'Office & Salary Exp'], 
-            'Amount': [total_opening_cash, cash_in, cash_out, trip_outflow, office_exp]
-        })
-        fig_pie = px.pie(cf_data, values='Amount', names='Category', hole=0.4, color_discrete_sequence=px.colors.qualitative.Bold)
-        fig_pie.update_layout(legend_font_color="#00d4ff")
-        st.plotly_chart(fig_pie, use_container_width=True)
-
-    with col_b:
-        st.subheader("🚛 Own Vehicle Trip Revenue")
-        if not df_own.empty:
-            v_perf_rev = df_own.groupby('Vehicle')['Freight'].sum().reset_index()
-            fig_bar = px.bar(v_perf_rev, x='Vehicle', y='Freight', text_auto='.2s', color_discrete_sequence=['#00d4ff'])
-            st.plotly_chart(fig_bar, use_container_width=True)
+        if total_opening_cash > 0 or cash_in > 0:
+            cf_data = pd.DataFrame({
+                'Category': ['Opening Bank', 'Current Receipts', 'Total Expenses'], 
+                'Amount': [total_opening_cash, cash_in, (cash_out + trip_outflow)]
+            })
+            # Color sequence update for better visibility
+            fig_pie = px.pie(cf_data, values='Amount', names='Category', hole=0.4, 
+                             color_discrete_sequence=px.colors.qualitative.Bold)
+            
+            # Chart text color force to Black/White based on theme
+            fig_pie.update_layout(showlegend=True, legend_font_color="#00d4ff")
+            st.plotly_chart(fig_pie, use_container_width=True)
         else:
-            st.info("No Own Vehicle Trips found.")
+            st.info("No Cash Flow data to display.")
+    
+    with col_b:
+        st.subheader("🚛 Own Vehicle Income")
+        if not df_tf.empty:
+            df_v = df_tf[df_tf['Type'].str.contains('Own', case=False, na=False)]
+            if not df_v.empty:
+                v_perf = df_v.groupby('Vehicle')['Freight'].sum().reset_index()
+                # Bar chart with neon blue color and labels
+                fig_bar = px.bar(v_perf, x='Vehicle', y='Freight', text_auto='.2s', 
+                                 color_discrete_sequence=['#00d4ff'])
+                
+                # Layout updates for better visibility
+                fig_bar.update_traces(textfont_size=12, textangle=0, textposition="outside", cliponaxis=False)
+                fig_bar.update_layout(
+                    xaxis_title="Vehicle Number",
+                    yaxis_title="Total Freight (₹)",
+                    font=dict(color="#ffffff") # Forced white text for dark theme
+                )
+                st.plotly_chart(fig_bar, use_container_width=True)
+            else:
+                st.info("No Own Vehicle trips found for this FY.")
+        else:
+            st.info("No trip data found.")
 
-    # --- ACTUAL VEHICLE PROFIT ---
-    st.divider()
-    st.write("### 🚛 Actual Vehicle Profit (After Maintenance & Salary)")
-    # Trip Profit Data
-    v_trip_p = df_own.groupby('Vehicle')['Profit'].sum().reset_index() if not df_own.empty else pd.DataFrame(columns=['Vehicle', 'Profit'])
-    
-    # OE Manager Data
-    v_oe_exp = pd.DataFrame(columns=['Vehicle', 'Extra_Exp'])
-    if not df_oef.empty:
-        oe_v_col = 'Vehicle Number' if 'Vehicle Number' in df_oef.columns else 'Vehicle'
-        v_oe_exp = df_oef[df_oef[oe_v_col] != "N/A"].groupby(oe_v_col)['Amount'].sum().reset_index()
-        v_oe_exp.columns = ['Vehicle', 'Extra_Exp']
-    
-    # Merge (Outer join so 0891 etc show up)
-    actual_v_df = pd.merge(v_trip_p, v_oe_exp, on='Vehicle', how='outer').fillna(0)
-    actual_v_df['Actual_Profit'] = actual_v_df['Profit'] - actual_v_df['Extra_Exp']
-    actual_v_df = actual_v_df.sort_values('Actual_Profit', ascending=False)
-    
-    fig_actual = px.bar(actual_v_df, x='Vehicle', y='Actual_Profit', text_auto='.2s', color='Actual_Profit', color_continuous_scale='RdYlGn')
-    st.plotly_chart(fig_actual, use_container_width=True)
-    st.dataframe(actual_v_df.style.format({"Profit": "₹{:,.0f}", "Extra_Exp": "₹{:,.0f}", "Actual_Profit": "₹{:,.0f}"}), use_container_width=True)
-
-    # --- 6. PENDING BALANCE TABLE (BACK AT BOTTOM) ---
+    # --- 6. RECEIVABLES TABLE (Styled for Visibility) ---
     st.divider()
     st.subheader("⏳ Party-wise Pending Balance")
     if not df_tf.empty or op_party_receivable > 0:
@@ -462,13 +452,15 @@ if menu == "0. Dashboard":
         else:
             p_due['Total_Billed'] = p_due['Freight']
         
-        p_rec = df_pf[df_pf['Type'].str.contains('Receipt', case=False, na=False)].groupby('Account_Name')['Amount'].sum().reset_index()
+        p_rec = df_p[df_p['Type'].str.contains('Receipt', case=False, na=False)].groupby('Account_Name')['Amount'].sum().reset_index()
         p_rec.columns = ['Party', 'Received']
         
         final_due = pd.merge(p_due, p_rec, on='Party', how='left').fillna(0)
         final_due['Pending'] = final_due['Total_Billed'] - final_due['Received']
         
-        display_due = final_due[final_due['Pending'].abs() > 1].sort_values('Pending', ascending=False)
+        display_due = final_due[final_due['Pending'] > 1].sort_values('Pending', ascending=False)
+        
+        # Table Styling for better font visibility
         st.dataframe(display_due[['Party', 'Total_Billed', 'Received', 'Pending']].style.format({
             "Total_Billed": "₹{:,.0f}", "Received": "₹{:,.0f}", "Pending": "₹{:,.0f}"
         }).set_properties(**{'color': '#00d4ff', 'font-weight': 'bold'}), use_container_width=True)
@@ -780,31 +772,20 @@ elif menu == "4. Financials":
                 acc = st.selectbox("Account*", ["Select"] + all_accs, key="s1")
             with f2: 
                 p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)", "Opening Balance"], key="s2")
-                p_dr = st.number_input("Debit (Dene hain/Advance)", min_value=0.0)
-                p_cr = st.number_input("Credit (Mile hain/Income)", min_value=0.0)
+                p_a = st.number_input("Amount*", min_value=0.0, key="n1")
             with f3: 
                 p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque", "None"], key="s3")
                 p_r = st.text_input("Ref/Remarks", value="FY 2026-27 Opening", key="t1_ref")
             
             if st.form_submit_button("Save Transaction"):
-                # Check karein ki account select kiya hai aur koi ek amount dala hai
-                if acc != "Select" and (p_dr > 0 or p_cr > 0):
+                if acc != "Select" and p_a > 0:
                     entry_type = "OP_BAL" if p_t == "Opening Balance" else p_t
-                    
-                    # Naye columns ke hisaab se data taiyar karein
-                    # Order: Date, Account_Name, Type, Debit, Credit, Mode, Remarks
-                    payment_data = [str(p_d), acc, entry_type, p_dr, p_cr, p_m, p_r]
-                    
-                    if save("payments", payment_data):
-                        st.cache_data.clear() # Dashboard update karne ke liye cache clear
-                        st.success("Entry Saved Successfully!")
-                        st.rerun()
-                    else:
-                        st.error("Error: Google Sheet me save nahi ho paya!")
+                    # List order: Date, Account_Name, Type, Amount, Mode, Ref_No
+                    if save("payments", [str(p_d), acc, entry_type, p_a, p_m, p_r]): 
+                        st.success("Entry Saved Successfully!"); st.rerun()
                 else:
-                    # Ye wo else hai jahan pehle syntax error aa raha tha
-                    st.error("Kripya Account select karein aur Debit ya Credit me amount bharein!")
-                    
+                    st.error("Select Account & Amount!")
+
     with t2:
         sel_a = st.selectbox("Select Account for Statement", ["Select"] + all_accs, key="s4_final")
         
@@ -847,31 +828,25 @@ elif menu == "4. Financials":
                         'Credit': pd.to_numeric(r.get('HiredCharges', 0), errors='coerce')
                     })
 
-           # --- C. ACTUAL PAYMENTS (Receipts & Payments) ---
+            # --- C. ACTUAL PAYMENTS (Receipts & Payments) ---
             if not df_p.empty:
-                # Sirf wo entries lein jo Opening Balance nahi hain
                 p_entries = df_p[(df_p['Account_Name'] == sel_a) & (df_p['Type'] != 'OP_BAL')]
-                
                 for _, r in p_entries.iterrows():
-                    dr_val = pd.to_numeric(r.get('Debit', 0), errors='coerce')
-                    cr_val = pd.to_numeric(r.get('Credit', 0), errors='coerce')
-                    
-                    ledger_entries.append({
-                        'Date': r.get('Date', date.today()), 
-                        'Particulars': f"{r.get('Type','Entry')} ({r.get('Mode','Cash')})", 
-                        'Debit': dr_val, 
-                        'Credit': cr_val
-                    })
-                    
-                else:
-                        # Payment: Party badhta hai -> Debit | Broker kam hota hai -> Credit
+                    amt = pd.to_numeric(r.get('Amount', 0), errors='coerce')
+                    p_type = str(r.get('Type','')).lower()
+                    if "receipt" in p_type or "in" in p_type:
+                        ledger_entries.append({
+                            'Date': r.get('Date', date.today()), 
+                            'Particulars': f"Payment Recd ({r.get('Mode','Cash')})", 
+                            'Debit': 0, 'Credit': amt
+                        })
+                    else:
                         ledger_entries.append({
                             'Date': r.get('Date', date.today()), 
                             'Particulars': f"Payment Paid ({r.get('Mode','Cash')})", 
-                            'Debit': 0 if is_broker else amt, 
-                            'Credit': amt if is_broker else 0
+                            'Debit': amt, 'Credit': 0
                         })
-                        
+
             # --- D. FINAL DISPLAY (Ab NameError nahi aayega) ---
             if ledger_entries:
                 full_df = pd.DataFrame(ledger_entries)
@@ -1055,26 +1030,36 @@ elif menu == "5. Business Insights":
 elif menu == "6. Expense Manager":
     st.header("🏢 Office & Personal Expense Manager")
     
-    # 1. DATA LOADING
+    # 1. PEHLE DATA LOAD KAREIN (Taki dropdown khali na rahe)
     df_oe = load("office_expenses")
-    df_m_data = load("masters") 
-
-    # --- DROP DOWN LISTS (From Masters) ---
-    if not df_m_data.empty:
-        # Bank list loading (Type 'Bank' or 'BANK')
-        b_list = sorted(df_m_data[df_m_data['Type'].str.contains('Bank', case=False, na=False)]['Name'].unique().tolist())
-        # Vehicle list loading (Type 'Vehicle' or 'VEHICLE')
-        v_list = sorted(df_m_data[df_m_data['Type'].str.contains('Vehicle', case=False, na=False)]['Name'].unique().tolist())
+    
+    # --- VEHICLE LIST LOAD KARNA ---
+    # Agar aapki vehicle list 'vehicles' naam ki sheet se aati hai:
+    df_v_list = load("vehicles") 
+    if not df_v_list.empty:
+        # Maan lijiye column ka naam 'Vehicle No' hai, use apne hisab se badal lein
+        v_options = df_v_list.iloc[:, 0].tolist() 
     else:
-        b_list = ["Cash"]
-        v_list = []
+        v_options = ["No Vehicles Found"]
+
+    # --- BANK LIST LOAD KARNA ---
+    # Agar aapki bank list 'banks' naam ki sheet se aati hai:
+    df_b_list = load("banks") 
+    if not df_b_list.empty:
+        # Maan lijiye bank ka naam pehle column mein hai
+        b_options = df_b_list.iloc[:, 0].tolist()
+    else:
+        # Agar sheet nahi mili to purane static options fallback ke liye
+        b_options = ["Cash", "HDFC", "SBI", "ICICI", "Online"]
+
+    if not df_oe.empty: 
+        df_oe.columns = [str(c).strip() for c in df_oe.columns]
 
     tab_add, tab_view, tab_indrajit, tab_vishal = st.tabs([
         "➕ Add Expense", "📊 Office Expenses", "👤 Indrajit Khata", "👤 Vishal Khata"
     ])
     
     with tab_add:
-        # Form shuru
         with st.form("office_exp_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
@@ -1086,52 +1071,35 @@ elif menu == "6. Expense Manager":
                     "Indrajit Personal", "Vishal Personal", "Others"
                 ])
                 
-                # LOGIC REMOVED: Ab dropdown hamesha enabled rahega
-                sel_v_no = st.selectbox("Select Vehicle No (If any)", 
-                                        options=["N/A"] + v_list if v_list else ["N/A"])
+                # VEHICLE SELECTION: Sirf Driver ya Maintenance pe dikhega
+                # Isko hamesha render kar rahe hain par disable rakhenge agar zarurat nahi hai
+                is_vehicle_exp = e_cat in ["Driver Salary", "Vehicle Maintenance", "Maintenance", "maintenance"]
+                v_no = st.selectbox("Select Vehicle (If applicable)", 
+                                    options=["N/A"] + v_options, 
+                                    disabled=not is_vehicle_exp)
 
             with col2:
-                e_amt = st.number_input("Amount (₹)", min_value=0.0, step=1.0)
-                # Actual Banks from Master
-                e_bank = st.selectbox("Paid From (Bank/Cash)", b_list if b_list else ["Cash"])
+                e_amt = st.number_input("Amount (₹)", min_value=0.0)
+                # BANK DROPDOWN: Yahan ab b_options load honge
+                e_mode = st.selectbox("Payment Mode (Bank/Cash)", b_options)
             
             e_desc = st.text_input("Description / Remarks")
             
-            # Form Submit Button (Zaroori hai)
-            submitted = st.form_submit_button("🚀 Save Expense")
-            
-            if submitted:
+            if st.form_submit_button("Save Expense"):
                 if e_amt > 0:
-                    # Row data as per your CSV structure
-                    new_row = [str(e_date), e_cat, e_desc, e_amt, e_bank, sel_v_no]
+                    # Gadi ka number description ke saath save kar rahe hain
+                    final_desc = f"[{v_no}] {e_desc}" if v_no != "N/A" else e_desc
                     
-                    if save("office_expenses", new_row):
-                        st.success(f"Entry Saved Successfully!")
-                        st.rerun()
-                else:
-                    st.error("Please enter a valid Amount!")
+                    if save("office_expenses", [str(e_date), e_cat, final_desc, e_amt, e_mode]):
+                        st.success(f"Entry Saved!"); st.rerun()
 
-    # --- VIEW & LEDGERS ---
+    # --- BAKI VIEW KA CODE SAME RAHEGA ---
     with tab_view:
         st.subheader("General Office Expenses")
         if not df_oe.empty:
             office_df = df_oe[~df_oe['Category'].str.contains('Indrajit|Vishal', na=False)]
-            st.dataframe(office_df, use_container_width=True, hide_index=True)
-            st.info(f"Total Office Exp: ₹{pd.to_numeric(office_df['Amount'], errors='coerce').sum():,.2f}")
-
-    with tab_indrajit:
-        st.subheader("👤 Indrajit Personal Ledger")
-        if not df_oe.empty:
-            ind_df = df_oe[df_oe['Category'] == "Indrajit Personal"]
-            st.metric("Total Withdrawal", f"₹{pd.to_numeric(ind_df['Amount'], errors='coerce').sum():,.0f}")
-            st.dataframe(ind_df, use_container_width=True)
-
-    with tab_vishal:
-        st.subheader("👤 Vishal Personal Ledger")
-        if not df_oe.empty:
-            vis_df = df_oe[df_oe['Category'] == "Vishal Personal"]
-            st.metric("Total Withdrawal", f"₹{pd.to_numeric(vis_df['Amount'], errors='coerce').sum():,.0f}")
-            st.dataframe(vis_df, use_container_width=True)
+            st.dataframe(office_df, use_container_width=True)
+            st.info(f"Total Office Expense: ₹{pd.to_numeric(office_df['Amount'], errors='coerce').sum():,.2f}")
 elif menu == "7. Driver Khata":
     st.header("🚛 Driver Khata & Trip Settlement")
     df_dk = load("driver_khata")
