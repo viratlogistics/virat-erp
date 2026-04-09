@@ -276,7 +276,10 @@ def gl(t):
     # Baaki sab (Vehicle, Driver, Bank) ke liye normal logic
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist())
 if menu == "0. Dashboard":
-    st.markdown("<h2 style='text-align: center; color: #00d4ff;'>📊 VIRAT LOGISTICS STRATEGIC DASHBOARD</h2>", unsafe_allow_html=True)
+    # Sabse upar ek Refresh Button de dein
+    if st.button("🔄 Refresh Data"):
+        st.cache_data.clear() # Ye purana data saaf kar dega
+        st.rerun()
 
     # --- 1. FY SELECTION ---
     available_fy = ["2024-25", "2025-26", "2026-27"]
@@ -320,13 +323,31 @@ if menu == "0. Dashboard":
             total_opening_cash = pd.to_numeric(cash_bank_op['Amount'], errors='coerce').fillna(0).sum()
             party_op = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
             op_party_receivable = pd.to_numeric(party_op['Amount'], errors='coerce').fillna(0).sum()
+    # Dashboard calculations ke andar:
+    total_broker_payable = 0
+    if not df_tf.empty:
+        # Market Hired trips se total hired charges
+        hired_trips = df_tf[df_tf['Type'].str.contains('Market|Hired', case=False, na=False)]
+        total_hired_amt = hired_trips['HiredCharges'].sum()
+        
+        # Brokers ko kitna pay kar diya
+        broker_paid = df_pf[df_pf['Account_Name'].isin(gl("Broker"))]['Amount'].sum()
+        
+        # Broker ka Opening Balance (Liability side)
+        op_broker = op_entries[op_entries['Account_Name'].isin(gl("Broker"))]['Amount'].sum()
+        
+        total_broker_payable = (op_broker + total_hired_amt) - broker_paid
 
-    # B. CURRENT YEAR FLOW
+       # B. CURRENT YEAR FLOW (REPLACED LOGIC)
     cash_in = 0; cash_out = 0
     if not df_pf.empty:
-        df_pf['Amount'] = pd.to_numeric(df_pf['Amount'], errors='coerce').fillna(0)
-        cash_in = df_pf[(df_pf['Type'].str.contains('Receipt|In', case=False, na=False)) & (df_pf['Type'] != 'OP_BAL')]['Amount'].sum()
-        cash_out = df_pf[(df_pf['Type'].str.contains('Payment|Out', case=False, na=False)) & (df_pf['Type'] != 'OP_BAL')]['Amount'].sum()
+        # Amount column ki jagah ab hum Debit/Credit use karenge
+        df_pf['Debit'] = pd.to_numeric(df_pf['Debit'], errors='coerce').fillna(0)
+        df_pf['Credit'] = pd.to_numeric(df_pf['Credit'], errors='coerce').fillna(0)
+        
+        # Dashboard ke liye: Credit matlab bank/cash mein paisa aaya, Debit matlab gaya
+        cash_in = df_pf[df_pf['Type'] != 'OP_BAL']['Credit'].sum()
+        cash_out = df_pf[df_pf['Type'] != 'OP_BAL']['Debit'].sum()
 
     # C. TRIP PERFORMANCE
     own_profit = 0; hired_profit = 0; total_rev = 0; trip_outflow = 0
@@ -353,10 +374,11 @@ if menu == "0. Dashboard":
 
     # --- 4. DISPLAY UI ---
     st.write("### 💰 Financial Status (Cash & Dues)")
-    m1, m2, m3 = st.columns(3)
+    m1, m2, m3, m4 = st.columns(4)
     m1.metric("Cash In Hand", f"₹{cash_hand_balance:,.0f}", delta=f"Including OE Impact")
     m2.metric("Total Receivables", f"₹{receivables:,.0f}", help="Paisa jo market se lena baki hai")
     m3.metric("Yearly Revenue", f"₹{total_rev:,.0f}", delta="Total Billed")
+    m4.metric("Total Payables", f"₹{total_broker_payable:,.0f}", help="Brokers ko dena baki hai", delta_color="inverse")
 
     st.divider()
     st.write("### 🚛 Business Performance")
@@ -758,20 +780,31 @@ elif menu == "4. Financials":
                 acc = st.selectbox("Account*", ["Select"] + all_accs, key="s1")
             with f2: 
                 p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)", "Opening Balance"], key="s2")
-                p_a = st.number_input("Amount*", min_value=0.0, key="n1")
+                p_dr = st.number_input("Debit (Dene hain/Advance)", min_value=0.0)
+                p_cr = st.number_input("Credit (Mile hain/Income)", min_value=0.0)
             with f3: 
                 p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque", "None"], key="s3")
                 p_r = st.text_input("Ref/Remarks", value="FY 2026-27 Opening", key="t1_ref")
             
             if st.form_submit_button("Save Transaction"):
-                if acc != "Select" and p_a > 0:
+                # Check karein ki account select kiya hai aur koi ek amount dala hai
+                if acc != "Select" and (p_dr > 0 or p_cr > 0):
                     entry_type = "OP_BAL" if p_t == "Opening Balance" else p_t
-                    # List order: Date, Account_Name, Type, Amount, Mode, Ref_No
-                    if save("payments", [str(p_d), acc, entry_type, p_a, p_m, p_r]): 
-                        st.success("Entry Saved Successfully!"); st.rerun()
+                    
+                    # Naye columns ke hisaab se data taiyar karein
+                    # Order: Date, Account_Name, Type, Debit, Credit, Mode, Remarks
+                    payment_data = [str(p_d), acc, entry_type, p_dr, p_cr, p_m, p_r]
+                    
+                    if save("payments", payment_data):
+                        st.cache_data.clear() # Dashboard update karne ke liye cache clear
+                        st.success("Entry Saved Successfully!")
+                        st.rerun()
+                    else:
+                        st.error("Error: Google Sheet me save nahi ho paya!")
                 else:
-                    st.error("Select Account & Amount!")
-
+                    # Ye wo else hai jahan pehle syntax error aa raha tha
+                    st.error("Kripya Account select karein aur Debit ya Credit me amount bharein!")
+                    
     with t2:
         sel_a = st.selectbox("Select Account for Statement", ["Select"] + all_accs, key="s4_final")
         
@@ -814,25 +847,31 @@ elif menu == "4. Financials":
                         'Credit': pd.to_numeric(r.get('HiredCharges', 0), errors='coerce')
                     })
 
-            # --- C. ACTUAL PAYMENTS (Receipts & Payments) ---
+           # --- C. ACTUAL PAYMENTS (Receipts & Payments) ---
             if not df_p.empty:
+                # Sirf wo entries lein jo Opening Balance nahi hain
                 p_entries = df_p[(df_p['Account_Name'] == sel_a) & (df_p['Type'] != 'OP_BAL')]
+                
                 for _, r in p_entries.iterrows():
-                    amt = pd.to_numeric(r.get('Amount', 0), errors='coerce')
-                    p_type = str(r.get('Type','')).lower()
-                    if "receipt" in p_type or "in" in p_type:
-                        ledger_entries.append({
-                            'Date': r.get('Date', date.today()), 
-                            'Particulars': f"Payment Recd ({r.get('Mode','Cash')})", 
-                            'Debit': 0, 'Credit': amt
-                        })
-                    else:
+                    dr_val = pd.to_numeric(r.get('Debit', 0), errors='coerce')
+                    cr_val = pd.to_numeric(r.get('Credit', 0), errors='coerce')
+                    
+                    ledger_entries.append({
+                        'Date': r.get('Date', date.today()), 
+                        'Particulars': f"{r.get('Type','Entry')} ({r.get('Mode','Cash')})", 
+                        'Debit': dr_val, 
+                        'Credit': cr_val
+                    })
+                    
+                else:
+                        # Payment: Party badhta hai -> Debit | Broker kam hota hai -> Credit
                         ledger_entries.append({
                             'Date': r.get('Date', date.today()), 
                             'Particulars': f"Payment Paid ({r.get('Mode','Cash')})", 
-                            'Debit': amt, 'Credit': 0
+                            'Debit': 0 if is_broker else amt, 
+                            'Credit': amt if is_broker else 0
                         })
-
+                        
             # --- D. FINAL DISPLAY (Ab NameError nahi aayega) ---
             if ledger_entries:
                 full_df = pd.DataFrame(ledger_entries)
@@ -1227,3 +1266,4 @@ elif menu == "8. Monthly Bill":
     if st.session_state.get('inv_ready'):
         pdf_data = generate_invoice_pdf(st.session_state.inv_ready)
         st.download_button("📥 DOWNLOAD INVOICE PDF", pdf_data, f"Invoice_{st.session_state.inv_ready['InvNo']}.pdf")
+
