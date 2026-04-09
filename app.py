@@ -22,11 +22,16 @@ def get_sh():
 
 sh = get_sh()
 
+# --- Naya wala code yahan paste karein ---
 def load(name):
     try:
         ws = sh.worksheet(name)
         df = pd.DataFrame(ws.get_all_records())
         df.columns = [str(c).strip() for c in df.columns]
+        # Debit/Credit ko number mein badalne ke liye logic
+        if 'Debit' in df.columns: df['Debit'] = pd.to_numeric(df['Debit'], errors='coerce').fillna(0)
+        if 'Credit' in df.columns: df['Credit'] = pd.to_numeric(df['Credit'], errors='coerce').fillna(0)
+        if 'Amount' in df.columns: df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
         return df
     except:
         return pd.DataFrame()
