@@ -694,24 +694,29 @@ elif menu == "4. Financials":
     t1, t2 = st.tabs(["💸 Add Transaction", "📖 Full Statement"])
     
     with t1:
-        with st.form("p_form_new", clear_on_submit=True):
-            f1, f2, f3 = st.columns(3)
-            with f1: 
-                p_d = st.date_input("Date", date(2026, 4, 1), key="d1")
-                acc = st.selectbox("Account*", ["Select"] + all_accs, key="s1")
-            with f2: 
-                p_t = st.selectbox("Type*", ["Receipt (In)", "Payment (Out)", "Opening Balance"], key="s2")
-                p_a = st.number_input("Amount*", min_value=0.0, key="n1")
-            with f3: 
-                p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque", "None"], key="s3")
-                p_r = st.text_input("Ref/Remarks", value="FY 2026-27 Opening", key="t1_ref")
+    with st.form("p_form_new", clear_on_submit=True):
+        f1, f2, f3 = st.columns(3)
+        with f1: 
+            p_d = st.date_input("Date", date.today())
+            acc = st.selectbox("Account*", ["Select"] + all_accs)
+        with f2: 
+            p_amt = st.number_input("Amount*", min_value=0.0)
+            # User se puche ki yeh Debit hai ya Credit
+            entry_direction = st.selectbox("Entry Type*", ["Debit (Lena Hai / Kharcha)", "Credit (Dena Hai / Receipt)"])
+        with f3: 
+            p_m = st.selectbox("Mode", ["NEFT", "Cash", "UPI", "Cheque"])
+            p_r = st.text_input("Ref/Remarks")
             
-            if st.form_submit_button("Save Transaction"):
-                if acc != "Select" and p_a > 0:
-                    entry_type = "OP_BAL" if p_t == "Opening Balance" else p_t
-                    # List order: Date, Account_Name, Type, Amount, Mode, Ref_No
-                    if save("payments", [str(p_d), acc, entry_type, p_a, p_m, p_r]): 
-                        st.success("Entry Saved Successfully!"); st.rerun()
+        if st.form_submit_button("Save Transaction"):
+            if acc != "Select" and p_amt > 0:
+                # Logic: Type ke hisab se Dr ya Cr column mein value jayegi
+                dr = p_amt if "Debit" in entry_direction else 0
+                cr = p_amt if "Credit" in entry_direction else 0
+                
+                # Google Sheet Columns: Date, Account_Name, Type, Debit, Credit, Mode, Remarks
+                new_row = [str(p_d), acc, "Transaction", dr, cr, p_m, p_r]
+                if save("payments", new_row):
+                    st.success("Entry Saved!"); st.rerun()
                 else:
                     st.error("Select Account & Amount!")
 
