@@ -278,53 +278,40 @@ def gl(t):
 if menu == "0. Dashboard":
     st.markdown("<h2 style='text-align: center; color: #00d4ff;'>📊 VIRAT LOGISTICS STRATEGIC DASHBOARD</h2>", unsafe_allow_html=True)
 
-    # --- 1. FY SELECTION ---
-    available_fy = ["2024-25", "2025-26", "2026-27"]
-    selected_fy = st.selectbox("📅 Select Financial Year", available_fy, index=2)
-
-    # --- 2. DATA LOADING & FILTERING ---
-    df_p = load("payments") # Original data for Opening Balances
+    # Data Load karein
+    df_p = load("payments")
+    df_t = load("trips")
     df_oe = load("office_expenses")
-    
-    def get_fy(date_str):
-        try:
-            dt = pd.to_datetime(date_str)
-            return f"{dt.year}-{str(dt.year+1)[2:]}" if dt.month >= 4 else f"{dt.year-1}-{str(dt.year)[2:]}"
-        except: return "Unknown"
 
-    # Filtered Dataframes for Current FY
-    df_tf = df_t.copy()
-    if not df_tf.empty:
-        df_tf['FY'] = df_tf['Date'].apply(get_fy)
-        df_tf = df_tf[df_tf['FY'] == selected_fy]
+    # Sabhi DataFrames ki columns ko clean karein taaki KeyError na aaye
+    for d_frame in [df_p, df_t, df_oe]:
+        if not d_frame.empty:
+            d_frame.columns = [str(c).strip() for c in d_frame.columns]
 
-    df_pf = df_p.copy()
-    if not df_pf.empty:
-        df_pf['FY'] = df_pf['Date'].apply(get_fy)
-        df_pf = df_pf[df_pf['FY'] == selected_fy]
-
-    df_oef = df_oe.copy()
-    if not df_oef.empty:
-        df_oef['FY'] = df_oef['Date'].apply(get_fy)
-        df_oef = df_oef[df_oef['FY'] == selected_fy]
-
-    # --- 3. CALCULATIONS (Fixed for Multiple Banks) ---
-
-    # A. OPENING BALANCES (From All OP_BAL entries)
-    total_opening_cash = 0
-    op_party_receivable = 0
-    
+    # Check karein ki df_p khali toh nahi hai
     if not df_p.empty:
+        # Check karein 'Amount' column exist karta hai ya nahi
+        # Agar column ka naam "Amount (₹)" hai toh use "Amount" mein rename kar dega
+        df_p = df_p.rename(columns={c: 'Amount' for c in df_p.columns if 'amount' in c.lower()})
+        
         op_entries = df_p[df_p['Type'] == 'OP_BAL']
         if not op_entries.empty:
-            # 1. Banks ka Total (Jinke naam mein Bank/Cash hai)
+            # Banks ka Total
             cash_bank_op = op_entries[op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
             total_opening_cash = pd.to_numeric(cash_bank_op['Amount'], errors='coerce').fillna(0).sum()
             
-            # 2. Parties ka Total (Jo Bank nahi hain)
+            # Parties ka Total
             party_op = op_entries[~op_entries['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
             op_party_receivable = pd.to_numeric(party_op['Amount'], errors='coerce').fillna(0).sum()
-
+        else:
+            total_opening_cash = 0
+            op_party_receivable = 0
+    else:
+        total_opening_cash = 0
+        op_party_receivable = 0
+        
+    # ... Baki ka dashboard logic ...
+    
     # B. CURRENT YEAR CASH FLOW
     cash_in = 0; cash_out = 0
     if not df_pf.empty:
