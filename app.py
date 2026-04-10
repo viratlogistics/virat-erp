@@ -1,4 +1,4 @@
-    import streamlit as st
+import streamlit as st
 from streamlit_option_menu import option_menu  # <--- Ye naya add karein
 import pandas as pd # Agar pehle se hai toh rehne dein
 import plotly.express as px
