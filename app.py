@@ -352,23 +352,64 @@ if menu == "0. Dashboard":
         fig_pie = px.pie(values=f_vals, names=f_labels, hole=0.4, color_discrete_sequence=px.colors.qualitative.Bold)
         st.plotly_chart(fig_pie, use_container_width=True)
 
-    with col_b:
-        st.subheader("🚛 Vehicle Net Performance")
-        all_v = gl("Vehicle")
-        v_data = []
-        for v in all_v:
-            v_inc = df_t[df_t['Vehicle'] == v]['Freight'].sum() if not df_t.empty else 0
-            v_exp_t = df_t[df_t['Vehicle'] == v][['Diesel', 'Toll', 'DriverExp']].sum().sum() if not df_t.empty else 0
-            v_exp_o = df_oe[df_oe['Description'].str.contains(v, na=False)]['Amount'].sum() if not df_oe.empty else 0
-            # Result is negative if expenses > income
-            v_data.append({"Vehicle": v, "Performance": v_inc - (v_exp_t + v_exp_o)})
-        
-        v_df = pd.DataFrame(v_data).sort_values(by="Performance", ascending=False)
-        if not v_df.empty:
-            v_df['Color'] = ['#00d4ff' if x >= 0 else '#ff4b4b' for x in v_df['Performance']]
-            fig_bar = px.bar(v_df, x='Vehicle', y='Performance', color='Color', color_discrete_map="identity")
-            fig_bar.update_layout(showlegend=False, yaxis_title="Profit (+) / Loss (-)")
-            st.plotly_chart(fig_bar, use_container_width=True)
+        # --- VEHICLE PERFORMANCE LOGIC ---
+    st.subheader("🚛 Vehicle Performance (Income - All Expenses)")
+
+    # 1. Masters se saari vehicles ki list lein
+    all_vehicles = gl("Vehicle") 
+    v_perf_list = []
+
+    for v in all_vehicles:
+        # A. Income (Trips sheet se Freight)
+        v_income = df_t[df_t['Vehicle'] == v]['Freight'].sum() if not df_t.empty else 0
+    
+        # B. Trip Expenses (Diesel, Toll, Driver Adv)
+        v_trip_exp = df_t[df_t['Vehicle'] == v][['Diesel', 'Toll', 'DriverExp']].sum().sum() if not df_t.empty else 0
+    
+        # C. Office Expenses (Description mein vehicle no. dhoond kar)
+        v_office_exp = 0
+        if not df_oe.empty:
+            # Description column mein gadi ka number match karein
+            v_office_exp = df_oe[df_oe['Description'].str.contains(v, na=False, case=False)]['Amount'].sum()
+    
+        # D. Net Calculation (Income minus dono tarah ke kharche)
+        # Agar Income 0 hai aur Exp 500 hai, toh result -500 aayega
+        net_val = v_income - (v_trip_exp + v_office_exp)
+    
+        v_perf_list.append({
+            "Vehicle": v, 
+            "Net_Performance": net_val,
+            "Status": "Profit" if net_val >= 0 else "Loss"
+        })
+
+    # DataFrame banayein aur Sort karein
+    v_df = pd.DataFrame(v_perf_list).sort_values(by="Net_Performance", ascending=False)
+    
+    if not v_df.empty:
+        # Bar Chart with Negative axis support
+        fig_v = px.bar(
+            v_df, 
+            x='Vehicle', 
+            y='Net_Performance', 
+            color='Status',
+            color_discrete_map={'Profit': '#00d4ff', 'Loss': '#ff4b4b'}, # Profit: Blue, Loss: Red
+            title="Vehicle-wise Profit/Loss Analysis"
+        )
+    
+        # Chart formatting taaki negative values saaf dikhein
+        fig_v.update_layout(
+            showlegend=False, 
+            yaxis_title="Net Profit (+) / Loss (-)",
+            xaxis_title="Vehicle Number"
+        )
+    
+        st.plotly_chart(fig_v, use_container_width=True)
+    
+        # Top Performer ka highlight
+        if v_df.iloc[0]['Net_Performance'] > 0:
+            st.success(f"🏆 Top Performer: {v_df.iloc[0]['Vehicle']} (Net: ₹{v_df.iloc[0]['Net_Performance']:,.0f})")
+    else:
+        st.info("No vehicle data found in Masters.")
 
     # --- 7. MULTI-BANK LIVE STATUS ---
     st.write("### 🏦 Multi-Bank Status")
