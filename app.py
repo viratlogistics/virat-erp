@@ -1,4 +1,4 @@
-import streamlit as st
+    import streamlit as st
 from streamlit_option_menu import option_menu  # <--- Ye naya add karein
 import pandas as pd # Agar pehle se hai toh rehne dein
 import plotly.express as px
@@ -287,112 +287,138 @@ if menu == "0. Dashboard":
     df_p = load("payments")
     df_t = load("trips")
     df_oe = load("office_expenses")
+    df_m = load("masters")
 
-    # Column cleaning (Spaces hatane ke liye)
+    # Column cleaning (Standardize)
     for dff in [df_p, df_t, df_oe]:
         if not dff.empty:
             dff.columns = [str(c).strip() for c in dff.columns]
 
-    # --- 2. DEBIT/CREDIT ACCOUNTING LOGIC ---
-    cash_hand_balance = 0
-    receivables = 0
-    total_rev = 0
+    # --- 2. PROFIT CALCULATION (ACCRUAL BASIS) ---
+    # Profit = Revenue - (Trip Costs + Hired Charges + Office Expenses)
+    # Note: Personal Withdrawals (Indrajit/Vishal) are EXCLUDED from profit.
+    total_revenue = 0
+    total_hired_costs = 0
+    total_own_trip_costs = 0
+    office_admin_costs = 0
+
+    if not df_t.empty:
+        total_revenue = df_t['Freight'].sum()
+        total_hired_costs = df_t['HiredCharges'].sum()
+        # Sirf Own fleet ke direct kharche
+        total_own_trip_costs = df_t[df_t['Type'].str.contains('Own', case=False, na=False)][['Diesel', 'Toll', 'DriverExp']].sum().sum()
+
+    if not df_oe.empty:
+        # Personal withdrawals ko filter out kar rahe hain Profit calculation ke liye
+        office_df = df_oe[~df_oe['Category'].str.contains('Indrajit|Vishal|Personal', case=False, na=False)]
+        office_admin_costs = pd.to_numeric(office_df['Amount'], errors='coerce').sum()
+
+    accrual_profit = total_revenue - (total_hired_costs + total_own_trip_costs + office_admin_costs)
+
+    # --- 3. CASH FLOW CALCULATION (ACTUAL BASIS) ---
+    # Inflow = Total Receipts in Bank/Cash
+    # Outflow = Trip Cash Exp + Office Exp (All) + Partner Withdrawals + Manual Payments
+    net_cash_inflow = 0
+    net_cash_outflow = 0
 
     if not df_p.empty:
-        # Cash & Bank Balance: Total Debit - Total Credit
-        cash_bank_mask = df_p['Account_Name'].str.contains('BANK|CASH', case=False, na=False)
-        cash_df = df_p[cash_bank_mask]
-        cash_hand_balance = cash_df['Debit'].sum() - cash_df['Credit'].sum()
-        
-        # Party Receivables (Accounting Mode): Total Debit - Total Credit
-        # Isme Freight (Dr) aur Payments (Cr) dono cover ho jayenge
-        party_df = df_p[~cash_bank_mask]
-        receivables = party_df['Debit'].sum() - party_df['Credit'].sum()
+        # Bank/Cash accounts ke Debit entries (Inflow)
+        bank_cash_df = df_p[df_p['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
+        net_cash_inflow = bank_cash_df['Debit'].sum()
+        # Manual Payments (Cr side)
+        fin_payments_out = bank_cash_df['Credit'].sum()
+    else:
+        fin_payments_out = 0
 
-    if not df_t.empty:
-        # Business performance ke liye Freight ka total
-        for c in ['Freight', 'Diesel', 'Toll', 'DriverExp', 'HiredCharges']:
-            if c in df_t.columns: df_t[c] = pd.to_numeric(df_t[c], errors='coerce').fillna(0)
-        total_rev = df_t['Freight'].sum()
+    # Trip Cash Outflow (Ignore HiredCharges as per request - Broker payment is handled in Financials)
+    trip_cash_out = total_own_trip_costs
+    
+    # Office + Personal Outflow (Cash flow mein personal withdrawal minus hota hai)
+    office_personal_out = pd.to_numeric(df_oe['Amount'], errors='coerce').sum() if not df_oe.empty else 0
 
-    # --- 3. DISPLAY UI (METRICS) ---
-    st.write("### 💰 Financial Status (Accounting Mode)")
+    net_cash_outflow = fin_payments_out + trip_cash_out + office_personal_out
+    cash_in_hand = net_cash_inflow - net_cash_outflow
+
+    # --- 4. TOP METRICS DISPLAY ---
+    st.write("### 💰 Financial Health (Live)")
     m1, m2, m3 = st.columns(3)
-    # Accounting balance dikhayenge
-    m1.metric("Cash In Hand", f"₹{cash_hand_balance:,.0f}", help="Bank + Cash accounts ka net balance")
-    m2.metric("Total Receivables", f"₹{receivables:,.0f}", help="Parties se lena baki total paisa")
-    m3.metric("Yearly Revenue", f"₹{total_rev:,.0f}", delta="Total Billed")
+    m1.metric("Cash In Hand", f"₹{cash_in_hand:,.0f}", help="Actual Bank + Cash Balance")
+    m2.metric("Total Inflow", f"₹{net_inflow if 'net_inflow' in locals() else net_cash_inflow:,.0f}", delta="Actual Receipts")
+    m3.metric("Total Outflow", f"₹{net_cash_outflow:,.0f}", delta_color="inverse", help="Trips + Office + Partners + Payments")
 
     st.divider()
-
-    # --- 4. CHARTS & PERFORMANCE (Aapka purana logic) ---
-    st.write("### 🚛 Business Performance")
-    # Calculation for Profit (Own vs Hired)
-    own_profit = 0
-    hired_profit = 0
-    if not df_t.empty:
-        df_own = df_t[df_t['Type'].str.contains('Own', case=False, na=False)]
-        own_profit = df_own['Freight'].sum() - (df_own['Diesel'].sum() + df_own['Toll'].sum() + df_own['DriverExp'].sum())
-        df_hired = df_t[df_t['Type'].str.contains('Market|Hired', case=False, na=False)]
-        hired_profit = df_hired['Freight'].sum() - df_hired['HiredCharges'].sum()
-
-    office_exp = df_oe['Amount'].sum() if not df_oe.empty else 0
-    total_net_profit = (own_profit + hired_profit) - office_exp
-
+    
+    st.write("### 📈 Accrual Performance (Profit & Loss)")
     p1, p2, p3, p4 = st.columns(4)
-    p1.metric("Net Profit", f"₹{total_net_profit:,.0f}")
-    p2.metric("Own Fleet", f"₹{own_profit:,.0f}")
-    p3.metric("Market Hired", f"₹{hired_profit:,.0f}")
-    p4.metric("Office Exp", f"₹{office_exp:,.0f}", delta_color="inverse")
+    p1.metric("Net Profit (Yearly)", f"₹{accrual_profit:,.0f}", help="Revenue - All Expenses (Accrual)")
+    p2.metric("Total Billed", f"₹{total_revenue:,.0f}")
+    p3.metric("Total Hired Cost", f"₹{total_hired_costs:,.0f}", help="Market Vehicle Liabilities")
+    p4.metric("Office/Admin Exp", f"₹{office_admin_costs:,.0f}")
 
-    # --- 5. BANK ACCOUNTS BREAKDOWN (Dr - Cr Logic) ---
-    st.write("### 🏦 My Bank Accounts Balance")
+    # --- 5. MULTIPLE BANK BALANCES ---
+    st.divider()
+    st.write("### 🏦 Multiple Bank Accounts Balance")
     my_banks = gl("Bank")
     if my_banks:
         b_cols = st.columns(len(my_banks))
         for i, b_name in enumerate(my_banks):
-            b_data = df_p[df_p['Account_Name'] == b_name]
-            # Bank balance = Total Dr - Total Cr
-            b_bal = b_data['Debit'].sum() - b_data['Credit'].sum()
+            # Bal = (Dr - Cr) from payments sheet
+            bank_ledger = df_p[df_p['Account_Name'] == b_name]
+            current_bal = bank_ledger['Debit'].sum() - bank_ledger['Credit'].sum()
             with b_cols[i]:
-                st.metric(b_name, f"₹{b_bal:,.0f}")
+                st.metric(b_name, f"₹{current_bal:,.0f}")
 
-    # --- 6. CHARTS ---
+    # --- 6. CHARTS SECTION ---
     st.divider()
     col_a, col_b = st.columns(2)
+
     with col_a:
-        st.subheader("💰 Cash Flow Breakdown")
-        if not df_p.empty:
-            cf_data = pd.DataFrame({
-                'Category': ['Inflow (Dr)', 'Outflow (Cr)'], 
-                'Amount': [df_p['Debit'].sum(), df_p['Credit'].sum()]
-            })
-            fig_pie = px.pie(cf_data, values='Amount', names='Category', hole=0.4, 
-                             color_discrete_sequence=['#00d4ff', '#ff4b4b'])
-            st.plotly_chart(fig_pie, use_container_width=True)
+        st.subheader("🔄 Fund Flow Analysis")
+        # Accrual basis rcvbl (Freight) vs payable (Hired Charges)
+        fund_data = pd.DataFrame({
+            'Category': ['Receivables (Freight)', 'Payables (Hired Charges)', 'Admin Expenses'],
+            'Amount': [total_revenue, total_hired_costs, office_admin_costs]
+        })
+        fig_fund = px.pie(fund_data, values='Amount', names='Category', hole=0.4, 
+                         color_discrete_sequence=px.colors.qualitative.Bold)
+        st.plotly_chart(fig_fund, use_container_width=True)
 
     with col_b:
-        st.subheader("🚛 Own Vehicle Income")
-        if not df_t.empty:
-            v_perf = df_t[df_t['Type'].str.contains('Own', na=False)].groupby('Vehicle')['Freight'].sum().reset_index()
-            if not v_perf.empty:
-                fig_bar = px.bar(v_perf, x='Vehicle', y='Freight', color_discrete_sequence=['#00d4ff'])
-                st.plotly_chart(fig_bar, use_container_width=True)
+        st.subheader("🚛 Vehicle Performance (Zero-Trip Included)")
+        all_vehicles = gl("Vehicle")
+        v_perf_list = []
+        for v in all_vehicles:
+            v_rev = df_t[df_t['Vehicle'] == v]['Freight'].sum() if not df_t.empty else 0
+            v_exp_trip = df_t[df_t['Vehicle'] == v][['Diesel', 'Toll', 'DriverExp']].sum().sum() if not df_t.empty else 0
+            # Office expense mein se vehicle specific maintenance dhoondhna
+            v_exp_off = 0
+            if not df_oe.empty:
+                v_exp_off = df_oe[df_oe['Description'].str.contains(v, na=False)]['Amount'].sum()
+            
+            v_perf_list.append({"Vehicle": v, "Income": v_rev, "Cost": v_exp_trip + v_exp_off})
+        
+        v_df = pd.DataFrame(v_perf_list).sort_values(by='Income', ascending=False)
+        
+        # Chart with Top Performer Highlight
+        fig_v = px.bar(v_df, x='Vehicle', y=['Income', 'Cost'], barmode='group',
+                      color_discrete_map={'Income': '#00d4ff', 'Cost': '#ff4b4b'},
+                      title="Vehicle Income vs Total Maintenance Cost")
+        st.plotly_chart(fig_v, use_container_width=True)
+        
+        # Highlight Top Performer
+        if not v_df.empty and v_df.iloc[0]['Income'] > 0:
+            top_v = v_df.iloc[0]['Vehicle']
+            st.success(f"🏆 Top Performer: {top_v} (₹{v_df.iloc[0]['Income']:,.0f})")
 
     # --- 7. RECEIVABLES TABLE ---
     st.divider()
     st.subheader("⏳ Party-wise Pending Balance")
     if not df_p.empty:
-        # Sirf Parties filter karein (Bank/Cash ko chhod kar)
         party_bal = df_p[~df_p['Account_Name'].str.contains('BANK|CASH', case=False, na=False)]
         p_table = party_bal.groupby('Account_Name').agg({'Debit': 'sum', 'Credit': 'sum'}).reset_index()
         p_table['Pending'] = p_table['Debit'] - p_table['Credit']
-        
-        # Display only those with pending > 1
-        display_due = p_table[p_table['Pending'] > 1].sort_values('Pending', ascending=False)
-        st.dataframe(display_due.style.format({"Debit": "₹{:,.0f}", "Credit": "₹{:,.0f}", "Pending": "₹{:,.0f}"})
-                     .set_properties(**{'color': '#00d4ff', 'font-weight': 'bold'}), use_container_width=True)
-        
+        display_due = p_table[p_table['Pending'] != 0].sort_values('Pending', ascending=False)
+        st.dataframe(display_due.style.format({"Debit": "₹{:,.0f}", "Credit": "₹{:,.0f}", "Pending": "₹{:,.0f}"}), use_container_width=True)        
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
