@@ -299,36 +299,25 @@ if menu == "0. Dashboard":
     for dff in [df_p, df_t, df_oe, df_m]:
         if not dff.empty: dff.columns = [str(c).strip() for c in dff.columns]
 
-    # --- 2. UPDATED CASH & BANK CALCULATION ---
-    bank_names = gl("Bank")
-    op_bal = 0
-    manual_in = 0
-    manual_out = 0
-    
+   # --- Bank Balance Calculation (Trips + Payments Sync) ---
+my_banks = gl("Bank")
+bank_status = {}
+
+for b in my_banks:
+    # A. Payments Sheet balance
+    p_bal = 0
     if not df_p.empty:
-        bank_df = df_p[df_p['Account_Name'].isin(bank_names)]
-        op_bal = bank_df[bank_df['Type'] == 'OP_BAL']['Debit'].sum() - bank_df[bank_df['Type'] == 'OP_BAL']['Credit'].sum()
-        manual_in = bank_df[bank_df['Type'] != 'OP_BAL']['Debit'].sum()
-        # Sirf wo manual payments jo Trips/Office ke nahi hain (taki double count na ho)
-        manual_out = bank_df[(bank_df['Type'] != 'OP_BAL') & 
-                             (~bank_df['Remarks'].str.contains('LR:|Office|Trip', case=False, na=False))]['Credit'].sum()
-
-    # TRIPS SHEET SE KHARCHA (Diesel + Toll + Driver Advance)
-    trip_exp_total = 0
-    if not df_t.empty:
-        df_own = df_t[df_t['Type'].str.contains('Own', na=False)]
-        trip_exp_total = pd.to_numeric(df_own['Diesel'], errors='coerce').sum() + \
-                         pd.to_numeric(df_own['Toll'], errors='coerce').sum() + \
-                         pd.to_numeric(df_own['DriverExp'], errors='coerce').sum()
-
-    # OFFICE EXPENSES SHEET SE KHARCHA
-    office_exp_total = pd.to_numeric(df_oe['Amount'], errors='coerce').sum() if not df_oe.empty else 0
-
-    # TOTAL EXPENSE (Combined from 3 sheets)
-    combined_total_exp = manual_out + trip_exp_total + office_exp_total
+        p_bal = df_p[df_p['Account_Name'] == b]['Debit'].sum() - df_p[df_p['Account_Name'] == b]['Credit'].sum()
     
-    # FINAL BANK BALANCE IMPACT
-    net_cash_balance = (op_bal + manual_in) - combined_total_exp
+    # B. Trips Sheet balance (Diesel + Toll fatch karna)
+    t_exp = 0
+    if not df_t.empty:
+        # 'Bank' ya 'Paid_Via' column check karein
+        b_col = 'Bank' if 'Bank' in df_t.columns else 'Paid_Via'
+        if b_col in df_t.columns:
+            t_exp = df_t[df_t[b_col] == b][['Diesel', 'Toll', 'DriverExp']].sum().sum()
+    
+    bank_status[b] = p_bal - t_exp    
     
     # --- 3. FUND FLOW CALCULATION (Receivables & Payables) ---
     parties = gl("Party")
@@ -390,17 +379,25 @@ if menu == "0. Dashboard":
 
     st.divider()
 
-    # --- 6. VEHICLE PERFORMANCE ---
-    st.subheader("🚛 Vehicle Performance Report")
-    if not df_t.empty:
-        df_perf = df_t[df_t['Type'].str.contains('Own', na=False)].copy()
-        if not df_perf.empty:
-            for c in ['Freight', 'Diesel', 'Toll', 'DriverExp']:
-                df_perf[c] = pd.to_numeric(df_perf[c], errors='coerce').fillna(0)
-            df_perf['Net_Profit'] = df_perf['Freight'] - (df_perf['Diesel'] + df_perf['Toll'] + df_perf['DriverExp'])
-            v_sum = df_perf.groupby('Vehicle')['Net_Profit'].sum().reset_index().sort_values(by='Net_Profit', ascending=False)
-            fig_v = px.bar(v_sum, x='Vehicle', y='Net_Profit', color='Net_Profit', color_continuous_scale='RdYlGn')
-            st.plotly_chart(fig_v, use_container_width=True)
+   # --- Vehicle Performance with Negative Bars ---
+all_v = gl("Vehicle")
+v_data = []
+for v in all_v:
+    inc = df_t[df_t['Vehicle'] == v]['Freight'].sum() if not df_t.empty else 0
+    # Trips exp
+    exp_t = df_t[df_t['Vehicle'] == v][['Diesel', 'Toll', 'DriverExp']].sum().sum() if not df_t.empty else 0
+    # Office maintenance exp (Match vehicle no in description)
+    exp_o = df_oe[df_oe['Description'].str.contains(v, na=False, case=False)]['Amount'].sum() if not df_oe.empty else 0
+    
+    net = inc - (exp_t + exp_o)
+    v_data.append({"Vehicle": v, "Net": net})
+
+v_df = pd.DataFrame(v_data).sort_values(by="Net", ascending=False)
+if not v_df.empty:
+    v_df['Status'] = ['Profit' if x >= 0 else 'Loss' for x in v_df['Net']]
+    fig_v = px.bar(v_df, x='Vehicle', y='Net', color='Status', 
+                  color_discrete_map={'Profit': '#00d4ff', 'Loss': '#ff4b4b'}) # Blue for +, Red for -
+    st.plotly_chart(fig_v, use_container_width=True)
 
     st.divider()
 
