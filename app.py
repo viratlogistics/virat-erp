@@ -289,29 +289,27 @@ if menu == "0. Dashboard":
     df_oe = load("office_expenses")
     df_m = load("masters")
 
-    # Column Standardizing
     for dff in [df_p, df_t, df_oe]:
         if not dff.empty: 
             dff.columns = [str(c).strip() for c in dff.columns]
 
-    # --- 2. CASH POSITION (Actual Bank Balances - Handles OD/Minus) ---
+    # --- 2. CASH POSITION (Accounting Logic - Handles Minus/OD) ---
     cash_in_hand = 0
     if not df_p.empty:
-        # Bank/Cash filter logic
         bank_mask = df_p['Account_Name'].str.contains('BANK|CASH', case=False, na=False)
         bank_df = df_p[bank_mask]
-        # Net Balance: Har bank ka (Debit - Credit) ka total. Minus balance apne aap subtract hoga.
+        # Net Balance: Debit minus Credit (Agar Credit zyada hai toh automatically Minus dikhayega)
         cash_in_hand = bank_df['Debit'].sum() - bank_df['Credit'].sum()
 
-    # --- 3. ACCRUAL FUND FLOW (Receivables & Payables Logic) ---
-    # RECEIVABLES: Party Op (Dr) + New Freight - Receipts (Cr)
+    # --- 3. ACCRUAL FUND FLOW (Receivables & Payables) ---
+    # RECEIVABLES = Party Opening (Dr) + New Freight - Receipts (Cr)
     parties = gl("Party")
     p_op_dr = df_p[(df_p['Account_Name'].isin(parties)) & (df_p['Type'] == 'OP_BAL')]['Debit'].sum() if not df_p.empty else 0
     new_freight = df_t['Freight'].sum() if not df_t.empty else 0
     p_receipts_cr = df_p[(df_p['Account_Name'].isin(parties)) & (df_p['Type'] != 'OP_BAL')]['Credit'].sum() if not df_p.empty else 0
     total_rcvbl = (p_op_dr + new_freight) - p_receipts_cr
 
-    # PAYABLES: Broker Op (Cr) + Hired Charges - Payments (Dr)
+    # PAYABLES = Broker Opening (Cr) + Hired Charges - Payments (Dr)
     brokers = gl("Broker")
     b_op_cr = df_p[(df_p['Account_Name'].isin(brokers)) & (df_p['Type'] == 'OP_BAL')]['Credit'].sum() if not df_p.empty else 0
     new_hired = df_t['HiredCharges'].sum() if not df_t.empty else 0
@@ -319,106 +317,84 @@ if menu == "0. Dashboard":
     total_paybl = (b_op_cr + new_hired) - b_pay_dr
 
     # --- 4. TOP METRICS ---
-    st.write("### 💰 Strategic Liquidity")
+    st.write("### 💰 Financial Liquidity")
     m1, m2, m3 = st.columns(3)
-    m1.metric("Cash In Hand (Net)", f"₹{cash_in_hand:,.0f}", help="Sum of all Banks (Debit - Credit)")
+    m1.metric("Cash In Hand (Net)", f"₹{cash_in_hand:,.0f}", help="Handles Overdraft/Minus balances")
     m2.metric("Total Receivables", f"₹{total_rcvbl:,.0f}", help="Op Dr + Freight - Receipts Cr")
-    m3.metric("Total Payables", f"₹{total_paybl:,.0f}", help="Op Cr + Hired - Payments Dr")
+    m3.metric("Total Payables", f"₹{total_paybl:,.0f}", help="Op Cr + Hired Charges - Payments Dr")
 
     st.divider()
 
-    # --- 5. PROFIT CALCULATION (Full Detail Table) ---
-    st.write("### 📝 Business Profitability (Accrual Calculation)")
+    # --- 5. DETAILED PROFIT CALCULATION TABLE ---
+    st.write("### 📝 Business Profitability (Detailed P&L)")
     own_trip_cost = df_t[df_t['Type'].str.contains('Own', na=False)][['Diesel', 'Toll', 'DriverExp']].sum().sum() if not df_t.empty else 0
     admin_cost = df_oe[~df_oe['Category'].str.contains('Indrajit|Vishal|Personal', na=False)]['Amount'].sum() if not df_oe.empty else 0
     net_profit = new_freight - (new_hired + own_trip_cost + admin_cost)
 
-    pl_math = {
-        "Particulars": ["(+) Gross Freight Revenue", "(-) Market Hired Charges", "(-) Own Fleet Trip Costs", "(-) Admin & Maintenance", "**NET BUSINESS PROFIT**"],
-        "Source": ["Trips (Accrual)", "Trips (Accrual)", "Diesel/Toll/Adv", "Office Exp", "Final Result"],
+    pl_table = pd.DataFrame({
+        "Accounting Particulars": ["(+) Gross Freight Revenue", "(-) Market Hired Charges", "(-) Own Fleet Costs", "(-) Admin & Maintenance", "**NET BUSINESS PROFIT**"],
         "Amount (₹)": [f"₹{new_freight:,.0f}", f"₹{new_hired:,.0f}", f"₹{own_trip_cost:,.0f}", f"₹{admin_cost:,.0f}", f"**₹{net_profit:,.0f}**"]
-    }
-    st.table(pd.DataFrame(pl_math))
+    })
+    st.table(pl_table)
 
-    # --- 6. STRATEGIC CHARTS ---
+    # --- 6. VEHICLE PERFORMANCE (Negative Bar for Expenses) ---
     st.divider()
-    col_a, col_b = st.columns(2)
+    st.subheader("🚛 Vehicle Performance Report")
+    
+    all_v = gl("Vehicle") # Masters se saari gadiyan uthayega
+    v_report = []
+    
+    for v in all_v:
+        # 1. Income
+        inc = df_t[df_t['Vehicle'] == v]['Freight'].sum() if not df_t.empty else 0
+        # 2. Trip Expenses
+        exp_t = df_t[df_t['Vehicle'] == v][['Diesel', 'Toll', 'DriverExp']].sum().sum() if not df_t.empty else 0
+        # 3. Office Expenses (Description match)
+        exp_o = 0
+        if not df_oe.empty:
+            exp_o = df_oe[df_oe['Description'].str.contains(v, na=False, case=False)]['Amount'].sum()
+        
+        # Calculation: Income - (Trip Exp + Office Exp)
+        # Agar Income 0 hai aur Exp hai, toh automatically negative result aayega
+        net_perf = inc - (exp_t + exp_o)
+        v_report.append({"Vehicle": v, "Performance": net_perf})
 
+    v_df = pd.DataFrame(v_report).sort_values(by="Performance", ascending=False)
+    
+    if not v_df.empty:
+        # Profit ke liye Blue, Loss ke liye Red
+        v_df['Status'] = ['Profit' if x >= 0 else 'Loss' for x in v_df['Performance']]
+        fig_v = px.bar(v_df, x='Vehicle', y='Performance', color='Status',
+                       color_discrete_map={'Profit': '#00d4ff', 'Loss': '#ff4b4b'})
+        
+        # Zero line focus for negative visibility
+        fig_v.update_layout(showlegend=False, yaxis_title="Profit (+) / Loss (-)")
+        st.plotly_chart(fig_v, use_container_width=True)
+        
+        # Highlight Top Performer
+        if v_df.iloc[0]['Performance'] > 0:
+            st.success(f"🏆 Best Performer: {v_df.iloc[0]['Vehicle']} (Net: ₹{v_df.iloc[0]['Performance']:,.0f})")
+
+    # --- 7. STRATEGIC FUND FLOW (PIE CHART) ---
+    st.divider()
+    st.subheader("🔄 Strategic Fund Flow Analysis")
+    col_a, col_b = st.columns(2)
+    
     with col_a:
-        st.subheader("🔄 Fund Flow Analysis")
         # Strategically showing Inflow sources vs Outflow liabilities
         f_labels = ['Op Party Balance', 'New Freight Revenue', 'Op Broker Balance', 'Hired Liabilities', 'Admin/Trip Costs']
         f_vals = [p_op_dr, new_freight, b_op_cr, new_hired, (own_trip_cost + admin_cost)]
-        fig_pie = px.pie(values=f_vals, names=f_labels, hole=0.4, color_discrete_sequence=px.colors.qualitative.Bold)
+        fig_pie = px.pie(values=f_vals, names=f_labels, hole=0.4, color_discrete_sequence=px.colors.qualitative.Safe)
         st.plotly_chart(fig_pie, use_container_width=True)
 
-        # --- VEHICLE PERFORMANCE LOGIC ---
-    st.subheader("🚛 Vehicle Performance (Income - All Expenses)")
-
-    # 1. Masters se saari vehicles ki list lein
-    all_vehicles = gl("Vehicle") 
-    v_perf_list = []
-
-    for v in all_vehicles:
-        # A. Income (Trips sheet se Freight)
-        v_income = df_t[df_t['Vehicle'] == v]['Freight'].sum() if not df_t.empty else 0
-    
-        # B. Trip Expenses (Diesel, Toll, Driver Adv)
-        v_trip_exp = df_t[df_t['Vehicle'] == v][['Diesel', 'Toll', 'DriverExp']].sum().sum() if not df_t.empty else 0
-    
-        # C. Office Expenses (Description mein vehicle no. dhoond kar)
-        v_office_exp = 0
-        if not df_oe.empty:
-            # Description column mein gadi ka number match karein
-            v_office_exp = df_oe[df_oe['Description'].str.contains(v, na=False, case=False)]['Amount'].sum()
-    
-        # D. Net Calculation (Income minus dono tarah ke kharche)
-        # Agar Income 0 hai aur Exp 500 hai, toh result -500 aayega
-        net_val = v_income - (v_trip_exp + v_office_exp)
-    
-        v_perf_list.append({
-            "Vehicle": v, 
-            "Net_Performance": net_val,
-            "Status": "Profit" if net_val >= 0 else "Loss"
-        })
-
-    # DataFrame banayein aur Sort karein
-    v_df = pd.DataFrame(v_perf_list).sort_values(by="Net_Performance", ascending=False)
-    
-    if not v_df.empty:
-        # Bar Chart with Negative axis support
-        fig_v = px.bar(
-            v_df, 
-            x='Vehicle', 
-            y='Net_Performance', 
-            color='Status',
-            color_discrete_map={'Profit': '#00d4ff', 'Loss': '#ff4b4b'}, # Profit: Blue, Loss: Red
-            title="Vehicle-wise Profit/Loss Analysis"
-        )
-    
-        # Chart formatting taaki negative values saaf dikhein
-        fig_v.update_layout(
-            showlegend=False, 
-            yaxis_title="Net Profit (+) / Loss (-)",
-            xaxis_title="Vehicle Number"
-        )
-    
-        st.plotly_chart(fig_v, use_container_width=True)
-    
-        # Top Performer ka highlight
-        if v_df.iloc[0]['Net_Performance'] > 0:
-            st.success(f"🏆 Top Performer: {v_df.iloc[0]['Vehicle']} (Net: ₹{v_df.iloc[0]['Net_Performance']:,.0f})")
-    else:
-        st.info("No vehicle data found in Masters.")
-
-    # --- 7. MULTI-BANK LIVE STATUS ---
-    st.write("### 🏦 Multi-Bank Status")
-    banks = gl("Bank")
-    if banks:
-        b_cols = st.columns(len(banks))
-        for i, b in enumerate(banks):
-            bal = df_p[df_p['Account_Name'] == b]['Debit'].sum() - df_p[df_p['Account_Name'] == b]['Credit'].sum()
-            b_cols[i].metric(b, f"₹{bal:,.0f}")        
+    with col_b:
+        # Individual Bank Balances (Handing Overdraft)
+        st.write("#### 🏦 Live Multi-Bank Status")
+        my_banks = gl("Bank")
+        if my_banks:
+            for b in my_banks:
+                b_bal = df_p[df_p['Account_Name'] == b]['Debit'].sum() - df_p[df_p['Account_Name'] == b]['Credit'].sum()
+                st.write(f"**{b}:** ₹{b_bal:,.0f}")        
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
