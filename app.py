@@ -306,20 +306,25 @@ if menu == "0. Dashboard":
     curr_receipts = 0
     curr_payments = 0
 
-    if not df_p.empty:
-        bank_mask = df_p['Account_Name'].str.contains('BANK|CASH', case=False, na=False)
-        bank_df = df_p[bank_mask]
-        
-        # Opening Bank Balance
-        op_cash_total = bank_df[bank_df['Type'] == 'OP_BAL']['Debit'].sum() - bank_df[bank_df['Type'] == 'OP_BAL']['Credit'].sum()
-        # Current Receipts (Paisa Aaya)
-        curr_receipts = bank_df[bank_df['Type'] != 'OP_BAL']['Debit'].sum()
-        # Current Payments (Paisa Gaya - Manual + Office)
-        curr_payments = bank_df[bank_df['Type'] != 'OP_BAL']['Credit'].sum()
-        
-        # Net Cash In Hand
-        cash_in_hand = op_cash_total + curr_receipts - curr_payments
-
+    # --- Dashboard tab ke andar 'CASH POSITION' section mein ye badlav karein ---
+if not df_p.empty:
+    bank_mask = df_p['Account_Name'].str.contains('BANK|CASH', case=False, na=False)
+    bank_df = df_p[bank_mask]
+    
+    # Opening Balance
+    op_cash_total = bank_df[bank_df['Type'] == 'OP_BAL']['Debit'].sum() - bank_df[bank_df['Type'] == 'OP_BAL']['Credit'].sum()
+    
+    # Current Receipts (Debit entries in Bank/Cash)
+    # Yahan 'Manual Entry' aur 'Bank Adjustment' dono ko include karna hoga
+    curr_receipts = bank_df[bank_df['Debit'] > 0]['Debit'].sum() 
+    
+    # Current Payments (Credit entries in Bank/Cash)
+    # Trip Expenses aur Manual Payments dono yahan se deduct honge
+    curr_payments = bank_df[bank_df['Credit'] > 0]['Credit'].sum()
+    
+    # Net Cash In Hand
+    cash_in_hand = op_cash_total + curr_receipts - curr_payments
+    
     # --- 3. STRATEGIC FUND FLOW (Total Receivables & Payables) ---
     parties = gl("Party")
     brokers = gl("Broker")
@@ -811,17 +816,26 @@ elif menu == "4. Financials":
                         'Debit': 0, 'Credit': pd.to_numeric(r.get('HiredCharges', 0), errors='coerce'), 'Bank': 'N/A'
                     })
 
-            # 3. Payments Data (Receipts and Payments)
+            # --- 3. Payments Data (Receipts and Payments) ---
             if not df_p.empty:
                 p_entries = df_p[(df_p['Account_Name'] == sel_a) & (df_p['Type'] != 'OP_BAL')]
                 for _, r in p_entries.iterrows():
+                    # Dr aur Cr value ko numbers mein convert karein
+                    dr_val = pd.to_numeric(r.get('Debit', 0), errors='coerce')
+                    cr_val = pd.to_numeric(r.get('Credit', 0), errors='coerce')
+        
+                    # Logic: Agar Debit column mein entry hai toh wo humne "Pay" kiya hai, 
+                    # Agar Credit mein hai toh humein "Receive" hua hai.
+                    entry_type = "Payment (Out) 💸" if dr_val > 0 else "Receipt (In) 💰"
+                    if dr_val > 0 and cr_val > 0: entry_type = "Adjustment 🔄" # Dono ho toh adjustment
+
                     ledger_entries.append({
-                        'Date': r.get('Date', date.today()), 
-                        'Particulars': f"Payment ({r.get('Mode','Cash')}) - {r.get('Remarks','')}", 
-                        'Debit': pd.to_numeric(r.get('Debit', 0), errors='coerce'), 
-                        'Credit': pd.to_numeric(r.get('Credit', 0), errors='coerce'),
-                        'Bank': r.get('Bank_Used', 'N/A')
-                    })
+                    'Date': r.get('Date', date.today()), 
+                    'Particulars': f"{entry_type} | {r.get('Mode','Cash')} - {r.get('Remarks','')}", 
+                    'Debit': dr_val, 
+                    'Credit': cr_val,
+                    'Bank': r.get('Bank_Used', 'N/A')
+                 })
 
             if ledger_entries:
                 full_df = pd.DataFrame(ledger_entries)
