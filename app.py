@@ -243,6 +243,21 @@ st.markdown("""
         }
     </style>
     """, unsafe_allow_html=True)
+# --- GLOBAL DATA LOADING (Ise sidebar se pehle rakhein) ---
+df_p = load("payments")
+df_t = load("trips")
+df_oe = load("office_expenses")
+df_m = load("masters")
+
+# Column Cleaning (Sabhi sheets ke liye ek saath)
+for dff in [df_p, df_t, df_oe, df_m]:
+    if not dff.empty: 
+        dff.columns = [str(c).strip() for c in dff.columns]
+
+# --- AB SIDEBAR SHURU HOGA ---
+with st.sidebar:
+    st.title("VIRAT LOGISTICS")
+    # ... baki ka menu code
 
 # --- UPDATED SIDEBAR MENU (Professional & Clean) ---
 with st.sidebar:
