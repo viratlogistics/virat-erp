@@ -852,32 +852,31 @@ elif menu == "4. Financials":
 elif menu == "5. Business Insights":
     st.markdown("<h2 style='text-align: center; color: #00d4ff;'>📈 BUSINESS INSIGHTS & ANALYTICS</h2>", unsafe_allow_html=True)
 
-    # --- 1. DATA LOADING (Yahan fix hai - saare data ko pehle load karna zaroori hai) ---
+    # --- 1. DATA LOADING (Yahan fix hai - Data load hona zaroori hai) ---
     df_p = load("payments")
     df_t = load("trips")
     df_oe = load("office_expenses")
     df_m = load("masters")
 
-    # Column Standardizing
+    # Column Standardizing (Spaces hatane ke liye)
     for dff in [df_p, df_t, df_oe]:
         if not dff.empty: 
             dff.columns = [str(c).strip() for c in dff.columns]
 
-    # Check if data exists before proceeding
     if df_t.empty:
         st.warning("Trips sheet khali hai. Analytics ke liye data zaroori hai.")
     else:
-        # --- 2. VEHICLE PERFORMANCE SUMMARY ---
-        st.subheader("🚛 Detailed Fleet Profitability")
+        # --- 2. VEHICLE PROFITABILITY REPORT (Accuracy Fixed) ---
+        st.subheader("🚛 Detailed Fleet Performance")
         all_v = gl("Vehicle")
         v_analytics = []
 
         for v in all_v:
-            # Income
+            # Income (LR se)
             v_inc = df_t[df_t['Vehicle'] == v]['Freight'].sum()
-            # Direct Trip Expenses (Own Vehicles Only)
+            # Trip Exp (Diesel/Toll jo Own Fleet mein hai)
             v_trip_exp = df_t[df_t['Vehicle'] == v][['Diesel', 'Toll', 'DriverExp']].sum().sum()
-            # Office Maintenance (Description Match)
+            # Office Maintenance (Description mein gadi number match karke)
             v_maint = 0
             if not df_oe.empty:
                 v_maint = df_oe[df_oe['Description'].str.contains(v, na=False, case=False)]['Amount'].sum()
@@ -886,56 +885,55 @@ elif menu == "5. Business Insights":
             v_analytics.append({
                 "Vehicle": v,
                 "Income": v_inc,
-                "Expenses": v_trip_exp + v_maint,
+                "Direct Costs": v_trip_exp + v_maint,
                 "Net Profit/Loss": net_v
             })
 
         v_df = pd.DataFrame(v_analytics).sort_values(by="Net Profit/Loss", ascending=False)
-        st.dataframe(v_df.style.format({"Income": "₹{:,.0f}", "Expenses": "₹{:,.0f}", "Net Profit/Loss": "₹{:,.0f}"}), use_container_width=True)
+        st.dataframe(v_df.style.format({"Income": "₹{:,.0f}", "Direct Costs": "₹{:,.0f}", "Net Profit/Loss": "₹{:,.0f}"}), use_container_width=True)
 
-        # --- 3. PARTY-WISE BUSINESS SHARE ---
+        # --- 3. PARTY REVENUE & RECEIVABLES ---
         st.divider()
         col1, col2 = st.columns(2)
         
         with col1:
             st.subheader("🏢 Party Revenue Share")
             party_rev = df_t.groupby('Party')['Freight'].sum().reset_index()
-            fig_p = px.pie(party_rev, values='Freight', names='Party', hole=0.4)
+            fig_p = px.pie(party_rev, values='Freight', names='Party', hole=0.4, color_discrete_sequence=px.colors.qualitative.Bold)
             st.plotly_chart(fig_p, use_container_width=True)
 
         with col2:
-            # --- 4. TOP OUTSTANDING (RECEIVABLES) ---
-            st.subheader("⏳ Top Party Receivables")
+            st.subheader("⏳ Party Outstanding (Receivables)")
             if not df_p.empty:
                 parties_list = gl("Party")
                 outstanding = []
                 for p in parties_list:
-                    # Logic: Opening Dr + Freight - Receipts Cr
+                    # Logic: Op Dr + Freight - Receipts Cr
                     p_op = df_p[(df_p['Account_Name'] == p) & (df_p['Type'] == 'OP_BAL')]['Debit'].sum()
                     p_freight = df_t[df_t['Party'] == p]['Freight'].sum()
                     p_receipts = df_p[(df_p['Account_Name'] == p) & (df_p['Type'] != 'OP_BAL')]['Credit'].sum()
                     bal = (p_op + p_freight) - p_receipts
-                    if bal > 0:
+                    if bal > 1: # ₹1 se zyada balance hai toh dikhao
                         outstanding.append({"Party": p, "Balance": bal})
                 
                 if outstanding:
-                    out_df = pd.DataFrame(outstanding).sort_values(by="Balance", ascending=False).head(5)
+                    out_df = pd.DataFrame(outstanding).sort_values(by="Balance", ascending=False)
                     fig_out = px.bar(out_df, x='Party', y='Balance', color_discrete_sequence=['#ff9f43'])
                     st.plotly_chart(fig_out, use_container_width=True)
                 else:
-                    st.write("Sab clear hai!")
+                    st.write("Koi pending payment nahi hai.")
 
-        # --- 5. MONTHLY SALES TREND ---
+        # --- 4. MONTHLY GROWTH TREND ---
         st.divider()
-        st.subheader("📅 Monthly Sales Growth")
+        st.subheader("📅 Monthly Business Trend")
         try:
             df_t['Date'] = pd.to_datetime(df_t['Date'], errors='coerce')
             df_t['Month'] = df_t['Date'].dt.strftime('%Y-%m')
             monthly = df_t.groupby('Month')['Freight'].sum().reset_index()
-            fig_line = px.line(monthly, x='Month', y='Freight', markers=True, line_shape='spline')
+            fig_line = px.line(monthly, x='Month', y='Freight', markers=True, title="Revenue Growth")
             st.plotly_chart(fig_line, use_container_width=True)
         except:
-            st.info("Date format issue in Trips sheet.")
+            st.info("Trips sheet mein Date format check karein.")
 elif menu == "6. Expense Manager":
     st.header("🏢 Office & Personal Expense Manager")
     
