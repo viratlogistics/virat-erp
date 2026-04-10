@@ -384,30 +384,51 @@ if menu == "0. Dashboard":
         fig_v.update_layout(showlegend=False, yaxis_title="Profit (+) / Loss (-)")
         st.plotly_chart(fig_v, use_container_width=True)
 
-    # --- 7. INDIVIDUAL BANK STATUS (Sync with ICICI etc.) ---
-    st.divider()
-    st.write("### 🏦 Multi-Bank Live Status")
-    my_banks = gl("Bank")
-    if my_banks:
-        b_cols = st.columns(len(my_banks))
-        for i, b in enumerate(my_banks):
-            # Bank = Payments (Dr-Cr) - Trip (Diesel/Toll if via this bank)
+    # --- 7. INDIVIDUAL BANK STATUS (Triple Source Sync) ---
+st.divider()
+st.write("### 🏦 Multi-Bank Live Status (Payments + Trips + Office)")
+my_banks = gl("Bank")
+
+if my_banks:
+    b_cols = st.columns(len(my_banks))
+    for i, b in enumerate(my_banks):
+        # SOURCE 1: Payments Sheet (Manual/Financial Entries)
+        p_bal = 0
+        if not df_p.empty:
             p_bal = df_p[df_p['Account_Name'] == b]['Debit'].sum() - df_p[df_p['Account_Name'] == b]['Credit'].sum()
-            
-            t_bank_exp = 0
-            # Column check for trips sheet
+        
+        # SOURCE 2: Trips Sheet (Own Vehicle Diesel/Toll/Adv)
+        t_bank_exp = 0
+        if not df_t.empty:
             b_col = 'Bank' if 'Bank' in df_t.columns else 'Paid_Via'
             if b_col in df_t.columns:
+                # Sirf us bank se hue trip kharche fatch karega
                 t_bank_exp = df_t[df_t[b_col] == b][['Diesel', 'Toll', 'DriverExp']].sum().sum()
-            
-            final_bal = p_bal - t_bank_exp
-            with b_cols[i]:
-                st.markdown(f"""
-                    <div style='text-align: center; border: 1px solid #444; border-radius: 8px; padding: 10px;'>
-                        <p style='margin:0; color: gray;'>{b}</p>
-                        <h3 style='margin:0; color: {"#00d4ff" if final_bal >= 0 else "#ff4b4b"};'>₹{final_bal:,.0f}</h3>
-                    </div>
-                """, unsafe_allow_html=True)       
+        
+        # SOURCE 3: Office Expenses (Jahan bank se payment dikhayi ho)
+        # Note: Agar aapne Office Exp mein 'Payment_Mode' column rakha hai bank name ke saath
+        o_bank_exp = 0
+        if not df_oe.empty:
+            # Check karein agar 'Mode' ya 'Bank' column office_expenses mein hai
+            oe_b_col = 'Mode' if 'Mode' in df_oe.columns else 'Bank'
+            if oe_b_col in df_oe.columns:
+                o_bank_exp = df_oe[df_oe[oe_b_col] == b]['Amount'].sum()
+
+        # FINAL CALCULATION: Payments Bal - Trip Exp - Office Exp
+        final_bal = (p_bal - t_bank_exp - o_bank_exp)
+        
+        with b_cols[i]:
+            st.markdown(f"""
+                <div style='text-align: center; border: 1px solid #444; border-radius: 8px; padding: 12px; background-color: #1a1a1a;'>
+                    <p style='margin:0; color: #888; font-size: 0.9em;'>{b}</p>
+                    <h2 style='margin:0; color: {"#00d4ff" if final_bal >= 0 else "#ff4b4b"};'>₹{final_bal:,.0f}</h2>
+                    <p style='margin:0; font-size: 0.7em; color: #555;'>Sync: P + T + OE</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+# --- TOTAL NET CASH CALCULATION (FOR METRICS) ---
+# Upar wala logic hi use karke Total Cash In Hand bhi metrics mein update ho jayega
+
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
