@@ -918,10 +918,10 @@ elif menu == "5. Business Insights":
         if not df_p.empty:
             st.divider()
             st.subheader("⏳ Top Outstanding Payments (Parties)")
-            parties = gl("Party")
+            parties_list = gl("Party")
             # Logic: Opening Dr + Freight - Receipts Cr
             outstanding = []
-            for p in parties:
+            for p in parties_list:
                 p_op = df_p[(df_p['Account_Name'] == p) & (df_p['Type'] == 'OP_BAL')]['Debit'].sum()
                 p_freight = df_t[df_t['Party'] == p]['Freight'].sum()
                 p_receipts = df_p[(df_p['Account_Name'] == p) & (df_p['Type'] != 'OP_BAL')]['Credit'].sum()
