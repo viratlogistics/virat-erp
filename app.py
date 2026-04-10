@@ -281,114 +281,133 @@ def gl(t):
     # Baaki sab (Vehicle, Driver, Bank) ke liye normal logic
     return sorted(df_m[df_m['Type'] == t]['Name'].unique().tolist())
 if menu == "0. Dashboard":
-    st.markdown("<h1 style='text-align: center; color: #00d4ff;'>🚀 VIRAT LOGISTICS CONTROL TOWER</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #00d4ff;'>🚀 VIRAT LOGISTICS STRATEGIC DASHBOARD</h1>", unsafe_allow_html=True)
 
-    # --- 1. DATA LOADING ---
+    # --- 1. DATA LOADING & CLEANING ---
     df_p = load("payments")
     df_t = load("trips")
     df_oe = load("office_expenses")
     df_m = load("masters")
 
-    # Column Standardizing (Spaces hatane ke liye)
+    # Column cleaning
     for dff in [df_p, df_t, df_oe]:
         if not dff.empty: 
             dff.columns = [str(c).strip() for c in dff.columns]
 
-    # --- 2. MULTI-SOURCE EXPENSE & INCOME CALCULATION ---
+    # --- 2. ADVANCED ACCOUNTING CALCULATIONS ---
     
-    # A. Income (Accrual basis from Trips)
-    total_freight_rev = df_t['Freight'].sum() if not df_t.empty else 0
-
-    # B. Expenses from THREE SOURCES:
-    # 1. Trips Sheet: Diesel + Toll + Driver Exp (Own Fleet)
-    trip_direct_exp = 0
-    if not df_t.empty:
-        trip_direct_exp = df_t[df_t['Type'].str.contains('Own', na=False)][['Diesel', 'Toll', 'DriverExp']].sum().sum()
+    # A. CASH FLOW (Actual Paisa)
+    op_cash = 0
+    curr_receipts = 0
+    bank_fin_out = 0
     
-    # 2. Trips Sheet: Hired Charges (Market Vehicles)
-    total_hired_cost = df_t['HiredCharges'].sum() if not df_t.empty else 0
-
-    # 3. Office Expenses Sheet: All Admin/Maintenance Costs
-    office_exp_total = pd.to_numeric(df_oe['Amount'], errors='coerce').sum() if not df_oe.empty else 0
-
-    # 4. Payments Sheet: Any direct 'Payment (Out)' entries (Excluding OP_BAL)
-    fin_payments_out = 0
     if not df_p.empty:
-        # Bank/Cash accounts ke Credit side entries jo OP_BAL nahi hain
         bank_mask = df_p['Account_Name'].str.contains('BANK|CASH', case=False, na=False)
-        fin_payments_out = df_p[bank_mask & (df_p['Type'] != 'OP_BAL')]['Credit'].sum()
+        bank_df = df_p[bank_mask]
+        # Opening Cash (Dr - Cr for OP_BAL)
+        op_cash = bank_df[bank_df['Type'] == 'OP_BAL']['Debit'].sum() - bank_df[bank_df['Type'] == 'OP_BAL']['Credit'].sum()
+        # Current Receipts (Dr side excluding OP_BAL)
+        curr_receipts = bank_df[bank_df['Type'] != 'OP_BAL']['Debit'].sum()
+        # Financial Payments (Cr side excluding OP_BAL)
+        bank_fin_out = bank_df[bank_df['Type'] != 'OP_BAL']['Credit'].sum()
 
-    # COMBINED TOTAL EXPENSES (Trip + Office + Financials)
-    combined_total_exp = trip_direct_exp + total_hired_cost + office_exp_total + fin_payments_out
+    # Trip Cash Outflow (ONLY OWN FLEET - Diesel, Toll, DriverExp)
+    # Hired charges are skipped here because they go through Financials
+    trip_cash_out = 0
+    if not df_t.empty:
+        own_mask = df_t['Type'].str.contains('Own', case=False, na=False)
+        trip_cash_out = df_t[own_mask][['Diesel', 'Toll', 'DriverExp']].sum().sum()
+    
+    # Office Expenses Outflow
+    office_outflow = pd.to_numeric(df_oe['Amount'], errors='coerce').sum() if not df_oe.empty else 0
 
-    # --- 3. CASH & BANK POSITION (Handles Overdraft/Minus) ---
-    cash_in_hand = 0
-    if not df_p.empty:
-        # Net Balance = Debit (In) - Credit (Out) across all banks
-        cash_in_hand = df_p[bank_mask]['Debit'].sum() - df_p[bank_mask]['Credit'].sum()
+    # FINAL METRICS
+    combined_total_outflow = bank_fin_out + trip_cash_out + office_outflow
+    net_cash_balance = (op_cash + curr_receipts) - combined_total_outflow
 
-    # --- 4. TOP METRICS DISPLAY ---
+    # --- 3. TOP METRICS UI (Graphics) ---
     st.markdown("---")
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("💰 Net Cash Balance", f"₹{cash_in_hand:,.0f}", help="Live Bank/Cash Balance (Handles OD)")
-    m2.metric("📈 Total Revenue", f"₹{total_freight_rev:,.0f}", help="Total Billed LR Amount")
-    m3.metric("📉 Total Expenses", f"₹{combined_total_exp:,.0f}", help="Trips + Office + Payments")
-    
-    # Business Profit (Excluding Personal Withdrawals)
-    admin_only_cost = df_oe[~df_oe['Category'].str.contains('Indrajit|Vishal|Personal', na=False)]['Amount'].sum() if not df_oe.empty else 0
-    actual_profit = total_freight_rev - (total_hired_cost + trip_direct_exp + admin_only_cost)
-    m4.metric("📊 Net Profit", f"₹{actual_profit:,.0f}", delta=f"Actual")
+    m1.metric("💰 Net Cash Hand", f"₹{net_cash_balance:,.0f}", help="Handles Overdraft/Minus balances")
+    m2.metric("🏠 Opening Fund", f"₹{op_cash:,.0f}")
+    m3.metric("📥 Current Inflow", f"₹{curr_receipts:,.0f}", help="Actual Receipts")
+    m4.metric("📤 Total Outflow", f"₹{combined_total_outflow:,.0f}", delta_color="inverse")
 
     st.divider()
 
-    # --- 5. P&L DETAILED CALCULATION TABLE ---
-    st.write("### 📝 Detailed Profit & Loss Breakdown")
+    # --- 4. ACCRUAL FUND FLOW (Receivables & Payables) ---
+    # Receivables = Party Op (Dr) + New Freight - Receipts (Cr)
+    parties = gl("Party")
+    p_op_dr = df_p[(df_p['Account_Name'].isin(parties)) & (df_p['Type'] == 'OP_BAL')]['Debit'].sum() if not df_p.empty else 0
+    total_freight_rev = df_t['Freight'].sum() if not df_t.empty else 0
+    p_receipts_cr = df_p[(df_p['Account_Name'].isin(parties)) & (df_p['Type'] != 'OP_BAL')]['Credit'].sum() if not df_p.empty else 0
+    net_receivables = (p_op_dr + total_freight_rev) - p_receipts_cr
+
+    # Payables = Broker Op (Cr) + Hired Charges - Payments (Dr)
+    brokers = gl("Broker")
+    b_op_cr = df_p[(df_p['Account_Name'].isin(brokers)) & (df_p['Type'] == 'OP_BAL')]['Credit'].sum() if not df_p.empty else 0
+    total_hired_payable = df_t['HiredCharges'].sum() if not df_t.empty else 0
+    b_pay_dr = df_p[(df_p['Account_Name'].isin(brokers)) & (df_p['Type'] != 'OP_BAL')]['Debit'].sum() if not df_p.empty else 0
+    net_payables = (b_op_cr + total_hired_payable) - b_pay_dr
+
+    # --- 5. P&L FULL CALCULATION TABLE ---
+    st.write("### 📝 Business Profitability Statement")
+    admin_only_cost = df_oe[~df_oe['Category'].str.contains('Indrajit|Vishal|Personal', na=False)]['Amount'].sum() if not df_oe.empty else 0
+    net_accrual_profit = total_freight_rev - (total_hired_payable + trip_cash_out + admin_only_cost)
+
     pl_math = {
-        "Accounting Heads": ["(+) Total Freight Income", "(-) Market Hired Charges", "(-) Own Fleet Trip Costs", "(-) Office & Admin Expenses", "**TOTAL BUSINESS PROFIT**"],
-        "Source": ["Trips Sheet", "Trips Sheet", "Diesel/Toll/Adv", "Office Exp Sheet", "Net Result"],
-        "Amount (₹)": [f"₹{total_freight_rev:,.0f}", f"₹{total_hired_cost:,.0f}", f"₹{trip_direct_exp:,.0f}", f"₹{admin_only_cost:,.0f}", f"**₹{actual_profit:,.0f}**"]
+        "Accounting Particulars": ["(+) Gross Freight Revenue (Billed)", "(-) Hired Charges (Liabilities)", "(-) Own Fleet Direct Expenses", "(-) Office & Admin Expenses", "**NET BUSINESS PROFIT**"],
+        "Details": ["From Trips Sheet", "Market Vehicles", "Diesel/Toll/Adv", "Excl. Withdrawals", "Revenue - All Costs"],
+        "Amount (₹)": [f"₹{total_freight_rev:,.0f}", f"₹{total_hired_payable:,.0f}", f"₹{trip_cash_out:,.0f}", f"₹{admin_only_cost:,.0f}", f"**₹{net_accrual_profit:,.0f}**"]
     }
     st.table(pd.DataFrame(pl_math))
 
-    # --- 6. VEHICLE PERFORMANCE (NEGATIVE LOGIC SUPPORT) ---
-    st.subheader("🚛 Vehicle Performance Report (Income - Expenses)")
+    # --- 6. VEHICLE PERFORMANCE (NEGATIVE BAR SUPPORT) ---
+    st.divider()
+    st.subheader("🚛 Fleet Performance (Losses in Red)")
     all_v = gl("Vehicle")
-    v_report = []
+    v_perf = []
     for v in all_v:
-        # Income - (Trip Exp + Office Maintenance Match)
-        v_inc = df_t[df_t['Vehicle'] == v]['Freight'].sum() if not df_t.empty else 0
-        v_t_exp = df_t[df_t['Vehicle'] == v][['Diesel', 'Toll', 'DriverExp']].sum().sum() if not df_t.empty else 0
-        v_o_exp = df_oe[df_oe['Description'].str.contains(v, na=False, case=False)]['Amount'].sum() if not df_oe.empty else 0
+        # Net = LR Income - (Diesel/Toll/Adv + Office Maintenance)
+        inc = df_t[df_t['Vehicle'] == v]['Freight'].sum() if not df_t.empty else 0
+        exp_trip = df_t[df_t['Vehicle'] == v][['Diesel', 'Toll', 'DriverExp']].sum().sum() if not df_t.empty else 0
+        exp_off = df_oe[df_oe['Description'].str.contains(v, na=False, case=False)]['Amount'].sum() if not df_oe.empty else 0
         
-        net_v = v_inc - (v_t_exp + v_o_exp)
-        v_report.append({"Vehicle": v, "Performance": net_v})
+        net_v = inc - (exp_trip + exp_off)
+        v_perf.append({"Vehicle": v, "Performance": net_v})
 
-    v_df = pd.DataFrame(v_report).sort_values(by="Performance", ascending=False)
+    v_df = pd.DataFrame(v_perf).sort_values(by="Performance", ascending=False)
     if not v_df.empty:
-        v_df['Color'] = ['#00d4ff' if x >= 0 else '#ff4b4b' for x in v_df['Performance']]
-        fig_v = px.bar(v_df, x='Vehicle', y='Performance', color='Color', color_discrete_map="identity")
-        fig_v.update_layout(showlegend=False, yaxis_title="Net Performance (Dr - Cr)")
+        v_df['Status'] = ['Profit' if x >= 0 else 'Loss' for x in v_df['Performance']]
+        fig_v = px.bar(v_df, x='Vehicle', y='Performance', color='Status', 
+                      color_discrete_map={'Profit': '#00d4ff', 'Loss': '#ff4b4b'})
+        fig_v.update_layout(showlegend=False, yaxis_title="Profit (+) / Loss (-)")
         st.plotly_chart(fig_v, use_container_width=True)
 
-    # --- 7. INDIVIDUAL BANK SYNC (ICICI Fix) ---
+    # --- 7. INDIVIDUAL BANK STATUS (Sync with ICICI etc.) ---
     st.divider()
-    st.write("### 🏦 Live Bank Account Status")
+    st.write("### 🏦 Multi-Bank Live Status")
     my_banks = gl("Bank")
     if my_banks:
         b_cols = st.columns(len(my_banks))
         for i, b in enumerate(my_banks):
-            # Bank balance logic: Payments Sheet + Trip Sync
+            # Bank = Payments (Dr-Cr) - Trip (Diesel/Toll if via this bank)
             p_bal = df_p[df_p['Account_Name'] == b]['Debit'].sum() - df_p[df_p['Account_Name'] == b]['Credit'].sum()
             
-            # Trip sheet se Diesel/Toll minus karna (Agar 'Bank' column mein bank name hai)
             t_bank_exp = 0
+            # Column check for trips sheet
             b_col = 'Bank' if 'Bank' in df_t.columns else 'Paid_Via'
             if b_col in df_t.columns:
                 t_bank_exp = df_t[df_t[b_col] == b][['Diesel', 'Toll', 'DriverExp']].sum().sum()
             
             final_bal = p_bal - t_bank_exp
             with b_cols[i]:
-                st.markdown(f"<div style='text-align:center; border:1px solid #444; border-radius:8px; padding:10px;'><b>{b}</b><br><h3 style='color:{'#00d4ff' if final_bal >=0 else '#ff4b4b'}'>₹{final_bal:,.0f}</h3></div>", unsafe_allow_html=True)       
+                st.markdown(f"""
+                    <div style='text-align: center; border: 1px solid #444; border-radius: 8px; padding: 10px;'>
+                        <p style='margin:0; color: gray;'>{b}</p>
+                        <h3 style='margin:0; color: {"#00d4ff" if final_bal >= 0 else "#ff4b4b"};'>₹{final_bal:,.0f}</h3>
+                    </div>
+                """, unsafe_allow_html=True)       
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
