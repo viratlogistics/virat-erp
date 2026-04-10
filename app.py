@@ -299,22 +299,37 @@ if menu == "0. Dashboard":
     for dff in [df_p, df_t, df_oe, df_m]:
         if not dff.empty: dff.columns = [str(c).strip() for c in dff.columns]
 
-    # --- 2. CASH & BANK CALCULATION ---
+    # --- 2. UPDATED CASH & BANK CALCULATION ---
     bank_names = gl("Bank")
+    op_bal = 0
     manual_in = 0
     manual_out = 0
-    op_bal = 0
     
     if not df_p.empty:
         bank_df = df_p[df_p['Account_Name'].isin(bank_names)]
         op_bal = bank_df[bank_df['Type'] == 'OP_BAL']['Debit'].sum() - bank_df[bank_df['Type'] == 'OP_BAL']['Credit'].sum()
         manual_in = bank_df[bank_df['Type'] != 'OP_BAL']['Debit'].sum()
-        manual_out = bank_df[bank_df['Type'] != 'OP_BAL']['Credit'].sum()
+        # Sirf wo manual payments jo Trips/Office ke nahi hain (taki double count na ho)
+        manual_out = bank_df[(bank_df['Type'] != 'OP_BAL') & 
+                             (~bank_df['Remarks'].str.contains('LR:|Office|Trip', case=False, na=False))]['Credit'].sum()
 
-    # Trips aur Office ka kharcha pehle hi 'payments' mein auto-entry ho raha hai, 
-    # isliye use manual_out mein already count kar liya gaya hai (double counting se bachne ke liye).
-    net_cash_balance = (op_bal + manual_in) - manual_out
+    # TRIPS SHEET SE KHARCHA (Diesel + Toll + Driver Advance)
+    trip_exp_total = 0
+    if not df_t.empty:
+        df_own = df_t[df_t['Type'].str.contains('Own', na=False)]
+        trip_exp_total = pd.to_numeric(df_own['Diesel'], errors='coerce').sum() + \
+                         pd.to_numeric(df_own['Toll'], errors='coerce').sum() + \
+                         pd.to_numeric(df_own['DriverExp'], errors='coerce').sum()
 
+    # OFFICE EXPENSES SHEET SE KHARCHA
+    office_exp_total = pd.to_numeric(df_oe['Amount'], errors='coerce').sum() if not df_oe.empty else 0
+
+    # TOTAL EXPENSE (Combined from 3 sheets)
+    combined_total_exp = manual_out + trip_exp_total + office_exp_total
+    
+    # FINAL BANK BALANCE IMPACT
+    net_cash_balance = (op_bal + manual_in) - combined_total_exp
+    
     # --- 3. FUND FLOW CALCULATION (Receivables & Payables) ---
     parties = gl("Party")
     brokers = gl("Broker")
@@ -340,8 +355,10 @@ if menu == "0. Dashboard":
     with m2:
         st.markdown(f"<div class='main-card'><p class='metric-label'>Total Payables (Dena)</p><p class='metric-value' style='color:#ff4b4b;'>₹{net_payables:,.0f}</p></div>", unsafe_allow_html=True)
     with m3:
-        st.markdown(f"<div class='main-card'><p class='metric-label'>Total Expenses Done</p><p class='metric-value'>₹{manual_out:,.0f}</p></div>", unsafe_allow_html=True)
+        # manual_out ki jagah combined_total_exp use karein
+        st.markdown(f"<div class='main-card'><p class='metric-label'>Total Expenses Done (All)</p><p class='metric-value' style='color:#ff9f43;'>₹{combined_total_exp:,.0f}</p></div>", unsafe_allow_html=True)
     with m4:
+        # Available balance ab accurate subtract hoke aayega
         st.markdown(f"<div class='main-card'><p class='metric-label'>Available Cash/Bank</p><p class='metric-value' style='color:#00d4ff;'>₹{net_cash_balance:,.0f}</p></div>", unsafe_allow_html=True)
 
     st.divider()
