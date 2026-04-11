@@ -662,6 +662,7 @@ elif menu == "2. LR Entry":
                     st.rerun()
             else:
                 st.error("Please fill Party Name and Freight!")
+                
                     # 3. PDF ke liye Branch/Company ka sara data bundle karna
                     st.session_state.pdf_ready = {
                         "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
