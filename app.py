@@ -400,51 +400,58 @@ if menu == "0. Dashboard":
         st.plotly_chart(fig_v, use_container_width=True)
 
    # --- 7. FINAL ACCURACY: MULTI-BANK STATUS (TRIP + OFFICE + PAYMENTS) ---
-st.divider()
-st.write("### 🏦 Multi-Bank Live Status (Auto-Sync)")
-my_banks = gl("Bank")
+    st.divider()
+    
+    # --- NEW ADDITION: TOTAL CASH SUMMARY (Bina purana delete kiye) ---
+    total_combined_net = 0
+    
+    st.write("### 🏦 Multi-Bank Live Status (Auto-Sync)")
+    my_banks = gl("Bank")
 
-if my_banks:
-    b_cols = st.columns(len(my_banks))
-    for i, b in enumerate(my_banks):
-        
-        # SOURCE 1: Payments Sheet (Manual Financial Entries)
-        p_bal = 0
-        if not df_p.empty:
-            # Debit (Aaya) - Credit (Gaya)
-            p_bal = df_p[df_p['Account_Name'] == b]['Debit'].sum() - df_p[df_p['Account_Name'] == b]['Credit'].sum()
-        
-        # SOURCE 2: Trips Sheet (Diesel + Toll + Adv)
-        # Yeh tabhi chalega jab Trip sheet mein 'Bank' column mein bank ka naam hoga
-        t_bank_exp = 0
-        if not df_t.empty:
-            # Check column name in your trip sheet
-            b_col = 'Bank' if 'Bank' in df_t.columns else ('Paid_Via' if 'Paid_Via' in df_t.columns else None)
+    if my_banks:
+        b_cols = st.columns(len(my_banks))
+        for i, b in enumerate(my_banks):
             
-            if b_col:
-                # Sirf us bank se hue OWN Fleet ke kharche (Diesel + Toll + DriverExp)
-                t_bank_exp = df_t[df_t[b_col] == b][['Diesel', 'Toll', 'DriverExp']].sum().sum()
-        
-        # SOURCE 3: Office Expenses (Maintenance etc.)
-        o_bank_exp = 0
-        if not df_oe.empty:
-            # Check if you have 'Mode' or 'Bank' column in Office Expenses
-            oe_b_col = 'Mode' if 'Mode' in df_oe.columns else ('Bank' if 'Bank' in df_oe.columns else None)
-            if oe_b_col:
-                o_bank_exp = df_oe[df_oe[oe_b_col] == b]['Amount'].sum()
+            # 1. Payments Sheet (Matching 'Account_Name')
+            p_bal = 0
+            if not df_p.empty:
+                # strip() isliye taaki extra space ka error na aaye
+                mask = df_p['Account_Name'].str.strip() == b.strip()
+                p_bal = df_p[mask]['Debit'].sum() - df_p[mask]['Credit'].sum()
+            
+            # 2. Trips Sheet (Matching 'Bank' Column as per your sheet)
+            t_bank_exp = 0
+            if not df_t.empty and 'Bank' in df_t.columns:
+                t_mask = df_t['Bank'].str.strip() == b.strip()
+                t_bank_exp = df_t[t_mask][['Diesel', 'Toll', 'DriverExp']].sum().sum()
+            
+            # 3. Office Expenses (Matching 'Payment_Mode' as per your sheet)
+            o_bank_exp = 0
+            if not df_oe.empty and 'Payment_Mode' in df_oe.columns:
+                o_mask = df_oe['Payment_Mode'].str.strip() == b.strip()
+                o_bank_exp = df_oe[o_mask]['Amount'].sum()
 
-        # --- FINAL CALCULATION ---
-        # Paisa jo Payments mein hai - Trip ka kharcha - Office ka kharcha
-        final_bal = (p_bal - t_bank_exp - o_bank_exp)
-        
-        with b_cols[i]:
-            st.markdown(f"""
-                <div style='text-align: center; border: 1px solid #444; border-radius: 8px; padding: 12px; background-color: #1a1a1a;'>
-                    <p style='margin:0; color: #888; font-size: 0.9em;'>{b}</p>
-                    <h2 style='margin:0; color: {"#00d4ff" if final_bal >= 0 else "#ff4b4b"};'>₹{final_bal:,.0f}</h2>
-                    <p style='margin:0; font-size: 0.7em; color: #555;'>Payments - Trips - Office</p>
-                </div>
-            """, unsafe_allow_html=True)
+            # --- FINAL CALCULATION ---
+            final_bal = (p_bal - t_bank_exp - o_bank_exp)
+            total_combined_net += final_bal 
+            
+            with b_cols[i]:
+                color = "#00d4ff" if final_bal >= 0 else "#ff4b4b"
+                st.markdown(f"""
+                    <div style='text-align: center; border: 1px solid #444; border-radius: 8px; padding: 12px; background-color: #1a1a1a;'>
+                        <p style='margin:0; color: #888; font-size: 0.9em;'>{b}</p>
+                        <h2 style='margin:0; color: {color};'>₹{final_bal:,.0f}</h2>
+                        <p style='margin:0; font-size: 0.7em; color: #555;'>P({p_bal:,.0f}) - T({t_bank_exp:,.0f}) - O({o_bank_exp:,.0f})</p>
+                    </div>
+                """, unsafe_allow_html=True)
+
+        # --- FOOTER SUMMARY CARD ---
+        st.markdown(f"""
+            <div style='background-color: #262730; padding: 10px; border-radius: 5px; text-align: right; border-right: 5px solid #00d4ff; margin-top: 10px;'>
+                <span style='color: gray;'>Total Business Liquidity: </span>
+                <span style='font-size: 1.2em; font-weight: bold; color: white;'>₹{total_combined_net:,.0f}</span>
+            </div>
+        """, unsafe_allow_html=True)
 if menu == "1. Masters Setup":
     st.header("🏗️ Master Management")
     
