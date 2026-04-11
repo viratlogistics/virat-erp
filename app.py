@@ -599,62 +599,69 @@ elif menu == "2. LR Entry":
                 dsl = toll = drv = 0.0
 
         # --- YE FORM KA END HAI ---
+        # --- 🚀 FINAL & COMPLETE SAVE LOGIC (Sahi Order Mein) ---
         if st.form_submit_button("🚀 SAVE LR"):
             if bill_pty and bill_pty != "Select" and fr_amt > 0:
-                # 1. Branch Master se sara data fetch karna
-                br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
-                
+                # 1. Profit Calculation
                 prof = (fr_amt - (hc if v_cat == "Market Hired" else (dsl+toll+drv)))
+                
+                # 2. Trips Sheet Row (With 26th Column: paid_via)
                 row = [
-                str(d),           # Date
-                lr_no,            # LR No
-                v_cat,            # Type
-                bill_pty,         # Party
-                cnor_name,        # Consignor
-                cnor_gst,         # Consignor_GST
-                "",               # Consignor_Add (Ab error nahi aayega)
-                cnee_name,        # Consignee
-                cnee_gst,         # Consignee_GST
-                "",               # Consignee_Add
-                mat,              # Material
-                n_wt,             # Weight
-                c_wt,             # Charge Weight
-                v_no,             # Vehicle
-                sel_driver,       # Driver
-                br_name,          # Broker
-                fl,               # From
-                tl,               # To
-                fr_amt,           # Freight
-                (hc if v_cat == "Market Hired" else 0.0), # HiredCharges
-                dsl,              # Diesel
-                drv,              # DriverExp
-                toll,             # Toll
-                0,                # Other
-                prof              # Profit
-            ]
+                    str(d), lr_no, v_cat, bill_pty, cnor_name, cnor_gst, "", 
+                    cnee_name, cnee_gst, "", mat, n_wt, c_wt, v_no, sel_driver, 
+                    br_name, fl, tl, fr_amt, 
+                    (hc if v_cat == "Market Hired" else 0.0), 
+                    dsl, drv, toll, 0, prof, 
+                    paid_via # <-- Column 26: Trip sheet mein bank jayega
+                ]
                 
                 if save("trips", row):
-                    # 2. AGAR NEW PARTY/CONSIGNOR HAI TO MASTER MEIN SAVE KARO
+                    # --- A. NEW PARTY MASTER UPDATE ---
                     if is_np and bill_pty not in gl("Party"):
                         save("masters", ["Party", bill_pty])
+                    
+                    # --- B. NEW CONSIGNOR MASTER UPDATE ---
                     if is_nc and cnor_name not in gl("Consignor"):
                         save("masters", ["Consignor", cnor_name])
+
+                    # --- C. BANK BALANCE MINUS (PAYMENTS AUTO-ENTRY) ---
                     if v_cat == "Own Fleet" and paid_via != "Select":
                         total_trip_exp = dsl + toll + drv
                         if total_trip_exp > 0:
-                            # Payments sheet mein auto-entry (Total 8 columns as per your CSV)
-                            # Date, Account_Name, Type, Amount, Mode, Remarks, LR_Ref, Bank_Used
+                            # 8 Columns order as per your ERP
                             bank_payment_row = [
-                                str(d), 
-                                f"Trip Exp ({v_no})", 
-                                "Payment (Out)", 
-                                total_trip_exp, 
-                                "Cash/Bank", 
-                                f"Diesel/Toll for LR: {lr_no}", 
-                                lr_no,
-                                paid_via # Ye column aapki sheet mein Bank track karega
+                                str(d),                     # 1. Date
+                                f"Trip Exp ({v_no})",       # 2. Account_Name
+                                "Payment (Out)",            # 3. Type
+                                total_trip_exp,             # 4. Amount
+                                "Bank",                     # 5. Mode
+                                f"Diesel/Toll for LR: {lr_no}", # 6. Remarks
+                                lr_no,                      # 7. LR_Ref
+                                paid_via                    # 8. Bank_Used (Dashboard sync)
                             ]
                             save("payments", bank_payment_row)
+                    
+                    # --- D. PDF & SUCCESS DATA ---
+                    br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
+                    st.session_state.pdf_ready = {
+                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
+                        "Cnor": cnor_name, "CnorGST": cnor_gst, 
+                        "Cnee": cnee_name, "CneeGST": cnee_gst, 
+                        "BillP": bill_pty, "From": fl, "To": tl, 
+                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, 
+                        "Freight": fr_amt, "PaidBy": paid_by, "Risk": risk, 
+                        "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr, "InsBy": ins_by,
+                        "BranchName": sel_br,
+                        "BranchGST": br_info.get('GST', 'N/A'),
+                        "BranchAddr": br_info.get('Address', 'N/A'),
+                        "BankName": br_info.get('Name', 'N/A'),
+                        "BankAC": br_info.get('A_C_No', 'N/A'),
+                        "BankIFSC": br_info.get('IFSC', 'N/A')
+                    }
+                    st.success(f"✅ LR {lr_no} Saved! Party & Bank Balance Updated.")
+                    st.rerun()
+            else:
+                st.error("Please fill Party Name and Freight!")
                     
                     # 3. PDF ke liye Branch/Company ka sara data bundle karna
                     st.session_state.pdf_ready = {
