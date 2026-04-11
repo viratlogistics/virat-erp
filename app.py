@@ -624,24 +624,18 @@ elif menu == "2. LR Entry":
                     if is_nc and cnor_name not in gl("Consignor"):
                         save("masters", ["Consignor", cnor_name])
 
-                    # --- C. BANK BALANCE MINUS (PAYMENTS AUTO-ENTRY) ---
+                    # --- C. BANK BALANCE MINUS ---
                     if v_cat == "Own Fleet" and paid_via != "Select":
                         total_trip_exp = dsl + toll + drv
                         if total_trip_exp > 0:
-                            # 8 Columns order as per your ERP
                             bank_payment_row = [
-                                str(d),                     # 1. Date
-                                f"Trip Exp ({v_no})",       # 2. Account_Name
-                                "Payment (Out)",            # 3. Type
-                                total_trip_exp,             # 4. Amount
-                                "Bank",                     # 5. Mode
-                                f"Diesel/Toll for LR: {lr_no}", # 6. Remarks
-                                lr_no,                      # 7. LR_Ref
-                                paid_via                    # 8. Bank_Used (Dashboard sync)
+                                str(d), f"Trip Exp ({v_no})", "Payment (Out)", 
+                                total_trip_exp, "Bank", f"Diesel/Toll for LR: {lr_no}", 
+                                lr_no, paid_via
                             ]
                             save("payments", bank_payment_row)
                     
-                    # --- D. PDF & SUCCESS DATA ---
+                    # --- D. PDF READY DATA ---
                     br_info = df_m[df_m['Name'] == sel_br].iloc[0] if sel_br != "Select" else {}
                     st.session_state.pdf_ready = {
                         "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
@@ -658,31 +652,9 @@ elif menu == "2. LR Entry":
                         "BankAC": br_info.get('A_C_No', 'N/A'),
                         "BankIFSC": br_info.get('IFSC', 'N/A')
                     }
-                    st.success(f"✅ LR {lr_no} Saved! Party & Bank Balance Updated.")
+                    # Is line ki seedh (alignment) check kijiye
+                    st.success("✅ LR Saved & Bank Balance Updated!")
                     st.rerun()
-            else:
-                st.error("Please fill Party Name and Freight!")
-                
-                    # 3. PDF ke liye Branch/Company ka sara data bundle karna
-                st.session_state.pdf_ready = {
-                        "LR No": lr_no, "Date": str(d), "Vehicle": v_no, 
-                        "Cnor": cnor_name, "CnorGST": cnor_gst, 
-                        "Cnee": cnee_name, "CneeGST": cnee_gst, 
-                        "BillP": bill_pty, "From": fl, "To": tl, 
-                        "Material": mat, "Pkg": pkg, "NetWt": n_wt, "ChgWt": c_wt, 
-                        "Freight": fr_amt, "PaidBy": paid_by, "Risk": risk, 
-                        "InvNo": inv_no, "ShipTo": ship_to, "show_fr": show_fr, "InsBy": ins_by,
-                        "BranchName": sel_br,
-                        "BranchGST": br_info.get('GST', 'N/A'),
-                        "BranchAddr": br_info.get('Address', 'N/A'),
-                        "BankName": br_info.get('Name', 'N/A'),
-                        "BankAC": br_info.get('A_C_No', 'N/A'),
-                        "BankIFSC": br_info.get('IFSC', 'N/A')
-                    }
-                    st.success("LR Saved and Masters Updated! and Bank Balance Updated!")
-                    st.rerun()
-            else:
-                st.error("Please fill Party Name and Freight!")
     # --- YE LINE FORM KE BAHAR (LEFT MARGIN SE MATCH KAREIN) ---
     if st.session_state.pdf_ready:
         st.divider()
