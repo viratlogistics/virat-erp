@@ -605,7 +605,6 @@ elif menu == "2. LR Entry":
                 hc = st.number_input("Hired Charges")
                 dsl = toll = drv = 0.0
 
-        # --- YE FORM KA END HAI ---
         # --- 🚀 FINAL & COMPLETE SAVE LOGIC (Sahi Order Mein) ---
         if st.form_submit_button("🚀 SAVE LR"):
             if bill_pty and bill_pty != "Select" and fr_amt > 0:
@@ -659,13 +658,17 @@ elif menu == "2. LR Entry":
                         "BankAC": br_info.get('A_C_No', 'N/A'),
                         "BankIFSC": br_info.get('IFSC', 'N/A')
                     }
-                    # Is line ki seedh (alignment) check kijiye
                     st.success("✅ LR Saved & Bank Balance Updated!")
                     st.rerun()
-    # --- YE LINE FORM KE BAHAR (LEFT MARGIN SE MATCH KAREIN) ---
+
+    # --- YE LINE FORM KE BAHAR ---
     if st.session_state.pdf_ready:
         st.divider()
-        st.download_button("📥 DOWNLOAD LR PDF", generate_lr_pdf(st.session_state.pdf_ready, st.session_state.pdf_ready.get('show_fr', True)), f"LR_{st.session_state.pdf_ready['LR No']}.pdf")    
+        st.download_button(
+            label="📥 DOWNLOAD LR PDF",
+            data=generate_lr_pdf(st.session_state.pdf_ready, st.session_state.pdf_ready.get('show_fr', True)),
+            file_name=f"LR_{st.session_state.pdf_ready['LR No']}.pdf"
+        )    
 elif menu == "3. LR Register":
     st.title("📋 LR REGISTER")
     if not df_t.empty:
